@@ -21,7 +21,7 @@
 
 github:
   description: "Apache Accumulo Classloader Extras"
-  homepage: https://accumulo.apache.org/
+  homepage: https://accumulo.apache.org
   labels:
     - java
     - classloader
