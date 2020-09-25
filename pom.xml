@@ -25,6 +25,7 @@
   <groupId>org.apache.accumulo</groupId>
   <artifactId>classloader-extras</artifactId>
   <version>1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
   <name>Classloader Extras</name>
   <description>Classloader Extras provided by the Apache Accumulo project</description>
   <inceptionYear>2020</inceptionYear>
@@ -66,6 +67,9 @@
       <archive>https://lists.apache.org/list.html?notifications@accumulo.apache.org</archive>
     </mailingList>
   </mailingLists>
+  <modules>
+    <module>modules/vfs-class-loader</module>
+  </modules>
   <scm>
     <connection>scm:git:https://gitbox.apache.org/repos/asf/accumulo-classloaders.git</connection>
     <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/accumulo-classloaders.git</developerConnection>
@@ -94,14 +98,11 @@
   </properties>
   <dependencies>
     <!-- spotbugs-annotations provides SuppressFBWarnings annotation -->
-    <!--
     <dependency>
       <groupId>com.github.spotbugs</groupId>
       <artifactId>spotbugs-annotations</artifactId>
       <version>4.1.2</version>
-      <optional>true</optional>
     </dependency>
-    -->
   </dependencies>
   <build>
     <pluginManagement>
