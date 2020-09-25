@@ -1,0 +1,15 @@
+1. Running Accumulo with new VFS ClassLoader as SystemClassLoader
+
+   a. Add accumulo/test/target/TestJar-Iterators.jar to HDFS directory
+	hadoop fs -mkdir /iterators
+	hadoop fs -put TestJar-Iterators.jar /iterators/.
+   b. Add vfs-reloading-classloader-0.0.1-SNAPSHOT.jar to CLASSPATH
+   c. Add "-Djava.system.class.loader=org.apache.accumulo.classloader.vfs.ReloadingVFSClassLoader" to JAVA_OPTS
+   d. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/TestJar-Iterators.jar" to JAVA_OPTS
+   e. Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
+   f. Create table , insert some test data
+      createtable test
+      insert a b c this_is_a_test
+      scan
+      setiter -class org.apache.accumulo.test.functional.ValueReversingIterator -scan -t test -name reverse -p 100
+
