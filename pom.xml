@@ -68,6 +68,7 @@
     </mailingList>
   </mailingLists>
   <modules>
+    <module>modules/classloaderfactory-substitute</module>
     <module>modules/vfs-class-loader</module>
   </modules>
   <scm>

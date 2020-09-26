@@ -408,7 +408,7 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
 
   /**
    * Remove the file from the monitor
-   * 
+   *
    * @param file
    *          to remove
    * @throws RuntimeException
@@ -500,7 +500,7 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
 
   /**
    * Return a reference to the delegate classloader, create a new one if necessary
-   * 
+   *
    * @return reference to delegate classloader
    */
   synchronized ClassLoader getDelegateClassLoader() {
