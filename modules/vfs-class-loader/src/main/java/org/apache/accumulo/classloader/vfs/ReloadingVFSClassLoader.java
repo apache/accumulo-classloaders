@@ -359,13 +359,16 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
         cl = new VFSClassLoaderWrapper(this.files, getFileSystem(), parent);
       } else {
         // This delegates to the parent after we lookup locally first.
-        cl = new VFSClassLoaderWrapper(this.files, getFileSystem()) {
+        cl = new VFSClassLoaderWrapper(this.files, getFileSystem(), parent) {
           @Override
           public synchronized Class<?> loadClass(String name, boolean resolve)
               throws ClassNotFoundException {
+            // Check to see if this ClassLoader has already loaded the class
             Class<?> c = findLoadedClass(name);
-            if (c != null)
+            if (c != null) {
+              printDebug("Returning loaded class: " + name);
               return c;
+            }
             try {
               // try finding this class here instead of parent
               return findClass(name);

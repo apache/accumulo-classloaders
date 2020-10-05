@@ -1,0 +1,20 @@
+{
+  "contexts": [
+    {
+      "name": "cxA",
+      "config": {
+        "classPath": "hdfs://localhost:9000/iterators/example-b/examples.jar",
+        "postDelegate": false,
+        "monitorIntervalMs": 10000
+      }
+    },
+    {
+      "name": "cxB",
+      "config": {
+        "classPath": "hdfs://localhost:9000/iterators/example-b/examples.jar",
+        "postDelegate": true,
+        "monitorIntervalMs": 10000
+      }
+    }
+  ]
+}
