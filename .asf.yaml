@@ -25,6 +25,7 @@ github:
   labels:
     - java
     - classloader
+    - hacktoberfest
   features:
     wiki: false
     issues: true
