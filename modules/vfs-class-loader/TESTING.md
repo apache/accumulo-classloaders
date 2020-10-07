@@ -23,12 +23,12 @@ under the License.
   
   ```
   hadoop fs -mkdir -p /iterators/example-a
-  hadoop fs -put modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/example-a/examples.jar
+  hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/example-a/examples.jar
   
   hadoop fs -mkdir -p /iterators/example-b
-  hadoop fs -put modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/example-b/examples.jar
+  hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/example-b/examples.jar
   
-  hadoop fs -cp /iterators/example-a/examples.jar /iterators/examples.jar
+  hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/examples.jar
   ```
   
   Copy the new class loader jar to `/tmp`: 
@@ -46,7 +46,7 @@ under the License.
 	d. Add "-Dvfs.classpath.monitor.seconds=10" to JAVA_OPTS
 	e. (optional) Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
 	
-	## Test setting iterator
+	## Test setting iterator retrieved from jar in HDFS with System ClassLoader
 	```
 	Create table, insert some test data
 	createtable test
@@ -56,33 +56,16 @@ under the License.
 	scan  // The value should be the word "foo"
 	deleteiter -n example -t test -scan
 	scan  // The value should be "this_is_a_test"
-	```
-	
-	## Test reloading function (NOT WORKING)
-	
-	a. Copy the example-b jar to /iterators/examples.jar:
-	```
-	hadoop fs -cp -f /iterators/example-b/examples.jar /iterators/examples.jar
-	```
-	b. Wait 10+ seconds, then
-	```
-	scan  // The value should be "this_is_a_test"
-	setiter -class org.apache.accumulo.classloader.vfs.examples.ExampleIterator -scan -t test -name example -p 100
-	scan  // The value should be the word "bar"
-	deleteiter -n example -t test -scan
-	scan  // The value should be "this_is_a_test"
-	```
-		
-	## Reset the state of the jar
-    ```
-    hadoop fs -cp /iterators/example-a/examples.jar /iterators/examples.jar
-    ```
+	```	
       
 # Setting scan context on table (Legacy)
 
+    ## Define a Table Context and load the iterator class with the same name, but different behavior
+    
 	a. Set Accumulo Classpath Context property:
 	```
-	config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/example-a/examples.jar
+	config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/example-b/examples.jar
+	config -s general.vfs.context.classpath.cx1.delegation=post
 	```
 	b. Set Accumulo Table Context property:
 	```
@@ -92,10 +75,30 @@ under the License.
 	```
 	scan  // The value should be "this_is_a_test"
 	setiter -class org.apache.accumulo.classloader.vfs.examples.ExampleIterator -scan -t test -name example -p 100
+	scan  // The value should be the word "bar"
+	deleteiter -n example -t test -scan
+	scan  // The value should be "this_is_a_test"
+	```
+	
+	## Change the context definition to point to the original jar
+	a. Set Accumulo Classpath Context property:
+	```
+	config -s general.vfs.context.classpath.cx2=hdfs://localhost:9000/iterators/example-a/examples.jar
+	config -s general.vfs.context.classpath.cx2.delegation=post
+	```
+	b. Set Accumulo Table Context property:
+	```
+	config -t test -s table.classpath.context=cx2
+	```
+	c. Test context classpath iterator setting:
+	```
+	scan  // The value should be "this_is_a_test"
+	setiter -class org.apache.accumulo.classloader.vfs.examples.ExampleIterator -scan -t test -name example -p 100
 	scan  // The value should be the word "foo"
 	deleteiter -n example -t test -scan
 	scan  // The value should be "this_is_a_test"
 	```
+	
 
 # Setting scan context on table (New)
 

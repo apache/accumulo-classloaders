@@ -23,9 +23,10 @@ import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.vfs.ReloadingVFSClassLoader;
-import org.apache.accumulo.core.spi.common.ClassLoaderFactory;
+import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 
 import com.google.gson.Gson;
 
@@ -33,10 +34,10 @@ import com.google.gson.Gson;
  * A ClassLoaderFactory implementation that uses a ReloadingVFSClassLoader per defined context.
  * Configuration of this class is done with a JSON file whose location is defined by the system
  * property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need to set
- * the Accumulo configuration property <b>general.context.factory</b> to the fully qualified name of
- * this class, create a configuration file that defines the supported contexts and their
- * configuration, and set the system property <b>vfs.context.class.loader.config</b> to the location
- * of the configuration file.
+ * the Accumulo configuration property <b>general.context.class.loader.factory</b> to the fully
+ * qualified name of this class, create a configuration file that defines the supported contexts and
+ * their configuration, and set the system property <b>vfs.context.class.loader.config</b> to the
+ * location of the configuration file.
  *
  * <p>
  * Example configuration file:
@@ -64,7 +65,7 @@ import com.google.gson.Gson;
  * }
  * </pre>
  */
-public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory {
+public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoaderFactory {
 
   public static class Contexts {
     List<Context> contexts;
@@ -229,7 +230,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
   }
 
   @Override
-  public void initialize(ClassLoaderFactoryConfiguration conf) throws Exception {
+  public void initialize(Supplier<Map<String,String>> contextProperties) throws Exception {
     // Properties
     File f = new File(getConfigFileLocation());
     if (!f.canRead()) {
@@ -254,6 +255,13 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
         @Override
         protected long getMonitorInterval() {
           return c.getConfig().getMonitorIntervalMs();
+        }
+
+        @Override
+        protected boolean isVMInitialized() {
+          // The classloader is not being set using
+          // `java.system.class.loader`, so the VM is initialized.
+          return true;
         }
       });
     });

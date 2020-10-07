@@ -27,6 +27,7 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -99,14 +100,13 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
   private volatile long sleepInterval = 1000;
   private volatile boolean vfsInitializing = false;
 
-  private final ThreadPoolExecutor executor;
   private final ClassLoader parent;
   private final ReentrantReadWriteLock updateLock = new ReentrantReadWriteLock(true);
   private final String name;
   private final String classpath;
   private final Boolean preDelegation;
   private final long monitorInterval;
-  private DefaultFileMonitor monitor;
+  private Optional<Updater> updater = Optional.empty();
   private FileObject[] files;
   private VFSClassLoaderWrapper cl = null;
   private DefaultFileSystemManager vfs = null;
@@ -218,30 +218,71 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
     return DEFAULT_TIMEOUT;
   }
 
-  /**
-   * This task replaces the delegate classloader with a new instance when the filesystem has
-   * changed. This will orphan the old classloader and the only references to the old classloader
-   * are from the objects that it loaded.
-   */
-  private final Runnable refresher = new Runnable() {
-    @Override
-    public void run() {
-      while (!executor.isTerminating()) {
-        try {
-          printDebug("Recreating delegate classloader due to filesystem change event");
-          updateDelegateClassloader();
-          return;
-        } catch (Exception e) {
-          e.printStackTrace();
+  private class Updater {
+
+    /**
+     * This task replaces the delegate classloader with a new instance when the filesystem has
+     * changed. This will orphan the old classloader and the only references to the old classloader
+     * are from the objects that it loaded.
+     */
+    private final Runnable refresher = new Runnable() {
+      @Override
+      public void run() {
+        while (!executor.isTerminating()) {
           try {
-            Thread.sleep(getMonitorInterval());
-          } catch (InterruptedException ie) {
-            ie.printStackTrace();
+            printDebug("Recreating delegate classloader due to filesystem change event");
+            updateDelegateClassloader();
+            return;
+          } catch (Exception e) {
+            e.printStackTrace();
+            try {
+              Thread.sleep(getMonitorInterval());
+            } catch (InterruptedException ie) {
+              ie.printStackTrace();
+            }
           }
         }
       }
+    };
+
+    private final ThreadPoolExecutor executor;
+    private final DefaultFileMonitor monitor;
+
+    private Updater(ReloadingVFSClassLoader fileMonitor) {
+      BlockingQueue<Runnable> queue = new ArrayBlockingQueue<>(2);
+      ThreadFactory factory = r -> {
+        Thread t = new Thread(r);
+        t.setDaemon(true);
+        return t;
+      };
+      this.executor = new ThreadPoolExecutor(1, 1, 1, SECONDS, queue, factory);
+
+      this.monitor = new DefaultFileMonitor(fileMonitor);
+      monitor.setDelay(getMonitorInterval());
+      monitor.setRecursive(false);
+      monitor.start();
+      printDebug("Monitor started with interval set to: " + monitor.getDelay());
+
     }
-  };
+
+    private FileMonitor getMonitor() {
+      return this.monitor;
+    }
+
+    private void scheduleRefresh() {
+      try {
+        this.executor.execute(refresher);
+      } catch (RejectedExecutionException e) {
+        printDebug("Ignoring refresh request (already refreshing)");
+      }
+    }
+
+    private void shutdown() {
+      this.executor.shutdownNow();
+      this.monitor.stop();
+    }
+
+  }
 
   public ReloadingVFSClassLoader(ClassLoader parent) {
     super(ReloadingVFSClassLoader.class.getSimpleName(), parent);
@@ -251,14 +292,6 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
     this.classpath = CLASSPATH;
     this.preDelegation = PRE_DELEGATION;
     this.monitorInterval = MONITOR_INTERVAL;
-
-    BlockingQueue<Runnable> queue = new ArrayBlockingQueue<>(2);
-    ThreadFactory factory = r -> {
-      Thread t = new Thread(r);
-      t.setDaemon(true);
-      return t;
-    };
-    executor = new ThreadPoolExecutor(1, 1, 1, SECONDS, queue, factory);
   }
 
   protected DefaultFileSystemManager getFileSystem() {
@@ -289,20 +322,11 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
     return this.monitorInterval;
   }
 
-  private synchronized FileMonitor getFileMonitor() {
-    if (null == this.monitor) {
-      this.monitor = new DefaultFileMonitor(this);
-      monitor.setDelay(getMonitorInterval());
-      monitor.setRecursive(false);
-      monitor.start();
-      printDebug("Monitor started with interval set to: " + monitor.getDelay());
-    }
-    return this.monitor;
-  }
-
   private void addFileToMonitor(FileObject file) throws RuntimeException {
     try {
-      getFileMonitor().addFile(file);
+      updater.ifPresent(u -> {
+        u.getMonitor().addFile(file);
+      });
     } catch (RuntimeException re) {
       if (re.getMessage().contains("files-cache"))
         printDebug("files-cache error adding " + file.toString() + " to VFS monitor. "
@@ -419,7 +443,9 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
    */
   private void removeFile(FileObject file) throws RuntimeException {
     try {
-      getFileMonitor().removeFile(file);
+      updater.ifPresent(u -> {
+        u.getMonitor().removeFile(file);
+      });
     } catch (RuntimeException re) {
       printError("Error removing file from VFS cache: " + file.toString());
       re.printStackTrace();
@@ -430,27 +456,19 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
   @Override
   public void fileCreated(FileChangeEvent event) throws Exception {
     printDebug(event.getFileObject().getURL().toString() + " created, recreating classloader");
-    scheduleRefresh();
+    updater.ifPresent(u -> u.scheduleRefresh());
   }
 
   @Override
   public void fileDeleted(FileChangeEvent event) throws Exception {
     printDebug(event.getFileObject().getURL().toString() + " deleted, recreating classloader");
-    scheduleRefresh();
+    updater.ifPresent(u -> u.scheduleRefresh());
   }
 
   @Override
   public void fileChanged(FileChangeEvent event) throws Exception {
     printDebug(event.getFileObject().getURL().toString() + " changed, recreating classloader");
-    scheduleRefresh();
-  }
-
-  private void scheduleRefresh() {
-    try {
-      executor.execute(refresher);
-    } catch (RejectedExecutionException e) {
-      printDebug("Ignoring refresh request (already refreshing)");
-    }
+    updater.ifPresent(u -> u.scheduleRefresh());
   }
 
   @Override
@@ -461,8 +479,7 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
       printDebug("Closing, removing file from monitoring: " + f.toString());
     });
 
-    this.executor.shutdownNow();
-    this.monitor.stop();
+    updater.ifPresent(u -> u.shutdown());
     if (null != this.vfs)
       VFSManager.returnVfs(this.vfs);
     vfs = null;
@@ -518,7 +535,7 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
       this.vfsInitializing = true;
       printDebug("getDelegateClassLoader() initializing VFS.");
       getFileSystem();
-      if (null == getFileSystem()) {
+      if (null == this.vfs) {
         // Some error happened
         throw new RuntimeException("Problem creating VFS file system");
       }
@@ -526,6 +543,14 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
     }
     if (null == this.cl) {
       try {
+        // If this is the system class loader, then reloading won't work.
+        // If not the system class loader, start the file monitor.
+        if (!isSystemClassLoader()) {
+          printDebug("Reloading enabled");
+          updater = Optional.of(new Updater(this));
+        } else {
+          printDebug("Reloading disabled as this is the java.system.class.loader");
+        }
         printDebug("Creating initial delegate class loader");
         updateDelegateClassloader();
       } catch (Exception e) {
@@ -590,7 +615,11 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
     return name;
   }
 
-  private boolean isVMInitialized() {
+  private boolean isSystemClassLoader() {
+    return ClassLoader.getSystemClassLoader().equals(this);
+  }
+
+  protected boolean isVMInitialized() {
     if (VM_INITIALIZED) {
       return VM_INITIALIZED;
     } else {
@@ -600,7 +629,7 @@ public class ReloadingVFSClassLoader extends ClassLoader implements Closeable, F
       try {
         printDebug(
             "System ClassLoader: " + ClassLoader.getSystemClassLoader().getClass().getName());
-        VM_INITIALIZED = ClassLoader.getSystemClassLoader().equals(this);
+        VM_INITIALIZED = isSystemClassLoader();
       } catch (IllegalStateException e) {
         // VM is still initializing
         VM_INITIALIZED = false;
