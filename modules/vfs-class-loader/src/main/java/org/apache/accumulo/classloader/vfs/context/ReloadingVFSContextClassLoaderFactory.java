@@ -19,14 +19,17 @@
 package org.apache.accumulo.classloader.vfs.context;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Files;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-import org.apache.accumulo.classloader.vfs.ReloadingVFSClassLoader;
+import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 
@@ -166,7 +169,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
 
     public void setClassPath(String classPath) {
-      this.classPath = ReloadingVFSClassLoader.replaceEnvVars(classPath, System.getenv());
+      this.classPath = AccumuloVFSClassLoader.replaceEnvVars(classPath, System.getenv());
     }
 
     public boolean getPostDelegate() {
@@ -217,8 +220,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
+  private static final Logger LOG =
+      LoggerFactory.getLogger(ReloadingVFSContextClassLoaderFactory.class);
   public static final String CONFIG_LOCATION = "vfs.context.class.loader.config";
-  private static final Map<String,ReloadingVFSClassLoader> CONTEXTS = new HashMap<>();
+  private static final Map<String,AccumuloVFSClassLoader> CONTEXTS = new ConcurrentHashMap<>();
+  private Contexts contextDefinitions = null;
 
   protected String getConfigFileLocation() {
     String loc = System.getProperty(CONFIG_LOCATION);
@@ -232,39 +238,45 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   @Override
   public void initialize(Supplier<Map<String,String>> contextProperties) throws Exception {
     // Properties
-    File f = new File(getConfigFileLocation());
+    String conf = getConfigFileLocation();
+    File f = new File(new URI(getConfigFileLocation()));
     if (!f.canRead()) {
-      throw new RuntimeException("Unable to read configuration file: " + f.getAbsolutePath());
+      throw new RuntimeException("Unable to read configuration file: " + conf);
     }
     Gson g = new Gson();
-    Contexts con = g.fromJson(Files.newBufferedReader(f.toPath()), Contexts.class);
+    contextDefinitions = g.fromJson(Files.newBufferedReader(f.toPath()), Contexts.class);
 
-    con.getContexts().forEach(c -> {
-      CONTEXTS.put(c.getName(), new ReloadingVFSClassLoader(
-          ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
-        @Override
-        protected String getClassPath() {
-          return c.getConfig().getClassPath();
-        }
-
-        @Override
-        protected boolean isPreDelegationModel() {
-          return !(c.getConfig().getPostDelegate());
-        }
-
-        @Override
-        protected long getMonitorInterval() {
-          return c.getConfig().getMonitorIntervalMs();
-        }
-
-        @Override
-        protected boolean isVMInitialized() {
-          // The classloader is not being set using
-          // `java.system.class.loader`, so the VM is initialized.
-          return true;
-        }
-      });
+    contextDefinitions.getContexts().forEach(c -> {
+      CONTEXTS.put(c.getName(), create(c));
     });
+  }
+
+  protected AccumuloVFSClassLoader create(Context c) {
+    LOG.debug("Creating ReloadingVFSClassLoader for context: {})", c.getName());
+    return new AccumuloVFSClassLoader(
+        ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+      @Override
+      protected String getClassPath() {
+        return c.getConfig().getClassPath();
+      }
+
+      @Override
+      protected boolean isPreDelegationModel() {
+        return !(c.getConfig().getPostDelegate());
+      }
+
+      @Override
+      protected long getMonitorInterval() {
+        return c.getConfig().getMonitorIntervalMs();
+      }
+
+      @Override
+      protected boolean isVMInitialized() {
+        // The classloader is not being set using
+        // `java.system.class.loader`, so the VM is initialized.
+        return true;
+      }
+    };
   }
 
   @Override
@@ -273,7 +285,20 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
       throw new IllegalArgumentException(
           "ReloadingVFSContextClassLoaderFactory not configured for context: " + contextName);
     }
-    return CONTEXTS.get(contextName);
+    AccumuloVFSClassLoader cl = CONTEXTS.get(contextName);
+    if (cl.isStale()) {
+      LOG.debug("ReloadingVFSClassLoader for context: {} is stale", contextName);
+      cl.close();
+      // Create a new one
+      for (Context c : contextDefinitions.getContexts()) {
+        if (c.getName().equals(contextName)) {
+          cl = create(c);
+          CONTEXTS.put(c.getName(), cl);
+        }
+      }
+    }
+    return cl;
+
   }
 
 }

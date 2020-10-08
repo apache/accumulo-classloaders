@@ -38,7 +38,7 @@ import org.junit.rules.TemporaryFolder;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
-public class ReloadingVFSClassLoaderTest {
+public class AccumuloVFSClassLoaderTest {
 
   @Rule
   public TemporaryFolder folder1 =
@@ -48,7 +48,7 @@ public class ReloadingVFSClassLoaderTest {
 
   @Before
   public void setup() throws Exception {
-    System.setProperty(ReloadingVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
+    System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
     vfs = VFSManager.generateVfs();
 
     folderPath = folder1.getRoot().toURI() + ".*";
@@ -75,84 +75,22 @@ public class ReloadingVFSClassLoaderTest {
     FileObject testDir = vfs.resolveFile(folder1.getRoot().toURI().toString());
     FileObject[] dirContents = testDir.getChildren();
 
-    ReloadingVFSClassLoader arvcl =
-        new ReloadingVFSClassLoader(ClassLoader.getSystemClassLoader()) {
-          @Override
-          protected String getClassPath() {
-            return folderPath;
-          }
+    AccumuloVFSClassLoader arvcl = new AccumuloVFSClassLoader(ClassLoader.getSystemClassLoader()) {
+      @Override
+      protected String getClassPath() {
+        return folderPath;
+      }
 
-          @Override
-          protected DefaultFileSystemManager getFileSystem() {
-            return vfs;
-          }
-        };
+      @Override
+      protected DefaultFileSystemManager getFileSystem() {
+        return vfs;
+      }
+    };
     arvcl.setVMInitializedForTests();
     arvcl.setVFSForTests(vfs);
 
     FileObject[] files = ((VFSClassLoaderWrapper) arvcl.getDelegateClassLoader()).getFileObjects();
     assertArrayEquals(createFileSystems(dirContents), files);
-
-    arvcl.close();
-  }
-
-  @Test
-  public void testReloading() throws Exception {
-    FileObject testDir = vfs.resolveFile(folder1.getRoot().toURI().toString());
-    FileObject[] dirContents = testDir.getChildren();
-
-    ReloadingVFSClassLoader arvcl =
-        new ReloadingVFSClassLoader(ClassLoader.getSystemClassLoader()) {
-          @Override
-          protected String getClassPath() {
-            return folderPath;
-          }
-
-          @Override
-          protected long getMonitorInterval() {
-            return 500l;
-          }
-
-          @Override
-          protected DefaultFileSystemManager getFileSystem() {
-            return vfs;
-          }
-        };
-    arvcl.setVMInitializedForTests();
-    arvcl.setVFSForTests(vfs);
-
-    FileObject[] files = ((VFSClassLoaderWrapper) arvcl.getDelegateClassLoader()).getFileObjects();
-    assertArrayEquals(createFileSystems(dirContents), files);
-
-    // set retry settings sufficiently low that not everything is reloaded in the first round
-    arvcl.setMaxRetries(1);
-
-    Class<?> clazz1 = arvcl.loadClass("test.HelloWorld");
-    Object o1 = clazz1.getDeclaredConstructor().newInstance();
-    assertEquals("Hello World!", o1.toString());
-
-    // Check that the class is the same before the update
-    Class<?> clazz1_5 = arvcl.loadClass("test.HelloWorld");
-    assertEquals(clazz1, clazz1_5);
-
-    assertTrue(new File(folder1.getRoot(), "HelloWorld.jar").delete());
-
-    Thread.sleep(1000);
-
-    // Update the class
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        folder1.newFile("HelloWorld2.jar"));
-
-    // Wait for the monitor to notice
-    Thread.sleep(1000);
-
-    Class<?> clazz2 = arvcl.loadClass("test.HelloWorld");
-    Object o2 = clazz2.getDeclaredConstructor().newInstance();
-    assertEquals("Hello World!", o2.toString());
-
-    // This is false because they are loaded by a different classloader
-    assertNotEquals(clazz1, clazz2);
-    assertNotEquals(o1, o2);
 
     arvcl.close();
   }
@@ -162,23 +100,22 @@ public class ReloadingVFSClassLoaderTest {
     FileObject testDir = vfs.resolveFile(folder1.getRoot().toURI().toString());
     FileObject[] dirContents = testDir.getChildren();
 
-    ReloadingVFSClassLoader arvcl =
-        new ReloadingVFSClassLoader(ClassLoader.getSystemClassLoader()) {
-          @Override
-          protected String getClassPath() {
-            return folderPath;
-          }
+    AccumuloVFSClassLoader arvcl = new AccumuloVFSClassLoader(ClassLoader.getSystemClassLoader()) {
+      @Override
+      protected String getClassPath() {
+        return folderPath;
+      }
 
-          @Override
-          protected long getMonitorInterval() {
-            return 1000l;
-          }
+      @Override
+      protected long getMonitorInterval() {
+        return 1000l;
+      }
 
-          @Override
-          protected DefaultFileSystemManager getFileSystem() {
-            return vfs;
-          }
-        };
+      @Override
+      protected DefaultFileSystemManager getFileSystem() {
+        return vfs;
+      }
+    };
     arvcl.setVMInitializedForTests();
     arvcl.setVFSForTests(vfs);
 

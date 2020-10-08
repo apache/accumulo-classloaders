@@ -15,13 +15,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Reloading VFS ClassLoader
+# Accumulo VFS ClassLoader
 
 This module contains a [ClassLoader](https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/ClassLoader.html) implementation that can be used as the JVM [System](https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/ClassLoader.html#getSystemClassLoader()) ClassLoader or a ClassLoader for Accumulo table contexts.
 
 ## System Class Loader
 
-To use this ClassLoader as the System ClassLoader you must set the JVM system property **java.system.class.loader** to the fully qualified class name (org.apache.accumulo.classloader.vfs.ReloadingVFSClassLoader). This jar and it's dependent jars must be on the **java.class.path**.
+To use this ClassLoader as the System ClassLoader you must set the JVM system property **java.system.class.loader** to the fully qualified class name (org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader). This jar and it's dependent jars must be on the **java.class.path**.
 
 NOTE: When used in this manner the reloading feature is disabled because the JVM caches classes created from the standard JVM hierarchy and thus reloading has no effect.
 

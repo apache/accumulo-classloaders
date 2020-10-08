@@ -90,7 +90,7 @@ public class VFSManager {
         continue;
       }
 
-      path = ReloadingVFSClassLoader.replaceEnvVars(path, System.getenv());
+      path = AccumuloVFSClassLoader.replaceEnvVars(path, System.getenv());
 
       FileObject fo = vfs.resolveFile(path);
 
@@ -180,7 +180,7 @@ public class VFSManager {
   @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
       justification = "tmpdir is controlled by admin, not unchecked user input")
   private static File computeTopCacheDir() {
-    String cacheDirPath = ReloadingVFSClassLoader.getVFSCacheDir();
+    String cacheDirPath = AccumuloVFSClassLoader.getVFSCacheDir();
     String procName = ManagementFactory.getRuntimeMXBean().getName();
     return new File(cacheDirPath,
         "accumulo-vfs-manager-cache-" + procName + "-" + System.getProperty("user.name", "nouser"));

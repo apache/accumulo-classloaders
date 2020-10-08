@@ -3,8 +3,8 @@
     {
       "name": "cxA",
       "config": {
-        "classPath": "hdfs://localhost:9000/iterators/example-b/examples.jar",
-        "postDelegate": false,
+        "classPath": "hdfs://localhost:9000/iterators/example-a/examples.jar",
+        "postDelegate": true,
         "monitorIntervalMs": 10000
       }
     },

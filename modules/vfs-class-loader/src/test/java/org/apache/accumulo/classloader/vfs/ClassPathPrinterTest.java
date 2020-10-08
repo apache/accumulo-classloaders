@@ -55,7 +55,7 @@ public class ClassPathPrinterTest {
     File conf = folder1.newFile("accumulo.properties");
     DefaultFileSystemManager vfs = VFSManager.generateVfs();
 
-    ReloadingVFSClassLoader cl = new ReloadingVFSClassLoader(parent) {
+    AccumuloVFSClassLoader cl = new AccumuloVFSClassLoader(parent) {
       @Override
       protected String getClassPath() {
         try {
