@@ -239,7 +239,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   public void initialize(Supplier<Map<String,String>> contextProperties) throws Exception {
     // Properties
     String conf = getConfigFileLocation();
-    File f = new File(new URI(getConfigFileLocation()));
+    File f = new File(new URI(conf));
     if (!f.canRead()) {
       throw new RuntimeException("Unable to read configuration file: " + conf);
     }

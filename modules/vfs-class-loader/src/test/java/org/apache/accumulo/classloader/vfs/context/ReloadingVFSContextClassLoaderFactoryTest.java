@@ -37,8 +37,6 @@ import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoade
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.ContextConfig;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Contexts;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.vfs2.FileObject;
-import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.junit.Before;
 import org.junit.Rule;
@@ -49,8 +47,16 @@ import com.google.gson.Gson;
 
 public class ReloadingVFSContextClassLoaderFactoryTest {
 
-  private class TestReloadingVFSContextClassLoaderFactory
+  private static class TestReloadingVFSContextClassLoaderFactory
       extends ReloadingVFSContextClassLoaderFactory {
+
+    private final String dir;
+    private final DefaultFileSystemManager vfs;
+
+    public TestReloadingVFSContextClassLoaderFactory(String dir, DefaultFileSystemManager vfs) {
+      this.dir = dir;
+      this.vfs = vfs;
+    }
 
     @Override
     protected AccumuloVFSClassLoader create(Context c) {
@@ -58,7 +64,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
           new AccumuloVFSClassLoader(ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
             @Override
             protected String getClassPath() {
-              return folderPath;
+              return dir;
             }
 
             @Override
@@ -71,44 +77,22 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
               return true;
             }
           };
-      cl.setVFSForTests(vfs);
+      cl.setVFSForTests(this.vfs);
       cl.setVMInitializedForTests();
+      cl.setMaxRetries(1);
       return cl;
     }
 
   }
 
   @Rule
-  public TemporaryFolder temp =
+  public TemporaryFolder TEMP =
       new TemporaryFolder(new File(System.getProperty("user.dir") + "/target"));
-
-  String folderPath;
-  private DefaultFileSystemManager vfs;
 
   private static final Contexts c = new Contexts();
 
-  FileObject[] createFileSystems(FileObject[] fos) throws FileSystemException {
-    FileObject[] rfos = new FileObject[fos.length];
-    for (int i = 0; i < fos.length; i++) {
-      if (vfs.canCreateFileSystem(fos[i])) {
-        rfos[i] = vfs.createFileSystem(fos[i]);
-      } else {
-        rfos[i] = fos[i];
-      }
-    }
-
-    return rfos;
-  }
-
   @Before
   public void setup() throws Exception {
-    System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
-    vfs = VFSManager.generateVfs();
-
-    folderPath = "file://" + temp.getRoot().getCanonicalPath() + "/.*";
-
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        temp.newFile("HelloWorld.jar"));
 
     ContextConfig cc1 = new ContextConfig();
     cc1.setClassPath("file:///tmp/foo");
@@ -147,7 +131,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
   @Test
   public void testCreation() throws Exception {
-    File f = temp.newFile();
+    File f = TEMP.newFile();
     f.deleteOnExit();
     Gson g = new Gson();
     String contexts = g.toJson(c);
@@ -175,14 +159,21 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   @Test
   public void testReloading() throws Exception {
 
-    File f = temp.newFile();
+    System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
+    DefaultFileSystemManager vfs = VFSManager.generateVfs();
+
+    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
+        TEMP.newFile("HelloWorld.jar"));
+
+    File f = TEMP.newFile();
     f.deleteOnExit();
     Gson g = new Gson();
     String contexts = g.toJson(c);
     try (BufferedWriter writer = Files.newBufferedWriter(f.toPath(), UTF_8, WRITE)) {
       writer.write(contexts);
     }
-    TestReloadingVFSContextClassLoaderFactory cl = new TestReloadingVFSContextClassLoaderFactory() {
+    TestReloadingVFSContextClassLoaderFactory cl = new TestReloadingVFSContextClassLoaderFactory(
+        "file://" + TEMP.getRoot().getCanonicalPath() + "/.*.jar", vfs) {
       @Override
       protected String getConfigFileLocation() {
         return f.toURI().toString();
@@ -198,13 +189,13 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     Class<?> clazz1_5 = cl.getClassLoader("cx1").loadClass("test.HelloWorld");
     assertEquals(clazz1, clazz1_5);
 
-    assertTrue(new File(temp.getRoot(), "HelloWorld.jar").delete());
+    assertTrue(new File(TEMP.getRoot(), "HelloWorld.jar").delete());
 
     Thread.sleep(1000);
 
     // Update the class
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        temp.newFile("HelloWorld2.jar"));
+        TEMP.newFile("HelloWorld2.jar"));
 
     // Wait for the monitor to notice
     Thread.sleep(1000);
