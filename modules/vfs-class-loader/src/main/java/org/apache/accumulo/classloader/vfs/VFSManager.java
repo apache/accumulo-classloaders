@@ -21,10 +21,7 @@ package org.apache.accumulo.classloader.vfs;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.CacheStrategy;
@@ -54,22 +51,30 @@ public class VFSManager {
     }
   }
 
-  private static List<WeakReference<DefaultFileSystemManager>> vfsInstances =
-      Collections.synchronizedList(new ArrayList<>());
+  private static DefaultFileSystemManager VFS = null;
   private static volatile boolean DEBUG = false;
-
-  static void enableDebug() {
-    DEBUG = true;
-  }
 
   static {
     // Register the shutdown hook
     Runtime.getRuntime().addShutdownHook(new Thread(new AccumuloVFSManagerShutdownThread()));
   }
 
-  public static FileObject[] resolve(FileSystemManager vfs, String uris)
-      throws FileSystemException {
-    return resolve(vfs, uris, new ArrayList<>());
+  public static void enableDebug() {
+    DEBUG = true;
+  }
+
+  private static void printDebug(String msg) {
+    if (!DEBUG)
+      return;
+    System.out.println(String.format("DEBUG: %d VFSManager: %s", System.currentTimeMillis(), msg));
+  }
+
+  private static void printError(String msg) {
+    System.err.println(String.format("ERROR: %d VFSManager: %s", System.currentTimeMillis(), msg));
+  }
+
+  public static FileObject[] resolve(String uris) throws FileSystemException {
+    return resolve(VFS, uris, new ArrayList<>());
   }
 
   static FileObject[] resolve(FileSystemManager vfs, String uris,
@@ -92,6 +97,7 @@ public class VFSManager {
 
       path = AccumuloVFSClassLoader.replaceEnvVars(path, System.getenv());
 
+      printDebug("Resolving path element: " + path);
       FileObject fo = vfs.resolveFile(path);
 
       switch (fo.getType()) {
@@ -115,17 +121,21 @@ public class VFSManager {
                 }
               }
             } else {
-              if (DEBUG)
-                System.out.println("classpath entry " + fo.getParent().toString() + " is "
+              if (DEBUG) {
+                printDebug("classpath entry " + fo.getParent().toString() + " is "
                     + fo.getParent().getType().toString());
+              }
             }
           } else {
-            if (DEBUG)
-              System.out.println("ignoring classpath entry: " + fo.toString());
+            if (DEBUG) {
+              printDebug("ignoring classpath entry: " + fo.toString());
+            }
           }
           break;
         default:
-          System.out.println("ignoring classpath entry:  " + fo.toString());
+          if (DEBUG) {
+            printDebug("ignoring classpath entry:  " + fo.toString());
+          }
           break;
       }
 
@@ -134,47 +144,52 @@ public class VFSManager {
     return classpath.toArray(new FileObject[classpath.size()]);
   }
 
-  public static DefaultFileSystemManager generateVfs() throws FileSystemException {
-    DefaultFileSystemManager vfs = new DefaultFileSystemManager();
-    vfs.addProvider("res", new org.apache.commons.vfs2.provider.res.ResourceFileProvider());
-    vfs.addProvider("zip", new org.apache.commons.vfs2.provider.zip.ZipFileProvider());
-    vfs.addProvider("gz", new org.apache.commons.vfs2.provider.gzip.GzipFileProvider());
-    vfs.addProvider("ram", new org.apache.commons.vfs2.provider.ram.RamFileProvider());
-    vfs.addProvider("file", new org.apache.commons.vfs2.provider.local.DefaultLocalFileProvider());
-    vfs.addProvider("jar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("http", new org.apache.commons.vfs2.provider.http.HttpFileProvider());
-    vfs.addProvider("https", new org.apache.commons.vfs2.provider.https.HttpsFileProvider());
-    vfs.addProvider("ftp", new org.apache.commons.vfs2.provider.ftp.FtpFileProvider());
-    vfs.addProvider("ftps", new org.apache.commons.vfs2.provider.ftps.FtpsFileProvider());
-    vfs.addProvider("war", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("par", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("ear", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("sar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("ejb3", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-    vfs.addProvider("tmp", new org.apache.commons.vfs2.provider.temp.TemporaryFileProvider());
-    vfs.addProvider("tar", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
-    vfs.addProvider("tbz2", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
-    vfs.addProvider("tgz", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
-    vfs.addProvider("bz2", new org.apache.commons.vfs2.provider.bzip2.Bzip2FileProvider());
-    vfs.addProvider("hdfs", new HdfsFileProvider());
-    vfs.addExtensionMap("jar", "jar");
-    vfs.addExtensionMap("zip", "zip");
-    vfs.addExtensionMap("gz", "gz");
-    vfs.addExtensionMap("tar", "tar");
-    vfs.addExtensionMap("tbz2", "tar");
-    vfs.addExtensionMap("tgz", "tar");
-    vfs.addExtensionMap("bz2", "bz2");
-    vfs.addMimeTypeMap("application/x-tar", "tar");
-    vfs.addMimeTypeMap("application/x-gzip", "gz");
-    vfs.addMimeTypeMap("application/zip", "zip");
-    vfs.setFileContentInfoFactory(new FileContentInfoFilenameFactory());
-    vfs.setFilesCache(new SoftRefFilesCache());
-    File cacheDir = computeTopCacheDir();
-    vfs.setReplicator(new UniqueFileReplicator(cacheDir));
-    vfs.setCacheStrategy(CacheStrategy.ON_RESOLVE);
-    vfs.init();
-    vfsInstances.add(new WeakReference<>(vfs));
-    return vfs;
+  public static void initialize() throws FileSystemException {
+    if (null == VFS) {
+      VFS = new DefaultFileSystemManager();
+      VFS.addProvider("res", new org.apache.commons.vfs2.provider.res.ResourceFileProvider());
+      VFS.addProvider("zip", new org.apache.commons.vfs2.provider.zip.ZipFileProvider());
+      VFS.addProvider("gz", new org.apache.commons.vfs2.provider.gzip.GzipFileProvider());
+      VFS.addProvider("ram", new org.apache.commons.vfs2.provider.ram.RamFileProvider());
+      VFS.addProvider("file",
+          new org.apache.commons.vfs2.provider.local.DefaultLocalFileProvider());
+      VFS.addProvider("jar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("http", new org.apache.commons.vfs2.provider.http.HttpFileProvider());
+      VFS.addProvider("https", new org.apache.commons.vfs2.provider.https.HttpsFileProvider());
+      VFS.addProvider("ftp", new org.apache.commons.vfs2.provider.ftp.FtpFileProvider());
+      VFS.addProvider("ftps", new org.apache.commons.vfs2.provider.ftps.FtpsFileProvider());
+      VFS.addProvider("war", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("par", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("ear", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("sar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("ejb3", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
+      VFS.addProvider("tmp", new org.apache.commons.vfs2.provider.temp.TemporaryFileProvider());
+      VFS.addProvider("tar", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
+      VFS.addProvider("tbz2", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
+      VFS.addProvider("tgz", new org.apache.commons.vfs2.provider.tar.TarFileProvider());
+      VFS.addProvider("bz2", new org.apache.commons.vfs2.provider.bzip2.Bzip2FileProvider());
+      VFS.addProvider("hdfs", new HdfsFileProvider());
+      VFS.addExtensionMap("jar", "jar");
+      VFS.addExtensionMap("zip", "zip");
+      VFS.addExtensionMap("gz", "gz");
+      VFS.addExtensionMap("tar", "tar");
+      VFS.addExtensionMap("tbz2", "tar");
+      VFS.addExtensionMap("tgz", "tar");
+      VFS.addExtensionMap("bz2", "bz2");
+      VFS.addMimeTypeMap("application/x-tar", "tar");
+      VFS.addMimeTypeMap("application/x-gzip", "gz");
+      VFS.addMimeTypeMap("application/zip", "zip");
+      VFS.setFileContentInfoFactory(new FileContentInfoFilenameFactory());
+      VFS.setFilesCache(new SoftRefFilesCache());
+      File cacheDir = computeTopCacheDir();
+      VFS.setReplicator(new UniqueFileReplicator(cacheDir));
+      VFS.setCacheStrategy(CacheStrategy.ON_RESOLVE);
+      VFS.init();
+    }
+  }
+
+  public static FileSystemManager get() {
+    return VFS;
   }
 
   @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
@@ -186,33 +201,22 @@ public class VFSManager {
         "accumulo-vfs-manager-cache-" + procName + "-" + System.getProperty("user.name", "nouser"));
   }
 
-  public static void returnVfs(DefaultFileSystemManager vfs) {
-    if (DEBUG) {
-      System.out.println("Closing VFS instance.");
-    }
+  private static void close() {
+    printDebug("Closing VFS instance.");
     FileReplicator replicator;
     try {
-      replicator = vfs.getReplicator();
+      replicator = VFS.getReplicator();
       if (replicator instanceof UniqueFileReplicator) {
         ((UniqueFileReplicator) replicator).close();
       }
     } catch (FileSystemException e) {
-      System.err.println("Error occurred closing VFS instance: " + e.getMessage());
+      printError("Error occurred closing VFS instance: " + e.getMessage());
     }
-    vfs.close();
-  }
-
-  public static void close() {
-    for (WeakReference<DefaultFileSystemManager> vfsInstance : vfsInstances) {
-      DefaultFileSystemManager ref = vfsInstance.get();
-      if (ref != null) {
-        returnVfs(ref);
-      }
-    }
+    VFS.close();
     try {
       FileUtils.deleteDirectory(computeTopCacheDir());
     } catch (IOException e) {
-      System.err.println("IOException deleting cache directory");
+      printError("IOException deleting cache directory");
       e.printStackTrace();
     }
   }

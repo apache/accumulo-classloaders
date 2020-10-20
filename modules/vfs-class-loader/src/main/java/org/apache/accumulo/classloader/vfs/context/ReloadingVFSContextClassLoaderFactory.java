@@ -28,6 +28,7 @@ import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +83,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
 
     @Override
+    public String toString() {
+      return "Contexts [contexts=" + contexts + "]";
+    }
+
+    @Override
     public int hashCode() {
       final int prime = 31;
       int result = 1;
@@ -125,6 +131,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
 
     public void setConfig(ContextConfig config) {
       this.config = config;
+    }
+
+    @Override
+    public String toString() {
+      return "Context [name=" + name + ", config=" + config + "]";
     }
 
     @Override
@@ -189,6 +200,12 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
 
     @Override
+    public String toString() {
+      return "ContextConfig [classPath=" + classPath + ", postDelegate=" + postDelegate
+          + ", monitorIntervalMs=" + monitorIntervalMs + "]";
+    }
+
+    @Override
     public int hashCode() {
       final int prime = 31;
       int result = 1;
@@ -244,8 +261,9 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
       throw new RuntimeException("Unable to read configuration file: " + conf);
     }
     Gson g = new Gson();
+    LOG.debug("Context configuration: {}", FileUtils.readFileToString(f, "UTF-8"));
     contextDefinitions = g.fromJson(Files.newBufferedReader(f.toPath()), Contexts.class);
-
+    LOG.debug("Deserialized JSON: {}", contextDefinitions);
     contextDefinitions.getContexts().forEach(c -> {
       CONTEXTS.put(c.getName(), create(c));
     });
@@ -261,8 +279,9 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
       }
 
       @Override
-      protected boolean isPreDelegationModel() {
-        return !(c.getConfig().getPostDelegate());
+      protected boolean isPostDelegationModel() {
+        LOG.debug("isPostDelegationModel called, returning {}", c.getConfig().getPostDelegate());
+        return c.getConfig().getPostDelegate();
       }
 
       @Override
@@ -280,25 +299,23 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   }
 
   @Override
-  public ClassLoader getClassLoader(String contextName) throws IllegalArgumentException {
+  public synchronized ClassLoader getClassLoader(String contextName)
+      throws IllegalArgumentException {
     if (!CONTEXTS.containsKey(contextName)) {
       throw new IllegalArgumentException(
           "ReloadingVFSContextClassLoaderFactory not configured for context: " + contextName);
     }
-    AccumuloVFSClassLoader cl = CONTEXTS.get(contextName);
-    if (cl.isStale()) {
-      LOG.debug("ReloadingVFSClassLoader for context: {} is stale", contextName);
-      cl.close();
-      // Create a new one
-      for (Context c : contextDefinitions.getContexts()) {
-        if (c.getName().equals(contextName)) {
-          cl = create(c);
-          CONTEXTS.put(c.getName(), cl);
-        }
-      }
-    }
-    return cl;
-
+    // The JVM maintains a cache of loaded classes where the key is the ClassLoader
+    // instance and the loaded Class name (see ClassLoader.findLoadedClass()). So
+    // that we can return new implementations of the same class when the context
+    // changes we need to load the class from the delegate classloader directly
+    // since the delegate instance will be recreated when the context changes.
+    return CONTEXTS.get(contextName).unwrap();
   }
 
+  public void closeForTests() {
+    CONTEXTS.forEach((k, v) -> {
+      v.close();
+    });
+  }
 }

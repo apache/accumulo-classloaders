@@ -22,12 +22,16 @@
 After running `mvn clean package` add the built jars to HDFS:
 
 ```
-hadoop fs -mkdir -p /iterators/example-a
-hadoop fs -mkdir -p /iterators/example-b
-hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/example-a/examples.jar
-hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/example-b/examples.jar
-hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/examples.jar
-hadoop fs -cp -f /iterators/example-b/examples.jar /iterators/context-examples.jar
+hadoop fs -mkdir -p /iterators/legacy/foo
+hadoop fs -mkdir -p /iterators/legacy/bar
+hadoop fs -mkdir -p /iterators/new/foo
+hadoop fs -mkdir -p /iterators/new/bar
+hadoop fs -mkdir -p /iterators/system
+hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/legacy/foo/examples.jar
+hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/new/foo/examples.jar
+hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/legacy/bar/examples.jar
+hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/new/bar/examples.jar
+hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/system/examples.jar
 ```
 
 Copy the new class loader jar to /tmp:
@@ -36,7 +40,7 @@ Copy the new class loader jar to /tmp:
 cp ./modules/vfs-class-loader/target/vfs-reloading-classloader-1.0.0-SNAPSHOT.jar /tmp/.
 ```
 
-## Running Accumulo with new VFS ClassLoader as SystemClassLoader
+## Running Accumulo with new VFS ClassLoader as System ClassLoader
 
 ### Configure Accumulo to use new classloader
 
@@ -45,7 +49,7 @@ Stop Accumulo if it's running and add the following to the accumulo-env.sh:
 ```	
 a. Add vfs-reloading-classloader-1.0.0-SNAPSHOT.jar to CLASSPATH
 b. Add "-Djava.system.class.loader=org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader" to JAVA_OPTS
-c. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/examples.jar" to JAVA_OPTS
+c. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/system/.*" to JAVA_OPTS
 d. Add "-Dvfs.classpath.monitor.seconds=10" to JAVA_OPTS
 e. (optional) Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
 ```
@@ -72,7 +76,7 @@ we did not change the iterator class name, the context classloader will load a n
 a. Set Accumulo Classpath Context property:
 
 ```
-config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/context-examples.jar
+config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/legacy/bar/.*
 config -s general.vfs.context.classpath.cx1.delegation=post
 ```
 
@@ -92,15 +96,16 @@ scan
 	
 This test will continue from the previous test and we will copy a jar over the jar referenced in the cx1 context classpath. The legacy AccumuloReloadingVFSClassLoader has a hard-coded filesystem monitor time of 5 minutes, so we will need to wait some number of minutes after overwriting the jar before the scans will return the new value of `foo`.
 
-a. Copy the example-a.jar over the context-examples.jar to force a reload. The value in the scan result should change from 'bar' back to 'foo'.
+a. Copy the example-a.jar over the context-examples.jar to force a reload. The value in the scan result should change from `bar` back to `foo`.
 
 ```
-hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/context-examples.jar
+hadoop fs -rm /iterators/legacy/bar/examples.jar
+hadoop fs -cp -f /iterators/legacy/foo/examples.jar /iterators/legacy/bar/examples2.jar
 ```
 
 b. Wait 10 minutes for a reload
     
-c. Test that class loader has been updated and is returning a new class
+c. Test that class loader has been updated and is returning the value 'foo'
 
 ```
 scan
@@ -117,9 +122,9 @@ deleteiter -n example -t test -scan
 config -t test -d table.classpath.context
 config -d general.vfs.context.classpath.cx1
 config -d general.vfs.context.classpath.cx1.delegation
-config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/example-a/examples.jar
+config -s general.vfs.context.classpath.cx1=hdfs://localhost:9000/iterators/new/foo/examples.jar
 config -s general.vfs.context.classpath.cx1.delegation=post
-config -s general.vfs.context.classpath.cx2=hdfs://localhost:9000/iterators/example-b/examples.jar
+config -s general.vfs.context.classpath.cx2=hdfs://localhost:9000/iterators/new/bar/examples.jar
 config -s general.vfs.context.classpath.cx2.delegation=post
 ```
 
@@ -153,7 +158,7 @@ After the context change, the scan should return `bar`.
 scan
 ```
 
-# Setting scan context on table (New)
+## Setting scan context on table (New)
 
 For this test we will use the new ReloadingVFSContextClassLoaderFactory for the table context classloaders. 
 
@@ -165,7 +170,6 @@ config -d general.vfs.context.classpath.cx1
 config -d general.vfs.context.classpath.cx1.delegation
 config -d general.vfs.context.classpath.cx2
 config -d general.vfs.context.classpath.cx2.delegation
-
 ```
 
 b. Then, create a file on the local filesystem for the context configuration.
@@ -176,7 +180,7 @@ b. Then, create a file on the local filesystem for the context configuration.
     {
       "name": "cxA",
       "config": {
-        "classPath": "hdfs://localhost:9000/iterators/example-a/examples.jar",
+        "classPath": "hdfs://localhost:9000/iterators/new/foo/.*",
         "postDelegate": true,
         "monitorIntervalMs": 10000
       }
@@ -184,7 +188,7 @@ b. Then, create a file on the local filesystem for the context configuration.
     {
       "name": "cxB",
       "config": {
-        "classPath": "hdfs://localhost:9000/iterators/example-b/examples.jar",
+        "classPath": "hdfs://localhost:9000/iterators/new/bar/.*",
         "postDelegate": true,
         "monitorIntervalMs": 10000
       }
@@ -200,8 +204,11 @@ a. Add "general.context.class.loader.factory=org.apache.accumulo.classloader.vfs
 b. Add "-Dvfs.context.class.loader.config=file:///path/to/config/file.json" to JAVA_OPTS
 ```
 
-d. Create the table as we did in the last test. Create a table, insert some data, and change the value of the data using an iterator that is loaded from HDFS via the VFSClassLoader set up as the System ClassLoader. After setting the iterator the value should be `foo` in subsequent scans.
+### Test setting iterator retrieved from jar in HDFS with System ClassLoader
 
+If you did not remove the configuration for the new System ClassLoader, then the following test should work as it should load the ExampleIterator class from the System ClassLoader.
+
+a. Create the table as we did in the last test. Create a table, insert some data, and change the value of the data using an iterator that is loaded from HDFS via the VFSClassLoader set up as the System ClassLoader. After setting the iterator the value should be `foo` in subsequent scans.
 
 ```
 createtable test
@@ -211,23 +218,34 @@ setiter -class org.apache.accumulo.classloader.vfs.examples.ExampleIterator -sca
 scan
 ```
 
-e. Set the table context to cxA. The scan on the table should return the value `foo`.
+### Change the context on the table
+
+Change the contexts on the table to test the classes being loaded from the different jars.
+
+a. Set the table context to cxA. The scan on the table should return the value `foo`.
 
 ```
 config -t test -s table.classpath.context=cxA
 scan
 ```
 
-f. Set the table context to cxB. The scan on the table should return the value `bar`.
+b. Set the table context to cxB. The scan on the table should return the value `bar`.
 
 ```
 config -t test -s table.classpath.context=cxB
 scan
 ```
 
-g. Now, to test the reloading copy /iterators/example-a/examples.jar to /iterators/example-b/examples.jar and rescan. The value from the scan should be `foo`.
+### Testing Reloading
+
+Now we are going to remove the jar from the `cxB` context directory and replace it with the jar from the `cxA` context directory.
+
+a. Test the reloading by removing the existing jar from HDFS, copy /iterators/example-a/examples.jar to /iterators/example-b/examples2.jar and rescan. The value from the scan should be `foo`. Note that the context set on the table is `cxB` which returned `bar` in the previous test.
+
+NOTE: Overwriting the example-b/examples.jar does not work, it does not appear that VFS pulls down the jar from HDFS into the local cache directory and it continues to serve up the old class.
 
 ```
-hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/example-b/examples.jar
+hadoop fs -rm /iterators/new/bar/examples.jar
+hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/new/bar/examples2.jar
 scan
 ```

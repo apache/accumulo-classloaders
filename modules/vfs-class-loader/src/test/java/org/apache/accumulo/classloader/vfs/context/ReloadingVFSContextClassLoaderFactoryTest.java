@@ -32,30 +32,31 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
-import org.apache.accumulo.classloader.vfs.VFSManager;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Context;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.ContextConfig;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Contexts;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 
 public class ReloadingVFSContextClassLoaderFactoryTest {
 
+  private static final Logger LOG =
+      LoggerFactory.getLogger(ReloadingVFSContextClassLoaderFactoryTest.class);
+
   private static class TestReloadingVFSContextClassLoaderFactory
       extends ReloadingVFSContextClassLoaderFactory {
 
     private final String dir;
-    private final DefaultFileSystemManager vfs;
 
-    public TestReloadingVFSContextClassLoaderFactory(String dir, DefaultFileSystemManager vfs) {
+    public TestReloadingVFSContextClassLoaderFactory(String dir) {
       this.dir = dir;
-      this.vfs = vfs;
     }
 
     @Override
@@ -68,6 +69,13 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
             }
 
             @Override
+            protected boolean isPostDelegationModel() {
+              LOG.debug("isPostDelegationModel called, returning {}",
+                  c.getConfig().getPostDelegate());
+              return c.getConfig().getPostDelegate();
+            }
+
+            @Override
             protected long getMonitorInterval() {
               return 500l;
             }
@@ -77,9 +85,8 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
               return true;
             }
           };
-      cl.setVFSForTests(this.vfs);
       cl.setVMInitializedForTests();
-      cl.setMaxRetries(1);
+      cl.setMaxRetries(2);
       return cl;
     }
 
@@ -91,21 +98,28 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
   private static final Contexts c = new Contexts();
 
-  @Before
-  public void setup() throws Exception {
+  private static File foo = new File(System.getProperty("user.dir") + "/target/foo");
+  private static File bar = new File(System.getProperty("user.dir") + "/target/bar");
 
+  @BeforeClass
+  public static void setup() throws Exception {
+
+    foo.mkdir();
+    bar.mkdir();
+
+    System.setProperty(AccumuloVFSClassLoader.VFS_CLASSLOADER_DEBUG, "true");
     ContextConfig cc1 = new ContextConfig();
-    cc1.setClassPath("file:///tmp/foo");
+    cc1.setClassPath(foo.toURI() + ".*");
     cc1.setPostDelegate(true);
-    cc1.setMonitorIntervalMs(30000);
+    cc1.setMonitorIntervalMs(1000);
     Context c1 = new Context();
     c1.setName("cx1");
     c1.setConfig(cc1);
 
     ContextConfig cc2 = new ContextConfig();
-    cc2.setClassPath("file:///tmp/bar");
+    cc2.setClassPath(bar.toURI() + ".*");
     cc2.setPostDelegate(false);
-    cc2.setMonitorIntervalMs(30000);
+    cc2.setMonitorIntervalMs(1000);
     Context c2 = new Context();
     c2.setName("cx2");
     c2.setConfig(cc2);
@@ -131,6 +145,12 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
   @Test
   public void testCreation() throws Exception {
+
+    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
+        new File(foo, "HelloWorld.jar"));
+    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
+        new File(bar, "HelloWorld2.jar"));
+
     File f = TEMP.newFile();
     f.deleteOnExit();
     Gson g = new Gson();
@@ -153,17 +173,18 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     }
     cl.getClassLoader("cx1");
     cl.getClassLoader("cx2");
-
+    cl.closeForTests();
   }
 
   @Test
   public void testReloading() throws Exception {
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
-    DefaultFileSystemManager vfs = VFSManager.generateVfs();
 
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        TEMP.newFile("HelloWorld.jar"));
+        new File(foo, "HelloWorld.jar"));
+    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
+        new File(bar, "HelloWorld2.jar"));
 
     File f = TEMP.newFile();
     f.deleteOnExit();
@@ -172,35 +193,40 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     try (BufferedWriter writer = Files.newBufferedWriter(f.toPath(), UTF_8, WRITE)) {
       writer.write(contexts);
     }
-    TestReloadingVFSContextClassLoaderFactory cl = new TestReloadingVFSContextClassLoaderFactory(
-        "file://" + TEMP.getRoot().getCanonicalPath() + "/.*.jar", vfs) {
-      @Override
-      protected String getConfigFileLocation() {
-        return f.toURI().toString();
-      }
-    };
-    cl.initialize(null);
 
-    Class<?> clazz1 = cl.getClassLoader("cx1").loadClass("test.HelloWorld");
+    TestReloadingVFSContextClassLoaderFactory factory =
+        new TestReloadingVFSContextClassLoaderFactory(foo.toURI() + ".*") {
+          @Override
+          protected String getConfigFileLocation() {
+            return f.toURI().toString();
+          }
+        };
+    factory.initialize(null);
+
+    ClassLoader cl1 = factory.getClassLoader("cx1");
+    Class<?> clazz1 = cl1.loadClass("test.HelloWorld");
     Object o1 = clazz1.getDeclaredConstructor().newInstance();
     assertEquals("Hello World!", o1.toString());
 
     // Check that the class is the same before the update
-    Class<?> clazz1_5 = cl.getClassLoader("cx1").loadClass("test.HelloWorld");
+    Class<?> clazz1_5 = cl1.loadClass("test.HelloWorld");
     assertEquals(clazz1, clazz1_5);
 
-    assertTrue(new File(TEMP.getRoot(), "HelloWorld.jar").delete());
+    assertTrue(new File(foo, "HelloWorld.jar").delete());
 
     Thread.sleep(1000);
 
     // Update the class
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        TEMP.newFile("HelloWorld2.jar"));
+        new File(foo, "HelloWorld2.jar"));
 
     // Wait for the monitor to notice
     Thread.sleep(1000);
 
-    Class<?> clazz2 = cl.getClassLoader("cx1").loadClass("test.HelloWorld");
+    ClassLoader cl2 = factory.getClassLoader("cx1");
+    assertNotEquals(cl1, cl2);
+
+    Class<?> clazz2 = factory.getClassLoader("cx1").loadClass("test.HelloWorld");
     Object o2 = clazz2.getDeclaredConstructor().newInstance();
     assertEquals("Hello World!", o2.toString());
 
@@ -208,7 +234,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     assertNotEquals(clazz1, clazz2);
     assertNotEquals(o1, o2);
 
-    ((AccumuloVFSClassLoader) cl.getClassLoader("cx1")).close();
+    factory.closeForTests();
   }
 
 }

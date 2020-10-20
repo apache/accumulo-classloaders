@@ -25,7 +25,6 @@ import java.io.File;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
-import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -40,12 +39,11 @@ public class AccumuloVFSClassLoaderTest {
   public TemporaryFolder folder1 =
       new TemporaryFolder(new File(System.getProperty("user.dir") + "/target"));
   String folderPath;
-  private DefaultFileSystemManager vfs;
 
   @Before
   public void setup() throws Exception {
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
-    vfs = VFSManager.generateVfs();
+    VFSManager.initialize();
 
     folderPath = folder1.getRoot().toURI() + ".*";
 
@@ -56,8 +54,8 @@ public class AccumuloVFSClassLoaderTest {
   FileObject[] createFileSystems(FileObject[] fos) throws FileSystemException {
     FileObject[] rfos = new FileObject[fos.length];
     for (int i = 0; i < fos.length; i++) {
-      if (vfs.canCreateFileSystem(fos[i])) {
-        rfos[i] = vfs.createFileSystem(fos[i]);
+      if (VFSManager.get().canCreateFileSystem(fos[i])) {
+        rfos[i] = VFSManager.get().createFileSystem(fos[i]);
       } else {
         rfos[i] = fos[i];
       }
@@ -68,7 +66,7 @@ public class AccumuloVFSClassLoaderTest {
 
   @Test
   public void testConstructor() throws Exception {
-    FileObject testDir = vfs.resolveFile(folder1.getRoot().toURI().toString());
+    FileObject testDir = VFSManager.get().resolveFile(folder1.getRoot().toURI().toString());
     FileObject[] dirContents = testDir.getChildren();
 
     AccumuloVFSClassLoader arvcl = new AccumuloVFSClassLoader(ClassLoader.getSystemClassLoader()) {
@@ -76,14 +74,8 @@ public class AccumuloVFSClassLoaderTest {
       protected String getClassPath() {
         return folderPath;
       }
-
-      @Override
-      protected DefaultFileSystemManager getFileSystem() {
-        return vfs;
-      }
     };
     arvcl.setVMInitializedForTests();
-    arvcl.setVFSForTests(vfs);
 
     FileObject[] files = ((VFSClassLoaderWrapper) arvcl.getDelegateClassLoader()).getFileObjects();
     assertArrayEquals(createFileSystems(dirContents), files);
