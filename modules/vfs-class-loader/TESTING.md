@@ -31,7 +31,7 @@ hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-S
 hadoop fs -put -f modules/example-iterators-a/target/example-iterators-a-1.0.0-SNAPSHOT.jar /iterators/new/foo/examples.jar
 hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/legacy/bar/examples.jar
 hadoop fs -put -f modules/example-iterators-b/target/example-iterators-b-1.0.0-SNAPSHOT.jar /iterators/new/bar/examples.jar
-hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/system/examples.jar
+hadoop fs -cp -f /iterators/legacy/foo/examples.jar /iterators/system/examples.jar
 ```
 
 Copy the new class loader jar to /tmp:
@@ -246,6 +246,6 @@ NOTE: Overwriting the example-b/examples.jar does not work, it does not appear t
 
 ```
 hadoop fs -rm /iterators/new/bar/examples.jar
-hadoop fs -cp -f /iterators/example-a/examples.jar /iterators/new/bar/examples2.jar
+hadoop fs -cp -f /iterators/new/foo/examples.jar /iterators/new/bar/examples2.jar
 scan
 ```
