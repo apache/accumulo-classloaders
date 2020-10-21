@@ -49,6 +49,8 @@ import org.apache.commons.vfs2.provider.hdfs.HdfsFileObject;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 /**
  * <p>
  * A {@code ClassLoader} implementation that watches for changes in any of the files/directories in
@@ -128,6 +130,11 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
         String.format("ERROR: %d AccumuloVFSClassLoader: %s", System.currentTimeMillis(), msg));
   }
 
+  private static void printWarn(String msg) {
+    System.err.println(
+        String.format("WARN: %d AccumuloVFSClassLoader: %s", System.currentTimeMillis(), msg));
+  }
+
   /**
    * Get the classpath value from the environment and resolve embedded env vars
    *
@@ -136,7 +143,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
   private static String getClassPathProperty() {
     String cp = System.getProperty(VFS_CLASSLOADER_CLASSPATH);
     if (null == cp || cp.isBlank()) {
-      printError(VFS_CLASSLOADER_CLASSPATH + " system property not set, using default of \"\"");
+      printWarn(VFS_CLASSLOADER_CLASSPATH + " system property not set, using default of \"\"");
       cp = "";
     }
     String result = replaceEnvVars(cp, System.getenv());
@@ -168,7 +175,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
     // Get configuration properties from the environment variables
     String vfsCacheDir = System.getProperty(VFS_CACHE_DIR_PROPERTY);
     if (null == vfsCacheDir || vfsCacheDir.isBlank()) {
-      printError(VFS_CACHE_DIR_PROPERTY + " system property not set, using default of "
+      printWarn(VFS_CACHE_DIR_PROPERTY + " system property not set, using default of "
           + VFS_CACHE_DIR_DEFAULT);
       vfsCacheDir = System.getProperty(VFS_CACHE_DIR_DEFAULT);
     }
@@ -208,7 +215,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
       try {
         return TimeUnit.SECONDS.toMillis(Long.parseLong(interval));
       } catch (NumberFormatException e) {
-        printError(VFS_CLASSPATH_MONITOR_INTERVAL + " system property not set, using default of "
+        printWarn(VFS_CLASSPATH_MONITOR_INTERVAL + " system property not set, using default of "
             + DEFAULT_TIMEOUT);
         return DEFAULT_TIMEOUT;
       }
@@ -340,9 +347,9 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
     }
   }
 
+  @SuppressFBWarnings(value = "SWL_SLEEP_WITH_LOCK_HELD")
   private synchronized void updateDelegateClassloader() throws Exception {
     try {
-      updateLock.writeLock().lock();
       // Re-resolve the files on the classpath, things may have changed.
       long retries = 0;
       long currentSleepMillis = sleepInterval;
@@ -351,7 +358,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
       if (classpathFiles.length == 0) {
         while (classpathFiles.length == 0 && retryPermitted(retries)) {
           try {
-            printDebug("VFS path was empty.  Waiting " + currentSleepMillis + " ms to retry");
+            printWarn("VFS path was empty.  Waiting " + currentSleepMillis + " ms to retry");
             Thread.sleep(currentSleepMillis);
             classpathFiles = VFSManager.resolve(this.getClassPath());
             retries++;
@@ -412,7 +419,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
             }
             try {
               // try finding this class here instead of parent
-              Class<?> clazz = findClass(name);
+              Class<?> clazz = super.findClass(name);
               if (DEBUG) {
                 printDebug("Returning newly loaded class: " + name + "@" + clazz.hashCode()
                     + " from classloader: " + clazz.getClassLoader().hashCode());
@@ -427,6 +434,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
           }
         };
       }
+      updateLock.writeLock().lock();
       this.cl = newDelegate;
       printDebug("AccumuloVFSClassLoader set, hash=" + this.cl.hashCode());
     } finally {
@@ -771,10 +779,14 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
 
   // VisibleForTesting intentionally not using annotation from Guava
   // because it adds unwanted dependency
+  @SuppressFBWarnings(value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
+      justification = "used for tests")
   public void setVMInitializedForTests() {
     VM_INITIALIZED = true;
   }
 
+  @SuppressFBWarnings(value = "ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD",
+      justification = "used for tests")
   public void enableDebugForTests() {
     DEBUG = true;
   }

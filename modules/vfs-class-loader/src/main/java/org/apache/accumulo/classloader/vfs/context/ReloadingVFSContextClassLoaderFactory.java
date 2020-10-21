@@ -21,6 +21,8 @@ package org.apache.accumulo.classloader.vfs.context;
 import java.io.File;
 import java.net.URI;
 import java.nio.file.Files;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -271,31 +273,37 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
 
   protected AccumuloVFSClassLoader create(Context c) {
     LOG.debug("Creating ReloadingVFSClassLoader for context: {})", c.getName());
-    return new AccumuloVFSClassLoader(
-        ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+    return AccessController.doPrivileged(new PrivilegedAction<AccumuloVFSClassLoader>() {
       @Override
-      protected String getClassPath() {
-        return c.getConfig().getClassPath();
-      }
+      public AccumuloVFSClassLoader run() {
+        return new AccumuloVFSClassLoader(
+            ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+          @Override
+          protected String getClassPath() {
+            return c.getConfig().getClassPath();
+          }
 
-      @Override
-      protected boolean isPostDelegationModel() {
-        LOG.debug("isPostDelegationModel called, returning {}", c.getConfig().getPostDelegate());
-        return c.getConfig().getPostDelegate();
-      }
+          @Override
+          protected boolean isPostDelegationModel() {
+            LOG.debug("isPostDelegationModel called, returning {}",
+                c.getConfig().getPostDelegate());
+            return c.getConfig().getPostDelegate();
+          }
 
-      @Override
-      protected long getMonitorInterval() {
-        return c.getConfig().getMonitorIntervalMs();
-      }
+          @Override
+          protected long getMonitorInterval() {
+            return c.getConfig().getMonitorIntervalMs();
+          }
 
-      @Override
-      protected boolean isVMInitialized() {
-        // The classloader is not being set using
-        // `java.system.class.loader`, so the VM is initialized.
-        return true;
+          @Override
+          protected boolean isVMInitialized() {
+            // The classloader is not being set using
+            // `java.system.class.loader`, so the VM is initialized.
+            return true;
+          }
+        };
       }
-    };
+    });
   }
 
   @Override

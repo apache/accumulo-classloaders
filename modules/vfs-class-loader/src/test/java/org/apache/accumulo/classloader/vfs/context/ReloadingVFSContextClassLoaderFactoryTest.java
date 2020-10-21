@@ -28,6 +28,8 @@ import static org.junit.Assert.fail;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.nio.file.Files;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,6 +47,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+@SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class ReloadingVFSContextClassLoaderFactoryTest {
 
   private static final Logger LOG =
@@ -61,35 +66,42 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
     @Override
     protected AccumuloVFSClassLoader create(Context c) {
-      AccumuloVFSClassLoader cl =
-          new AccumuloVFSClassLoader(ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+      AccumuloVFSClassLoader acl =
+          AccessController.doPrivileged(new PrivilegedAction<AccumuloVFSClassLoader>() {
             @Override
-            protected String getClassPath() {
-              return dir;
+            public AccumuloVFSClassLoader run() {
+              AccumuloVFSClassLoader cl = new AccumuloVFSClassLoader(
+                  ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+                @Override
+                protected String getClassPath() {
+                  return dir;
+                }
+
+                @Override
+                protected boolean isPostDelegationModel() {
+                  LOG.debug("isPostDelegationModel called, returning {}",
+                      c.getConfig().getPostDelegate());
+                  return c.getConfig().getPostDelegate();
+                }
+
+                @Override
+                protected long getMonitorInterval() {
+                  return 500l;
+                }
+
+                @Override
+                protected boolean isVMInitialized() {
+                  return true;
+                }
+              };
+              cl.setVMInitializedForTests();
+              cl.setMaxRetries(2);
+              return cl;
             }
 
-            @Override
-            protected boolean isPostDelegationModel() {
-              LOG.debug("isPostDelegationModel called, returning {}",
-                  c.getConfig().getPostDelegate());
-              return c.getConfig().getPostDelegate();
-            }
-
-            @Override
-            protected long getMonitorInterval() {
-              return 500l;
-            }
-
-            @Override
-            protected boolean isVMInitialized() {
-              return true;
-            }
-          };
-      cl.setVMInitializedForTests();
-      cl.setMaxRetries(2);
-      return cl;
+          });
+      return acl;
     }
-
   }
 
   @Rule
@@ -104,8 +116,8 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   @BeforeClass
   public static void setup() throws Exception {
 
-    foo.mkdir();
-    bar.mkdir();
+    assertTrue(foo.mkdir());
+    assertTrue(bar.mkdir());
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSLOADER_DEBUG, "true");
     ContextConfig cc1 = new ContextConfig();

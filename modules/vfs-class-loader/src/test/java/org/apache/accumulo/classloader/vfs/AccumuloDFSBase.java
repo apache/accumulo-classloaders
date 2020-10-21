@@ -23,6 +23,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.vfs2.CacheStrategy;
 import org.apache.commons.vfs2.FileSystemException;
@@ -43,9 +44,9 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class AccumuloDFSBase {
 
-  protected static Configuration conf = null;
-  protected static DefaultFileSystemManager vfs = null;
-  protected static MiniDFSCluster cluster = null;
+  private static Configuration conf = null;
+  private static DefaultFileSystemManager vfs = null;
+  private static MiniDFSCluster cluster = null;
 
   private static URI HDFS_URI;
 
@@ -60,7 +61,8 @@ public class AccumuloDFSBase {
     // with the correct permissions.
     try {
       Process p = Runtime.getRuntime().exec("/bin/sh -c umask");
-      try (BufferedReader bri = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+      try (BufferedReader bri =
+          new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
         String line = bri.readLine();
         p.waitFor();
 
@@ -149,6 +151,18 @@ public class AccumuloDFSBase {
       throw new RuntimeException("Error setting up VFS", e);
     }
 
+  }
+
+  public Configuration getConfiguration() {
+    return conf;
+  }
+
+  public MiniDFSCluster getCluster() {
+    return cluster;
+  }
+
+  public DefaultFileSystemManager getDefaultFileSystemManager() {
+    return vfs;
   }
 
   @AfterClass

@@ -37,6 +37,7 @@ package org.apache.accumulo.classloader.vfs.examples;
  * under the License.
  */
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Map;
 
@@ -63,7 +64,7 @@ public class ExampleIterator implements SortedKeyValueIterator<Key,Value> {
   }
 
   public Value getTopValue() {
-    return new Value("bar".getBytes());
+    return new Value("bar".getBytes(StandardCharsets.UTF_8));
   }
 
   public boolean hasTop() {
