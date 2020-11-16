@@ -26,9 +26,9 @@ import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
+import org.apache.accumulo.core.client.PluginEnvironment.Configuration;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -255,7 +255,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   }
 
   @Override
-  public void initialize(Supplier<Map<String,String>> contextProperties) throws Exception {
+  public void initialize(Configuration contextProperties) throws Exception {
     // Properties
     String conf = getConfigFileLocation();
     File f = new File(new URI(conf));
