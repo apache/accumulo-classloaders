@@ -24,7 +24,6 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.net.MalformedURLException;
 
-import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -53,9 +52,9 @@ public class ClassPathPrinterTest {
   @Test
   public void testPrintClassPath() throws Exception {
     File conf = folder1.newFile("accumulo.properties");
-    DefaultFileSystemManager vfs = VFSManager.generateVfs();
+    VFSManager.initialize();
 
-    ReloadingVFSClassLoader cl = new ReloadingVFSClassLoader(parent) {
+    AccumuloVFSClassLoader cl = new AccumuloVFSClassLoader(parent) {
       @Override
       protected String getClassPath() {
         try {
@@ -65,13 +64,8 @@ public class ClassPathPrinterTest {
         }
       }
 
-      @Override
-      protected DefaultFileSystemManager getFileSystem() {
-        return vfs;
-      }
     };
     cl.setVMInitializedForTests();
-    cl.setVFSForTests(vfs);
 
     assertPattern(ClassPathPrinter.getClassPath(cl, true), "(?s).*\\s+.*\\n$", true);
     assertTrue(ClassPathPrinter.getClassPath(cl, true)

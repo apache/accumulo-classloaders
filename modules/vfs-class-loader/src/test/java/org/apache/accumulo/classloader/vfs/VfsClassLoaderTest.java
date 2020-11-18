@@ -22,11 +22,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URL;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 
 import org.apache.commons.vfs2.FileChangeEvent;
 import org.apache.commons.vfs2.FileListener;
 import org.apache.commons.vfs2.FileObject;
+import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.impl.DefaultFileMonitor;
+import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.apache.commons.vfs2.impl.VFSClassLoader;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -40,11 +44,12 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
 
   private FileSystem hdfs = null;
   private VFSClassLoader cl = null;
+  private DefaultFileSystemManager vfs = null;
 
   @Before
   public void setup() throws Exception {
 
-    this.hdfs = cluster.getFileSystem();
+    this.hdfs = this.getCluster().getFileSystem();
     this.hdfs.mkdirs(TEST_DIR);
 
     // Copy jar file to TEST_DIR
@@ -53,11 +58,21 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
     Path dst = new Path(TEST_DIR, src.getName());
     this.hdfs.copyFromLocalFile(src, dst);
 
+    vfs = this.getDefaultFileSystemManager();
     FileObject testDir = vfs.resolveFile(TEST_DIR.toUri().toString());
     FileObject[] dirContents = testDir.getChildren();
 
-    // Point the VFSClassLoader to all of the objects in TEST_DIR
-    this.cl = new VFSClassLoader(dirContents, vfs);
+    this.cl = AccessController.doPrivileged(new PrivilegedAction<VFSClassLoader>() {
+      @Override
+      public VFSClassLoader run() {
+        // Point the VFSClassLoader to all of the objects in TEST_DIR
+        try {
+          return new VFSClassLoader(dirContents, vfs);
+        } catch (FileSystemException e) {
+          throw new RuntimeException("Error creating VFSClassLoader", e);
+        }
+      }
+    });
   }
 
   @Test

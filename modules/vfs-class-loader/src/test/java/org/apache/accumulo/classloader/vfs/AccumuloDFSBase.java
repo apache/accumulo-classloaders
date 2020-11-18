@@ -18,11 +18,13 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
-import org.apache.accumulo.start.classloader.vfs.MiniDFSUtil;
 import org.apache.commons.vfs2.CacheStrategy;
 import org.apache.commons.vfs2.FileSystemException;
 import org.apache.commons.vfs2.cache.DefaultFilesCache;
@@ -42,14 +44,41 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class AccumuloDFSBase {
 
-  protected static Configuration conf = null;
-  protected static DefaultFileSystemManager vfs = null;
-  protected static MiniDFSCluster cluster = null;
+  private static Configuration conf = null;
+  private static DefaultFileSystemManager vfs = null;
+  private static MiniDFSCluster cluster = null;
 
   private static URI HDFS_URI;
 
   protected static URI getHdfsUri() {
     return HDFS_URI;
+  }
+
+  public static String computeDatanodeDirectoryPermission() {
+    // MiniDFSCluster will check the permissions on the data directories, but does not
+    // do a good job of setting them properly. We need to get the users umask and set
+    // the appropriate Hadoop property so that the data directories will be created
+    // with the correct permissions.
+    try {
+      Process p = Runtime.getRuntime().exec("/bin/sh -c umask");
+      try (BufferedReader bri =
+          new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+        String line = bri.readLine();
+        p.waitFor();
+
+        if (line == null) {
+          throw new IOException("umask input stream closed prematurely");
+        }
+        short umask = Short.parseShort(line.trim(), 8);
+        // Need to set permission to 777 xor umask
+        // leading zero makes java interpret as base 8
+        int newPermission = 0777 ^ umask;
+
+        return String.format("%03o", newPermission);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Error getting umask from O/S", e);
+    }
   }
 
   @BeforeClass
@@ -63,7 +92,7 @@ public class AccumuloDFSBase {
     conf = new Configuration();
     conf.set("hadoop.security.token.service.use_ip", "true");
 
-    conf.set("dfs.datanode.data.dir.perm", MiniDFSUtil.computeDatanodeDirectoryPermission());
+    conf.set("dfs.datanode.data.dir.perm", computeDatanodeDirectoryPermission());
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024 * 1024); // 1M blocksize
 
     try {
@@ -122,6 +151,18 @@ public class AccumuloDFSBase {
       throw new RuntimeException("Error setting up VFS", e);
     }
 
+  }
+
+  public Configuration getConfiguration() {
+    return conf;
+  }
+
+  public MiniDFSCluster getCluster() {
+    return cluster;
+  }
+
+  public DefaultFileSystemManager getDefaultFileSystemManager() {
+    return vfs;
   }
 
   @AfterClass

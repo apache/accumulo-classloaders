@@ -80,4 +80,8 @@ public class VFSClassLoaderWrapper extends VFSClassLoader {
     return super.loadClass(name, resolve);
   }
 
+  @Override
+  public String toString() {
+    return "VFSClassLoaderWrapper (hashCode: " + this.hashCode() + ")";
+  }
 }

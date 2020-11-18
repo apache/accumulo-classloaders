@@ -28,24 +28,19 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <artifactId>vfs-reloading-classloader</artifactId>
-  <name>VFS Reloading ClassLoader</name>
+  <name>classloader-extras-vfs-reloading</name>
   <properties>
     <eclipseFormatterStyle>../../contrib/Eclipse-Accumulo-Codestyle.xml</eclipseFormatterStyle>
-    <!-- temporarily skip analyzing dependencies until things are fixed, in order to build -->
-    <mdep.analyze.skip>true</mdep.analyze.skip>
-    <!-- temporarily skip spotbugs until things are fixed, in order to build -->
-    <spotbugs.skip>true</spotbugs.skip>
+    <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
   </properties>
   <dependencies>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>3.7.1</version>
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs-annotations</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-vfs2</artifactId>
-      <version>2.6.0</version>
       <exclusions>
         <exclusion>
           <groupId>org.apache.hadoop</groupId>
@@ -54,74 +49,53 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-1.2-api</artifactId>
-      <version>2.13.1</version>
-    </dependency>
-    <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
-      <version>2.8.6</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
-      <version>2.7</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
-      <version>1.2</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
-      <artifactId>classloaderfactory-substitute</artifactId>
-      <version>${project.version}</version>
+      <artifactId>accumulo-core</artifactId>
       <scope>provided</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.accumulo</groupId>
+          <artifactId>accumulo-start</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.zookeeper</groupId>
+          <artifactId>zookeeper</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
-      <version>3.2.1</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
-      <version>1.7.30</version>
       <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <version>28.2-jre</version>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.13</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.accumulo</groupId>
-      <artifactId>accumulo-start</artifactId>
-      <version>2.1.0-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-minicluster</artifactId>
-      <version>3.2.1</version>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-slf4j-impl</artifactId>
-      <version>2.13.1</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -140,7 +114,7 @@
                   <pluginExecutionFilter>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>exec-maven-plugin</artifactId>
-                    <versionRange>[3.0.0,)</versionRange>
+                    <versionRange>[1.6.0,)</versionRange>
                     <goals>
                       <goal>exec</goal>
                     </goals>
@@ -167,7 +141,6 @@
             <exclude>**/LICENSE</exclude>
             <exclude>**/NOTICE</exclude>
             <exclude>**/target/**</exclude>
-            <exclude>contrib/javadoc11.patch</exclude>
           </excludes>
           <mapping combine.children="append">
             <!-- general mappings; module-specific mappings appear in their respective pom -->

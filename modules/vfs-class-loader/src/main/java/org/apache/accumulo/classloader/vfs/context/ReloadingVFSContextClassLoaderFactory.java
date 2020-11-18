@@ -19,13 +19,20 @@
 package org.apache.accumulo.classloader.vfs.context;
 
 import java.io.File;
+import java.net.URI;
 import java.nio.file.Files;
-import java.util.HashMap;
+import java.security.AccessController;
+import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.apache.accumulo.classloader.vfs.ReloadingVFSClassLoader;
-import org.apache.accumulo.core.spi.common.ClassLoaderFactory;
+import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
+import org.apache.accumulo.core.client.PluginEnvironment.Configuration;
+import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
 
@@ -33,10 +40,10 @@ import com.google.gson.Gson;
  * A ClassLoaderFactory implementation that uses a ReloadingVFSClassLoader per defined context.
  * Configuration of this class is done with a JSON file whose location is defined by the system
  * property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need to set
- * the Accumulo configuration property <b>general.context.factory</b> to the fully qualified name of
- * this class, create a configuration file that defines the supported contexts and their
- * configuration, and set <b>vfs.context.class.loader.config</b> to the location of the
- * configuration file.
+ * the Accumulo configuration property <b>general.context.class.loader.factory</b> to the fully
+ * qualified name of this class, create a configuration file that defines the supported contexts and
+ * their configuration, and set the system property <b>vfs.context.class.loader.config</b> to the
+ * location of the configuration file.
  *
  * <p>
  * Example configuration file:
@@ -64,7 +71,7 @@ import com.google.gson.Gson;
  * }
  * </pre>
  */
-public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory {
+public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoaderFactory {
 
   public static class Contexts {
     List<Context> contexts;
@@ -75,6 +82,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
 
     public void setContexts(List<Context> contexts) {
       this.contexts = contexts;
+    }
+
+    @Override
+    public String toString() {
+      return "Contexts [contexts=" + contexts + "]";
     }
 
     @Override
@@ -124,6 +136,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
     }
 
     @Override
+    public String toString() {
+      return "Context [name=" + name + ", config=" + config + "]";
+    }
+
+    @Override
     public int hashCode() {
       final int prime = 31;
       int result = 1;
@@ -165,7 +182,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
     }
 
     public void setClassPath(String classPath) {
-      this.classPath = ReloadingVFSClassLoader.replaceEnvVars(classPath, System.getenv());
+      this.classPath = AccumuloVFSClassLoader.replaceEnvVars(classPath, System.getenv());
     }
 
     public boolean getPostDelegate() {
@@ -182,6 +199,12 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
 
     public void setMonitorIntervalMs(long monitorIntervalMs) {
       this.monitorIntervalMs = monitorIntervalMs;
+    }
+
+    @Override
+    public String toString() {
+      return "ContextConfig [classPath=" + classPath + ", postDelegate=" + postDelegate
+          + ", monitorIntervalMs=" + monitorIntervalMs + "]";
     }
 
     @Override
@@ -216,8 +239,11 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
     }
   }
 
+  private static final Logger LOG =
+      LoggerFactory.getLogger(ReloadingVFSContextClassLoaderFactory.class);
   public static final String CONFIG_LOCATION = "vfs.context.class.loader.config";
-  private static final Map<String,ReloadingVFSClassLoader> CONTEXTS = new HashMap<>();
+  private static final Map<String,AccumuloVFSClassLoader> CONTEXTS = new ConcurrentHashMap<>();
+  private Contexts contextDefinitions = null;
 
   protected String getConfigFileLocation() {
     String loc = System.getProperty(CONFIG_LOCATION);
@@ -229,43 +255,75 @@ public class ReloadingVFSContextClassLoaderFactory implements ClassLoaderFactory
   }
 
   @Override
-  public void initialize(ClassLoaderFactoryConfiguration conf) throws Exception {
+  public void initialize(Configuration contextProperties) throws Exception {
     // Properties
-    File f = new File(getConfigFileLocation());
+    String conf = getConfigFileLocation();
+    File f = new File(new URI(conf));
     if (!f.canRead()) {
-      throw new RuntimeException("Unable to read configuration file: " + f.getAbsolutePath());
+      throw new RuntimeException("Unable to read configuration file: " + conf);
     }
     Gson g = new Gson();
-    Contexts con = g.fromJson(Files.newBufferedReader(f.toPath()), Contexts.class);
+    LOG.debug("Context configuration: {}", FileUtils.readFileToString(f, "UTF-8"));
+    contextDefinitions = g.fromJson(Files.newBufferedReader(f.toPath()), Contexts.class);
+    LOG.debug("Deserialized JSON: {}", contextDefinitions);
+    contextDefinitions.getContexts().forEach(c -> {
+      CONTEXTS.put(c.getName(), create(c));
+    });
+  }
 
-    con.getContexts().forEach(c -> {
-      CONTEXTS.put(c.getName(), new ReloadingVFSClassLoader(
-          ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
-        @Override
-        protected String getClassPath() {
-          return c.getConfig().getClassPath();
-        }
+  protected AccumuloVFSClassLoader create(Context c) {
+    LOG.debug("Creating ReloadingVFSClassLoader for context: {})", c.getName());
+    return AccessController.doPrivileged(new PrivilegedAction<AccumuloVFSClassLoader>() {
+      @Override
+      public AccumuloVFSClassLoader run() {
+        return new AccumuloVFSClassLoader(
+            ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
+          @Override
+          protected String getClassPath() {
+            return c.getConfig().getClassPath();
+          }
 
-        @Override
-        protected boolean isPreDelegationModel() {
-          return !(c.getConfig().getPostDelegate());
-        }
+          @Override
+          protected boolean isPostDelegationModel() {
+            LOG.debug("isPostDelegationModel called, returning {}",
+                c.getConfig().getPostDelegate());
+            return c.getConfig().getPostDelegate();
+          }
 
-        @Override
-        protected long getMonitorInterval() {
-          return c.getConfig().getMonitorIntervalMs();
-        }
-      });
+          @Override
+          protected long getMonitorInterval() {
+            return c.getConfig().getMonitorIntervalMs();
+          }
+
+          @Override
+          protected boolean isVMInitialized() {
+            // The classloader is not being set using
+            // `java.system.class.loader`, so the VM is initialized.
+            return true;
+          }
+        };
+      }
     });
   }
 
   @Override
-  public ClassLoader getClassLoader(String contextName) throws IllegalArgumentException {
+  public synchronized ClassLoader getClassLoader(String contextName)
+      throws IllegalArgumentException {
     if (!CONTEXTS.containsKey(contextName)) {
       throw new IllegalArgumentException(
           "ReloadingVFSContextClassLoaderFactory not configured for context: " + contextName);
     }
-    return CONTEXTS.get(contextName);
+    // The JVM maintains a cache of loaded classes where the key is the ClassLoader
+    // instance and the loaded Class name (see ClassLoader.findLoadedClass()). So
+    // that we can return new implementations of the same class when the context
+    // changes we need to load the class from the delegate classloader directly
+    // since the delegate instance will be recreated when the context changes.
+    return CONTEXTS.get(contextName).unwrap();
   }
 
+  public void closeForTests() {
+    CONTEXTS.forEach((k, v) -> {
+      v.close();
+    });
+  }
 }

@@ -93,12 +93,12 @@ public class ClassPathPrinter {
             printJar(out, u.getFile(), debug, sawFirst);
             sawFirst = true;
           }
-        } else if (classLoader instanceof ReloadingVFSClassLoader) {
+        } else if (classLoader instanceof AccumuloVFSClassLoader) {
           if (debug) {
             out.print("Level " + level + ": ReloadingVFSClassLoader, classpath items are:\n");
           }
           @SuppressWarnings("resource")
-          ReloadingVFSClassLoader vcl = (ReloadingVFSClassLoader) classLoader;
+          AccumuloVFSClassLoader vcl = (AccumuloVFSClassLoader) classLoader;
           ClassLoader delegate = vcl.getDelegateClassLoader();
           if (delegate instanceof VFSClassLoaderWrapper) {
             VFSClassLoaderWrapper wrapper = (VFSClassLoaderWrapper) delegate;
