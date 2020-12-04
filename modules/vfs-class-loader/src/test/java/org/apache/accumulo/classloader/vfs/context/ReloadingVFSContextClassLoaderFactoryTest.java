@@ -176,7 +176,6 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
         return f.toURI().toString();
       }
     };
-    cl.initialize(null);
     try {
       cl.getClassLoader("c1");
       fail("Expected illegal argument exception");
@@ -213,7 +212,6 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
             return f.toURI().toString();
           }
         };
-    factory.initialize(null);
 
     ClassLoader cl1 = factory.getClassLoader("cx1");
     Class<?> clazz1 = cl1.loadClass("test.HelloWorld");
