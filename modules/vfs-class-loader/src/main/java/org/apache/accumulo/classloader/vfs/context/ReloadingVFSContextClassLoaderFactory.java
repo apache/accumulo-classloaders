@@ -246,6 +246,14 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   private static final Map<String,AccumuloVFSClassLoader> CONTEXTS = new ConcurrentHashMap<>();
   private Contexts contextDefinitions = null;
 
+  public ReloadingVFSContextClassLoaderFactory() {
+    try {
+      initializeContexts();
+    } catch (URISyntaxException | IOException e) {
+      throw new RuntimeException("Error initializing contexts", e);
+    }
+  }
+
   protected String getConfigFileLocation() {
     String loc = System.getProperty(CONFIG_LOCATION);
     if (null == loc || loc.isBlank()) {
@@ -312,11 +320,6 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   @Override
   public synchronized ClassLoader getClassLoader(String contextName)
       throws IllegalArgumentException {
-    try {
-      initializeContexts();
-    } catch (URISyntaxException | IOException e) {
-      throw new RuntimeException("Error initializing contexts", e);
-    }
     if (!CONTEXTS.containsKey(contextName)) {
       throw new IllegalArgumentException(
           "ReloadingVFSContextClassLoaderFactory not configured for context: " + contextName);
