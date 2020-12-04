@@ -19,7 +19,9 @@
 package org.apache.accumulo.classloader.vfs.context;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -28,7 +30,6 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
-import org.apache.accumulo.core.client.PluginEnvironment.Configuration;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -245,6 +246,14 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   private static final Map<String,AccumuloVFSClassLoader> CONTEXTS = new ConcurrentHashMap<>();
   private Contexts contextDefinitions = null;
 
+  public ReloadingVFSContextClassLoaderFactory() {
+    try {
+      initializeContexts();
+    } catch (URISyntaxException | IOException e) {
+      throw new RuntimeException("Error initializing contexts", e);
+    }
+  }
+
   protected String getConfigFileLocation() {
     String loc = System.getProperty(CONFIG_LOCATION);
     if (null == loc || loc.isBlank()) {
@@ -254,8 +263,10 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     return loc;
   }
 
-  @Override
-  public void initialize(Configuration contextProperties) throws Exception {
+  private void initializeContexts() throws URISyntaxException, IOException {
+    if (!CONTEXTS.isEmpty()) {
+      LOG.debug("Contexts already initialized, skipping...");
+    }
     // Properties
     String conf = getConfigFileLocation();
     File f = new File(new URI(conf));
