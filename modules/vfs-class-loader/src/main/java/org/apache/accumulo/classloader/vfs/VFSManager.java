@@ -179,6 +179,7 @@ public class VFSManager {
       VFS.addMimeTypeMap("application/x-tar", "tar");
       VFS.addMimeTypeMap("application/x-gzip", "gz");
       VFS.addMimeTypeMap("application/zip", "zip");
+      VFS.addMimeTypeMap("application/java-archive", "jar");
       VFS.setFileContentInfoFactory(new FileContentInfoFilenameFactory());
       VFS.setFilesCache(new SoftRefFilesCache());
       File cacheDir = computeTopCacheDir();
