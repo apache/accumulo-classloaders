@@ -97,7 +97,7 @@
     <maven.compiler.target>11</maven.compiler.target>
     <!-- timestamp for reproducible outputs, updated on release by the release plugin -->
     <project.build.outputTimestamp>2020-08-27T15:56:15Z</project.build.outputTimestamp>
-    <slf4j.version>1.7.35</slf4j.version>
+    <slf4j.version>2.0.3</slf4j.version>
     <sourceReleaseAssemblyDescriptor>source-release-tar</sourceReleaseAssemblyDescriptor>
   </properties>
   <dependencyManagement>
@@ -208,8 +208,8 @@
       </dependency>
       <dependency>
         <groupId>org.apache.logging.log4j</groupId>
-        <artifactId>log4j-slf4j-impl</artifactId>
-        <version>2.17.2</version>
+        <artifactId>log4j-slf4j2-impl</artifactId>
+        <version>2.19.0</version>
         <scope>test</scope>
       </dependency>
     </dependencies>

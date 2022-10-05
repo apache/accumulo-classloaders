@@ -19,11 +19,13 @@
 package org.apache.accumulo.classloader.vfs;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URL;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
+import java.util.Arrays;
 
 import org.apache.commons.vfs2.FileChangeEvent;
 import org.apache.commons.vfs2.FileListener;
@@ -34,35 +36,53 @@ import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.apache.commons.vfs2.impl.VFSClassLoader;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class VfsClassLoaderTest extends AccumuloDFSBase {
 
+  private static final Logger LOG = LoggerFactory.getLogger(VfsClassLoaderTest.class);
   private static final Path TEST_DIR = new Path(getHdfsUri() + "/test-dir");
 
-  private FileSystem hdfs = null;
-  private VFSClassLoader cl = null;
-  private DefaultFileSystemManager vfs = null;
+  private static FileSystem hdfs = null;
+  private static DefaultFileSystemManager vfs = null;
+
+  @BeforeClass
+  public static void setup() throws Exception {
+
+    // miniDfsClusterSetup();
+
+    hdfs = getCluster().getFileSystem();
+    assertTrue("Unable to create: " + TEST_DIR, hdfs.mkdirs(TEST_DIR));
+
+    vfs = getDefaultFileSystemManager();
+
+  }
 
   @Before
-  public void setup() throws Exception {
-
-    this.hdfs = this.getCluster().getFileSystem();
-    this.hdfs.mkdirs(TEST_DIR);
-
+  public void before() throws Exception {
     // Copy jar file to TEST_DIR
-    URL jarPath = this.getClass().getResource("/HelloWorld.jar");
+    URL jarPath = VfsClassLoaderTest.class.getResource("/HelloWorld.jar");
+    assertNotNull("Unable to find HelloWorld.jar", jarPath);
     Path src = new Path(jarPath.toURI().toString());
     Path dst = new Path(TEST_DIR, src.getName());
-    this.hdfs.copyFromLocalFile(src, dst);
+    LOG.info("Copying {} to {}", src, dst);
+    hdfs.copyFromLocalFile(src, dst);
+  }
 
-    vfs = this.getDefaultFileSystemManager();
+  @Test
+  public void testGetClass() throws Exception {
+
     FileObject testDir = vfs.resolveFile(TEST_DIR.toUri().toString());
+    assertNotNull("Unable to resolve test dir via VFS", testDir);
     FileObject[] dirContents = testDir.getChildren();
+    LOG.info("Test directory contents according to VFS: {}", Arrays.toString(dirContents));
 
-    this.cl = AccessController.doPrivileged(new PrivilegedAction<VFSClassLoader>() {
+    VFSClassLoader cl = AccessController.doPrivileged(new PrivilegedAction<VFSClassLoader>() {
       @Override
       public VFSClassLoader run() {
         // Point the VFSClassLoader to all of the objects in TEST_DIR
@@ -73,11 +93,10 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
         }
       }
     });
-  }
 
-  @Test
-  public void testGetClass() throws Exception {
-    Class<?> helloWorldClass = this.cl.loadClass("test.HelloWorld");
+    LOG.info("VFSClassLoader has the following files: {}", Arrays.toString(cl.getFileObjects()));
+    LOG.info("Looking for HelloWorld.class");
+    Class<?> helloWorldClass = cl.loadClass("test.HelloWorld");
     Object o = helloWorldClass.getDeclaredConstructor().newInstance();
     assertEquals("Hello World!", o.toString());
   }
@@ -95,7 +114,7 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
     URL jarPath = this.getClass().getResource("/HelloWorld.jar");
     Path src = new Path(jarPath.toURI().toString());
     Path dst = new Path(TEST_DIR, "HelloWorld2.jar");
-    this.hdfs.copyFromLocalFile(src, dst);
+    hdfs.copyFromLocalFile(src, dst);
 
     // VFS-487 significantly wait to avoid failure
     Thread.sleep(7000);
@@ -105,13 +124,13 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
     jarPath = this.getClass().getResource("/HelloWorld.jar");
     src = new Path(jarPath.toURI().toString());
     dst = new Path(TEST_DIR, "HelloWorld2.jar");
-    this.hdfs.copyFromLocalFile(src, dst);
+    hdfs.copyFromLocalFile(src, dst);
 
     // VFS-487 significantly wait to avoid failure
     Thread.sleep(7000);
     assertTrue(listener.isFileChanged());
 
-    this.hdfs.delete(dst, false);
+    hdfs.delete(dst, false);
     // VFS-487 significantly wait to avoid failure
     Thread.sleep(7000);
     assertTrue(listener.isFileDeleted());
@@ -120,9 +139,10 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
 
   }
 
-  @After
-  public void tearDown() throws Exception {
-    this.hdfs.delete(TEST_DIR, true);
+  @AfterClass
+  public static void tearDown() throws Exception {
+    hdfs.delete(TEST_DIR, true);
+    tearDownMiniDfsCluster();
   }
 
   public static class MyFileMonitor implements FileListener {

@@ -27,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.vfs2.CacheStrategy;
 import org.apache.commons.vfs2.FileSystemException;
-import org.apache.commons.vfs2.cache.DefaultFilesCache;
 import org.apache.commons.vfs2.cache.SoftRefFilesCache;
 import org.apache.commons.vfs2.impl.DefaultFileReplicator;
 import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
@@ -108,7 +107,6 @@ public class AccumuloDFSBase {
     // Set up the VFS
     vfs = new DefaultFileSystemManager();
     try {
-      vfs.setFilesCache(new DefaultFilesCache());
       vfs.addProvider("res", new org.apache.commons.vfs2.provider.res.ResourceFileProvider());
       vfs.addProvider("zip", new org.apache.commons.vfs2.provider.zip.ZipFileProvider());
       vfs.addProvider("gz", new org.apache.commons.vfs2.provider.gzip.GzipFileProvider());
@@ -141,6 +139,7 @@ public class AccumuloDFSBase {
       vfs.addMimeTypeMap("application/x-tar", "tar");
       vfs.addMimeTypeMap("application/x-gzip", "gz");
       vfs.addMimeTypeMap("application/zip", "zip");
+      vfs.addMimeTypeMap("application/java-archive", "jar");
       vfs.setFileContentInfoFactory(new FileContentInfoFilenameFactory());
       vfs.setFilesCache(new SoftRefFilesCache());
       vfs.setReplicator(new DefaultFileReplicator(new File(System.getProperty("java.io.tmpdir"),
@@ -153,15 +152,15 @@ public class AccumuloDFSBase {
 
   }
 
-  public Configuration getConfiguration() {
+  public static Configuration getConfiguration() {
     return conf;
   }
 
-  public MiniDFSCluster getCluster() {
+  public static MiniDFSCluster getCluster() {
     return cluster;
   }
 
-  public DefaultFileSystemManager getDefaultFileSystemManager() {
+  public static DefaultFileSystemManager getDefaultFileSystemManager() {
     return vfs;
   }
 
