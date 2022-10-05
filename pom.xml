@@ -558,6 +558,11 @@
             </goals>
             <configuration>
               <failOnWarning>true</failOnWarning>
+              <ignoredUnusedDeclaredDependencies>
+                <unused>org.apache.logging.log4j:log4j-slf4j2-impl:jar:*</unused>
+                <!-- needed because https://issues.apache.org/jira/browse/LOG4J2-3601 -->
+                <unused>org.apache.logging.log4j:log4j-core:jar:*</unused>
+              </ignoredUnusedDeclaredDependencies>
             </configuration>
           </execution>
         </executions>
