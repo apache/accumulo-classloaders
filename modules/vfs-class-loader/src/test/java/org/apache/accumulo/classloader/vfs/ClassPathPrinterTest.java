@@ -33,7 +33,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class ClassPathPrinterTest {
 
   @TempDir
-  public static File folder1;
+  private static File folder1;
 
   private final ClassLoader parent = ClassPathPrinterTest.class.getClassLoader();
 

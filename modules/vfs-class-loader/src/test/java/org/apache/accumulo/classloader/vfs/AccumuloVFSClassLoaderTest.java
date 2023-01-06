@@ -36,7 +36,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class AccumuloVFSClassLoaderTest {
 
   @TempDir
-  public static File folder1;
+  private static File folder1;
   String folderPath;
 
   @BeforeEach

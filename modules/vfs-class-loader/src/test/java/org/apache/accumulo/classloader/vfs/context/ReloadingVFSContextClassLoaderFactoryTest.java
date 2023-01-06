@@ -104,7 +104,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @TempDir
-  public static File TEMP;
+  private static File TEMP;
 
   private static final Contexts c = new Contexts();
 
