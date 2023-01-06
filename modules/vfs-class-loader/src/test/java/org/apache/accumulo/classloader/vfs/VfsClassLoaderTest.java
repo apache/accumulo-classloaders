@@ -18,9 +18,9 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.security.AccessController;
@@ -36,10 +36,10 @@ import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.apache.commons.vfs2.impl.VFSClassLoader;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,23 +51,23 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
   private static FileSystem hdfs = null;
   private static DefaultFileSystemManager vfs = null;
 
-  @BeforeClass
+  @BeforeAll
   public static void setup() throws Exception {
 
     // miniDfsClusterSetup();
 
     hdfs = getCluster().getFileSystem();
-    assertTrue("Unable to create: " + TEST_DIR, hdfs.mkdirs(TEST_DIR));
+    assertTrue(hdfs.mkdirs(TEST_DIR), "Unable to create: " + TEST_DIR);
 
     vfs = getDefaultFileSystemManager();
 
   }
 
-  @Before
+  @BeforeEach
   public void before() throws Exception {
     // Copy jar file to TEST_DIR
     URL jarPath = VfsClassLoaderTest.class.getResource("/HelloWorld.jar");
-    assertNotNull("Unable to find HelloWorld.jar", jarPath);
+    assertNotNull(jarPath, "Unable to find HelloWorld.jar");
     Path src = new Path(jarPath.toURI().toString());
     Path dst = new Path(TEST_DIR, src.getName());
     LOG.info("Copying {} to {}", src, dst);
@@ -78,7 +78,7 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
   public void testGetClass() throws Exception {
 
     FileObject testDir = vfs.resolveFile(TEST_DIR.toUri().toString());
-    assertNotNull("Unable to resolve test dir via VFS", testDir);
+    assertNotNull(testDir, "Unable to resolve test dir via VFS");
     FileObject[] dirContents = testDir.getChildren();
     LOG.info("Test directory contents according to VFS: {}", Arrays.toString(dirContents));
 
@@ -139,7 +139,7 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
 
   }
 
-  @AfterClass
+  @AfterAll
   public static void tearDown() throws Exception {
     hdfs.delete(TEST_DIR, true);
     tearDownMiniDfsCluster();
