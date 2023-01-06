@@ -33,7 +33,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class ClassPathPrinterTest {
 
   @TempDir
-  private static File folder1;
+  private static File tempDir;
 
   private final ClassLoader parent = ClassPathPrinterTest.class.getClassLoader();
 
@@ -49,7 +49,7 @@ public class ClassPathPrinterTest {
 
   @Test
   public void testPrintClassPath() throws Exception {
-    File conf = new File(folder1, "accumulo.properties");
+    File conf = new File(tempDir, "accumulo.properties");
     assertTrue(conf.isFile() || conf.createNewFile());
     VFSManager.initialize();
 

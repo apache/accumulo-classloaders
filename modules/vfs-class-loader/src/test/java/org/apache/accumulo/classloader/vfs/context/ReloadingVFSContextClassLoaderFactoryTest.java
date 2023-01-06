@@ -40,6 +40,7 @@ import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoade
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -104,7 +105,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @TempDir
-  private static File TEMP;
+  private static File tempDir;
 
   private static final Contexts c = new Contexts();
 
@@ -154,14 +155,18 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testCreation() throws Exception {
+  public void testCreation(TestInfo testInfo) throws Exception {
 
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(foo, "HelloWorld.jar"));
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(bar, "HelloWorld2.jar"));
 
-    File f = new File(TEMP, "configFile");
+    String testMethodName = testInfo.getTestMethod().get().getName();
+    File testSubDir = new File(tempDir, testMethodName);
+    assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
+
+    File f = new File(testSubDir, "configFile");
     assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();
@@ -187,7 +192,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testReloading() throws Exception {
+  public void testReloading(TestInfo testInfo) throws Exception {
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
 
@@ -196,7 +201,11 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(bar, "HelloWorld2.jar"));
 
-    File f = new File(TEMP, "configFile");
+    String testMethodName = testInfo.getTestMethod().get().getName();
+    File testSubDir = new File(tempDir, testMethodName);
+    assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
+
+    File f = new File(testSubDir, "configFile");
     assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();

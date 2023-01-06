@@ -36,7 +36,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class AccumuloVFSClassLoaderTest {
 
   @TempDir
-  private static File folder1;
+  private static File tempDir;
   String folderPath;
 
   @BeforeEach
@@ -44,10 +44,10 @@ public class AccumuloVFSClassLoaderTest {
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
     VFSManager.initialize();
 
-    folderPath = folder1.toURI() + ".*";
+    folderPath = tempDir.toURI() + ".*";
 
     FileUtils.copyURLToFile(Objects.requireNonNull(this.getClass().getResource("/HelloWorld.jar")),
-        new File(folder1, "HelloWorld.jar"));
+        new File(tempDir, "HelloWorld.jar"));
   }
 
   FileObject[] createFileSystems(FileObject[] fos) throws FileSystemException {
@@ -65,7 +65,7 @@ public class AccumuloVFSClassLoaderTest {
 
   @Test
   public void testConstructor() throws Exception {
-    FileObject testDir = VFSManager.get().resolveFile(folder1.toURI().toString());
+    FileObject testDir = VFSManager.get().resolveFile(tempDir.toURI().toString());
     FileObject[] dirContents = testDir.getChildren();
 
     AccumuloVFSClassLoader arvcl = new AccumuloVFSClassLoader(ClassLoader.getSystemClassLoader()) {
