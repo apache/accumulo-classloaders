@@ -46,11 +46,15 @@ cp ./modules/vfs-class-loader/target/vfs-reloading-classloader-1.0.0-SNAPSHOT.ja
 
 Stop Accumulo if it's running and add the following to the accumulo-env.sh:
 
+**Note:** Make sure the commons-vfs2 jar is also on the classpath as well. This dependency was removed in Accumulo 3.0.0 
+so if using that version or newer you will need to add it.
+
 ```	
 a. Add vfs-reloading-classloader-1.0.0-SNAPSHOT.jar to CLASSPATH
-b. Add "-Djava.system.class.loader=org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader" to JAVA_OPTS
-c. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/system/.*" to JAVA_OPTS
-d. Add "-Dvfs.classpath.monitor.seconds=10" to JAVA_OPTS
+b. (if not already on classpath) Add commons-vfs2-<version>.jar to CLASSPATH
+c. Add "-Djava.system.class.loader=org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader" to JAVA_OPTS
+d. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/system/.*" to JAVA_OPTS
+e. Add "-Dvfs.classpath.monitor.seconds=10" to JAVA_OPTS
 e. (optional) Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
 ```
 	
@@ -66,7 +70,7 @@ setiter -class org.apache.accumulo.classloader.vfs.examples.ExampleIterator -sca
 scan
 ```
       
-## Setting scan context on table (Legacy)
+## Setting scan context on table (Legacy, only works on Accumulo 2.1.0 and older)
 
 ### Define a Table Context and load the iterator class with the same name, but different behavior
 
@@ -158,11 +162,11 @@ After the context change, the scan should return `bar`.
 scan
 ```
 
-## Setting scan context on table (New)
+## Setting scan context on table (Accumulo 3.0.0 and newer)
 
 For this test we will use the new ReloadingVFSContextClassLoaderFactory for the table context classloaders. 
 
-a. First, let's clean up from the prior tests
+a. First, let's clean up from the prior tests (**Note:** this does not apply if running Accumulo 3.0.0)
 
 ```
 droptable -f test
@@ -172,7 +176,7 @@ config -d general.vfs.context.classpath.cx2
 config -d general.vfs.context.classpath.cx2.delegation
 ```
 
-b. Then, create a file on the local filesystem for the context configuration.
+a. Then, create a file on the local filesystem for the context configuration.
 
 ```
 {
@@ -224,6 +228,15 @@ Change the contexts on the table to test the classes being loaded from the diffe
 
 a. Set the table context to cxA. The scan on the table should return the value `foo`.
 
+**Note:** The property for the context was renamed in Accumulo 3.0.0
+
+Accumulo 3.0.0
+```
+config -t test -s table.class.loader.context=cxA
+scan
+```
+
+Accumulo 2.1.0
 ```
 config -t test -s table.classpath.context=cxA
 scan
@@ -231,6 +244,13 @@ scan
 
 b. Set the table context to cxB. The scan on the table should return the value `bar`.
 
+Accumulo 3.0.0
+```
+config -t test -s table.class.loader.context=cxB
+scan
+```
+
+Accumulo 2.1.0
 ```
 config -t test -s table.classpath.context=cxB
 scan
