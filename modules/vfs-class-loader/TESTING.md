@@ -47,8 +47,7 @@ cp ./modules/vfs-class-loader/target/vfs-reloading-classloader-1.0.0-SNAPSHOT.ja
 Stop Accumulo if it's running and add the following to the accumulo-env.sh:
 
 **Note:** Make sure the commons-vfs2 jar is also on the classpath as well. This dependency was removed in Accumulo 3.0.0 
-so if using that version or newer you will need to add it. Also, if you are testing using Uno, do not turn on debug logging 
-as this will cause errors on start up as the logging to standard out interferes with the configuration parsing.
+so if using that version or newer you will need to add it.
 
 ```	
 a. Add vfs-reloading-classloader-1.0.0-SNAPSHOT.jar to CLASSPATH
@@ -56,7 +55,7 @@ b. (if not already on classpath) Add commons-vfs2-<version>.jar to CLASSPATH
 c. Add "-Djava.system.class.loader=org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader" to JAVA_OPTS
 d. Add "-Dvfs.class.loader.classpath=hdfs://localhost:9000/iterators/system/.*" to JAVA_OPTS
 e. Add "-Dvfs.classpath.monitor.seconds=10" to JAVA_OPTS
-e. (optional, currently not compatible with Uno) Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
+e. (optional) Add "-Dvfs.class.loader.debug=true" to JAVA_OPTS
 ```
 	
 ### Test setting iterator retrieved from jar in HDFS with System ClassLoader
