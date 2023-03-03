@@ -28,8 +28,6 @@ import static org.junit.Assert.fail;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.nio.file.Files;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -64,43 +62,37 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
       this.dir = dir;
     }
 
+    @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
+        justification = "Security Manager is deprecated for removal as of JDK 17")
     @Override
     protected AccumuloVFSClassLoader create(Context c) {
-      AccumuloVFSClassLoader acl =
-          AccessController.doPrivileged(new PrivilegedAction<AccumuloVFSClassLoader>() {
+      final AccumuloVFSClassLoader cl =
+          new AccumuloVFSClassLoader(ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
             @Override
-            public AccumuloVFSClassLoader run() {
-              AccumuloVFSClassLoader cl = new AccumuloVFSClassLoader(
-                  ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
-                @Override
-                protected String getClassPath() {
-                  return dir;
-                }
-
-                @Override
-                protected boolean isPostDelegationModel() {
-                  LOG.debug("isPostDelegationModel called, returning {}",
-                      c.getConfig().getPostDelegate());
-                  return c.getConfig().getPostDelegate();
-                }
-
-                @Override
-                protected long getMonitorInterval() {
-                  return 500l;
-                }
-
-                @Override
-                protected boolean isVMInitialized() {
-                  return true;
-                }
-              };
-              cl.setVMInitializedForTests();
-              cl.setMaxRetries(2);
-              return cl;
+            protected String getClassPath() {
+              return dir;
             }
 
-          });
-      return acl;
+            @Override
+            protected boolean isPostDelegationModel() {
+              LOG.debug("isPostDelegationModel called, returning {}",
+                  c.getConfig().getPostDelegate());
+              return c.getConfig().getPostDelegate();
+            }
+
+            @Override
+            protected long getMonitorInterval() {
+              return 500l;
+            }
+
+            @Override
+            protected boolean isVMInitialized() {
+              return true;
+            }
+          };
+      cl.setVMInitializedForTests();
+      cl.setMaxRetries(2);
+      return cl;
     }
   }
 

@@ -23,8 +23,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,6 +34,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * A ClassLoaderFactory implementation that uses a ReloadingVFSClassLoader per defined context.
@@ -282,39 +282,35 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     });
   }
 
+  @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
+      justification = "Security Manager is deprecated for removal as of JDK 17")
   protected AccumuloVFSClassLoader create(Context c) {
     LOG.debug("Creating ReloadingVFSClassLoader for context: {})", c.getName());
-    return AccessController.doPrivileged(new PrivilegedAction<AccumuloVFSClassLoader>() {
+    return new AccumuloVFSClassLoader(
+        ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
       @Override
-      public AccumuloVFSClassLoader run() {
-        return new AccumuloVFSClassLoader(
-            ReloadingVFSContextClassLoaderFactory.class.getClassLoader()) {
-          @Override
-          protected String getClassPath() {
-            return c.getConfig().getClassPath();
-          }
-
-          @Override
-          protected boolean isPostDelegationModel() {
-            LOG.debug("isPostDelegationModel called, returning {}",
-                c.getConfig().getPostDelegate());
-            return c.getConfig().getPostDelegate();
-          }
-
-          @Override
-          protected long getMonitorInterval() {
-            return c.getConfig().getMonitorIntervalMs();
-          }
-
-          @Override
-          protected boolean isVMInitialized() {
-            // The classloader is not being set using
-            // `java.system.class.loader`, so the VM is initialized.
-            return true;
-          }
-        };
+      protected String getClassPath() {
+        return c.getConfig().getClassPath();
       }
-    });
+
+      @Override
+      protected boolean isPostDelegationModel() {
+        LOG.debug("isPostDelegationModel called, returning {}", c.getConfig().getPostDelegate());
+        return c.getConfig().getPostDelegate();
+      }
+
+      @Override
+      protected long getMonitorInterval() {
+        return c.getConfig().getMonitorIntervalMs();
+      }
+
+      @Override
+      protected boolean isVMInitialized() {
+        // The classloader is not being set using
+        // `java.system.class.loader`, so the VM is initialized.
+        return true;
+      }
+    };
   }
 
   @Override
