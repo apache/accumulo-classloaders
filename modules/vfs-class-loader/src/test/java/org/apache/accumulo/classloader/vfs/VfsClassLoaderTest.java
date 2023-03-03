@@ -23,8 +23,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.net.URL;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Arrays;
 
 import org.apache.commons.vfs2.FileChangeEvent;
@@ -82,17 +80,14 @@ public class VfsClassLoaderTest extends AccumuloDFSBase {
     FileObject[] dirContents = testDir.getChildren();
     LOG.info("Test directory contents according to VFS: {}", Arrays.toString(dirContents));
 
-    VFSClassLoader cl = AccessController.doPrivileged(new PrivilegedAction<VFSClassLoader>() {
-      @Override
-      public VFSClassLoader run() {
-        // Point the VFSClassLoader to all of the objects in TEST_DIR
-        try {
-          return new VFSClassLoader(dirContents, vfs);
-        } catch (FileSystemException e) {
-          throw new RuntimeException("Error creating VFSClassLoader", e);
-        }
-      }
-    });
+    final VFSClassLoader cl;
+
+    // Point the VFSClassLoader to all of the objects in TEST_DIR
+    try {
+      cl = new VFSClassLoader(dirContents, vfs);
+    } catch (FileSystemException e) {
+      throw new RuntimeException("Error creating VFSClassLoader", e);
+    }
 
     LOG.info("VFSClassLoader has the following files: {}", Arrays.toString(cl.getFileObjects()));
     LOG.info("Looking for HelloWorld.class");
