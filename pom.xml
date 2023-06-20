@@ -353,7 +353,7 @@
                     <property name="message" value="Use JUnit5+ @Test annotation instead of TestCase" />
                   </module>
                   <module name="RegexpSinglelineJava">
-                    <property name="format" value="org[.]junit[.][^jupiter]" />
+                    <property name="format" value="org[.]junit[.](?!jupiter)" />
                     <property name="message" value="Use JUnit5 (JUnit Jupiter) instead of JUnit4 (or lower)" />
                   </module>
                   <module name="RegexpSinglelineJava">
