@@ -18,40 +18,39 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.net.MalformedURLException;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class ClassPathPrinterTest {
 
-  @Rule
-  public TemporaryFolder folder1 =
-      new TemporaryFolder(new File(System.getProperty("user.dir") + "/target"));
+  @TempDir
+  private static File tempDir;
 
   private final ClassLoader parent = ClassPathPrinterTest.class.getClassLoader();
 
   private static void assertPattern(String output, String pattern, boolean shouldMatch) {
     if (shouldMatch) {
-      assertTrue("Pattern " + pattern + " did not match output: " + output,
-          output.matches(pattern));
+      assertTrue(output.matches(pattern),
+          "Pattern " + pattern + " did not match output: " + output);
     } else {
-      assertFalse("Pattern " + pattern + " should not match output: " + output,
-          output.matches(pattern));
+      assertFalse(output.matches(pattern),
+          "Pattern " + pattern + " should not match output: " + output);
     }
   }
 
   @Test
   public void testPrintClassPath() throws Exception {
-    File conf = folder1.newFile("accumulo.properties");
+    File conf = new File(tempDir, "accumulo.properties");
+    assertTrue(conf.isFile() || conf.createNewFile());
     VFSManager.initialize();
 
     AccumuloVFSClassLoader cl = new AccumuloVFSClassLoader(parent) {

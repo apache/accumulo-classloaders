@@ -20,10 +20,10 @@ package org.apache.accumulo.classloader.vfs.context;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardOpenOption.WRITE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -36,10 +36,10 @@ import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoade
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.ContextConfig;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Contexts;
 import org.apache.commons.io.FileUtils;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,16 +96,15 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     }
   }
 
-  @Rule
-  public TemporaryFolder TEMP =
-      new TemporaryFolder(new File(System.getProperty("user.dir") + "/target"));
+  @TempDir
+  private static File tempDir;
 
   private static final Contexts c = new Contexts();
 
   private static File foo = new File(System.getProperty("user.dir") + "/target/foo");
   private static File bar = new File(System.getProperty("user.dir") + "/target/bar");
 
-  @BeforeClass
+  @BeforeAll
   public static void setup() throws Exception {
 
     assertTrue(foo.mkdir());
@@ -148,14 +147,19 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testCreation() throws Exception {
+  public void testCreation(TestInfo testInfo) throws Exception {
 
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(foo, "HelloWorld.jar"));
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(bar, "HelloWorld2.jar"));
 
-    File f = TEMP.newFile();
+    String testMethodName = testInfo.getTestMethod().get().getName();
+    File testSubDir = new File(tempDir, testMethodName);
+    assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
+
+    File f = new File(testSubDir, "configFile");
+    assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();
     String contexts = g.toJson(c);
@@ -180,7 +184,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testReloading() throws Exception {
+  public void testReloading(TestInfo testInfo) throws Exception {
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
 
@@ -189,7 +193,12 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(bar, "HelloWorld2.jar"));
 
-    File f = TEMP.newFile();
+    String testMethodName = testInfo.getTestMethod().get().getName();
+    File testSubDir = new File(tempDir, testMethodName);
+    assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
+
+    File f = new File(testSubDir, "configFile");
+    assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();
     String contexts = g.toJson(c);

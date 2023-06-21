@@ -18,37 +18,36 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
-import static org.junit.Assert.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import java.io.File;
+import java.util.Objects;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class AccumuloVFSClassLoaderTest {
 
-  @Rule
-  public TemporaryFolder folder1 =
-      new TemporaryFolder(new File(System.getProperty("user.dir") + "/target"));
+  @TempDir
+  private static File tempDir;
   String folderPath;
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
     VFSManager.initialize();
 
-    folderPath = folder1.getRoot().toURI() + ".*";
+    folderPath = tempDir.toURI() + ".*";
 
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        folder1.newFile("HelloWorld.jar"));
+    FileUtils.copyURLToFile(Objects.requireNonNull(this.getClass().getResource("/HelloWorld.jar")),
+        new File(tempDir, "HelloWorld.jar"));
   }
 
   FileObject[] createFileSystems(FileObject[] fos) throws FileSystemException {
@@ -66,7 +65,7 @@ public class AccumuloVFSClassLoaderTest {
 
   @Test
   public void testConstructor() throws Exception {
-    FileObject testDir = VFSManager.get().resolveFile(folder1.getRoot().toURI().toString());
+    FileObject testDir = VFSManager.get().resolveFile(tempDir.toURI().toString());
     FileObject[] dirContents = testDir.getChildren();
 
     AccumuloVFSClassLoader arvcl = new AccumuloVFSClassLoader(ClassLoader.getSystemClassLoader()) {
