@@ -33,13 +33,14 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up JDK 11
-      uses: actions/setup-java@v1
+      uses: actions/setup-java@v4
       with:
-        java-version: 11
+        distribution: adopt
+        java-version: 17
     - name: Cache local maven repository
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: |
           ~/.m2/repository/
@@ -47,19 +48,19 @@ jobs:
         key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
         restore-keys: ${{ runner.os }}-m2
     - name: Build with Maven (verify javadoc:jar)
-      run: mvn -B -V -e -ntp "-Dstyle.color=always" verify javadoc:jar
+      run: mvn -B -V -e -ntp "-Dstyle.color=always" verify javadoc:jar -DskipFormat -DverifyFormat
       env:
         MAVEN_OPTS: -Djansi.force=true
     - name: Upload unit test results
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: surefire-reports
         path: ./**/target/surefire-reports/
         if-no-files-found: ignore
     - name: Upload integration test results
       if: ${{ failure() }}
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: failsafe-reports
         path: ./**/target/failsafe-reports/
