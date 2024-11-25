@@ -9,7 +9,7 @@
     "License"); you may not use this file except in compliance
     with the License.  You may obtain a copy of the License at
 
-      http://www.apache.org/licenses/LICENSE-2.0
+      https://www.apache.org/licenses/LICENSE-2.0
 
     Unless required by applicable law or agreed to in writing,
     software distributed under the License is distributed on an
@@ -30,60 +30,60 @@
   <artifactId>vfs-reloading-classloader</artifactId>
   <name>classloader-extras-vfs-reloading</name>
   <properties>
-    <eclipseFormatterStyle>../../contrib/Eclipse-Accumulo-Codestyle.xml</eclipseFormatterStyle>
+    <eclipseFormatterStyle>../../src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
     <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
   </properties>
   <dependencies>
     <dependency>
+      <!-- needed for build checks, but not for runtime -->
       <groupId>com.github.spotbugs</groupId>
       <artifactId>spotbugs-annotations</artifactId>
+      <optional>true</optional>
     </dependency>
     <dependency>
+      <!-- no longer provided by accumulo after 2.1 -->
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-vfs2</artifactId>
       <exclusions>
         <exclusion>
+          <!-- exclude this outdated hadoop client from vfs -->
           <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-hdfs-client</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-core</artifactId>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.accumulo</groupId>
-          <artifactId>accumulo-start</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.zookeeper</groupId>
-          <artifactId>zookeeper</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
+      <!-- provided by accumulo -->
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
@@ -91,13 +91,6 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client-minicluster</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <!-- needed because https://issues.apache.org/jira/browse/LOG4J2-3601 -->
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-      <version>2.19.0</version>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -112,84 +105,29 @@
     </dependency>
   </dependencies>
   <build>
-    <pluginManagement>
-      <plugins>
-        <!--This plugin's configuration is used to store Eclipse m2e settings only. It has no influence on the Maven build itself.-->
-        <plugin>
-          <groupId>org.eclipse.m2e</groupId>
-          <artifactId>lifecycle-mapping</artifactId>
-          <version>1.0.0</version>
-          <configuration>
-            <lifecycleMappingMetadata>
-              <pluginExecutions>
-                <pluginExecution>
-                  <pluginExecutionFilter>
-                    <groupId>org.codehaus.mojo</groupId>
-                    <artifactId>exec-maven-plugin</artifactId>
-                    <versionRange>[1.6.0,)</versionRange>
-                    <goals>
-                      <goal>exec</goal>
-                    </goals>
-                  </pluginExecutionFilter>
-                  <action>
-                    <ignore />
-                  </action>
-                </pluginExecution>
-              </pluginExecutions>
-            </lifecycleMappingMetadata>
-          </configuration>
-        </plugin>
-      </plugins>
-    </pluginManagement>
     <plugins>
-      <plugin>
-        <groupId>com.mycila</groupId>
-        <artifactId>license-maven-plugin</artifactId>
-        <version>3.0</version>
-        <configuration>
-          <header>${project.basedir}/license-header.txt</header>
-          <excludes combine.children="append">
-            <exclude>**/DEPENDENCIES</exclude>
-            <exclude>**/LICENSE</exclude>
-            <exclude>**/NOTICE</exclude>
-            <exclude>**/target/**</exclude>
-          </excludes>
-          <mapping combine.children="append">
-            <!-- general mappings; module-specific mappings appear in their respective pom -->
-            <Makefile>SCRIPT_STYLE</Makefile>
-            <c>SLASHSTAR_STYLE</c>
-            <cc>SLASHSTAR_STYLE</cc>
-            <css>SLASHSTAR_STYLE</css>
-            <h>SLASHSTAR_STYLE</h>
-            <java>SLASHSTAR_STYLE</java>
-            <proto>SLASHSTAR_STYLE</proto>
-            <thrift>SLASHSTAR_STYLE</thrift>
-          </mapping>
-        </configuration>
-      </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
-        <version>1.6.0</version>
         <executions>
           <execution>
-            <id>Build Test jars</id>
+            <id>build-test-jars</id>
             <goals>
               <goal>exec</goal>
             </goals>
             <phase>process-test-classes</phase>
             <configuration>
-              <executable>${project.basedir}/src/test/shell/makeTestJars.sh</executable>
+              <executable>src/test/shell/makeTestJars.sh</executable>
             </configuration>
           </execution>
           <execution>
-            <id>Build HelloWorld jars</id>
+            <id>build-helloworld-jars</id>
             <goals>
               <goal>exec</goal>
             </goals>
             <phase>process-test-classes</phase>
             <configuration>
-              <executable>${project.basedir}/src/test/shell/makeHelloWorldJars.sh</executable>
+              <executable>src/test/shell/makeHelloWorldJars.sh</executable>
             </configuration>
           </execution>
         </executions>

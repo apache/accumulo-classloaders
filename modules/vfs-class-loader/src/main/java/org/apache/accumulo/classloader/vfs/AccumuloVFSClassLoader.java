@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -101,7 +101,6 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
   private volatile boolean vfsInitializing = false;
   private volatile boolean vfsInitialized = false;
 
-  private final ClassLoader parent;
   private final ReentrantReadWriteLock updateLock = new ReentrantReadWriteLock(true);
   private final String name;
   private final String classpath;
@@ -292,7 +291,6 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
     super(AccumuloVFSClassLoader.class.getSimpleName(), parent);
     printDebug("Parent ClassLoader: " + parent.getClass().getName());
     this.name = AccumuloVFSClassLoader.class.getSimpleName();
-    this.parent = parent;
     this.classpath = CLASSPATH;
     this.postDelegation = POST_DELEGATION;
     this.monitorInterval = MONITOR_INTERVAL;
@@ -397,6 +395,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
             + Arrays.stream(this.files).map(Object::toString).collect(Collectors.joining(",")));
       }
       VFSClassLoaderWrapper newDelegate;
+      var parent = getParent();
       if (!this.isPostDelegationModel()) {
         // This is the normal classloader parent delegation model
         printDebug("Creating new pre-delegating VFSClassLoaderWrapper");
@@ -445,10 +444,8 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
   /**
    * Remove the file from the monitor
    *
-   * @param file
-   *          to remove
-   * @throws RuntimeException
-   *           if error
+   * @param file to remove
+   * @throws RuntimeException if error
    */
   private void removeFile(FileObject file) throws RuntimeException {
     try {
@@ -544,7 +541,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
     // and call ClassLoader.getSystemClassLoader() which you can't do until
     // the VM is fully initialized.
     if (!isVMInitialized() || vfsInitializing) {
-      return this.parent;
+      return getParent();
     } else if (!this.vfsInitialized) {
       this.vfsInitializing = true;
       printDebug("getDelegateClassLoader() initializing VFS.");
@@ -726,6 +723,7 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
     final int prime = 31;
     int result = 1;
     result = prime * result + ((name == null) ? 0 : name.hashCode());
+    var parent = getParent();
     if (null != parent) {
       result = prime * result + ((parent.getName() == null) ? 0 : parent.getName().hashCode());
     }
@@ -746,10 +744,12 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
         return false;
     } else if (!name.equals(other.name))
       return false;
+    var parent = getParent();
+    var otherParent = other.getParent();
     if (parent == null) {
-      if (other.parent != null)
+      if (otherParent != null)
         return false;
-    } else if (!parent.getName().equals(other.parent.getName()))
+    } else if (!parent.getName().equals(otherParent.getName()))
       return false;
     return true;
   }

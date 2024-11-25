@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -74,14 +74,15 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  */
 public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  public static class Contexts {
-    List<Context> contexts;
+  // only visible for test
+  static class Contexts {
+    private List<Context> contexts;
 
-    public List<Context> getContexts() {
+    List<Context> getContexts() {
       return contexts;
     }
 
-    public void setContexts(List<Context> contexts) {
+    void setContexts(List<Context> contexts) {
       this.contexts = contexts;
     }
 
@@ -116,23 +117,24 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
-  public static class Context {
+  // only visible for test
+  static class Context {
     private String name;
     private ContextConfig config;
 
-    public String getName() {
+    String getName() {
       return name;
     }
 
-    public void setName(String name) {
+    void setName(String name) {
       this.name = name;
     }
 
-    public ContextConfig getConfig() {
+    ContextConfig getConfig() {
       return config;
     }
 
-    public void setConfig(ContextConfig config) {
+    void setConfig(ContextConfig config) {
       this.config = config;
     }
 
@@ -173,32 +175,33 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
-  public static class ContextConfig {
+  // only visible for test
+  static class ContextConfig {
     private String classPath;
     private boolean postDelegate;
     private long monitorIntervalMs;
 
-    public String getClassPath() {
+    String getClassPath() {
       return classPath;
     }
 
-    public void setClassPath(String classPath) {
+    void setClassPath(String classPath) {
       this.classPath = AccumuloVFSClassLoader.replaceEnvVars(classPath, System.getenv());
     }
 
-    public boolean getPostDelegate() {
+    boolean getPostDelegate() {
       return postDelegate;
     }
 
-    public void setPostDelegate(boolean postDelegate) {
+    void setPostDelegate(boolean postDelegate) {
       this.postDelegate = postDelegate;
     }
 
-    public long getMonitorIntervalMs() {
+    long getMonitorIntervalMs() {
       return monitorIntervalMs;
     }
 
-    public void setMonitorIntervalMs(long monitorIntervalMs) {
+    void setMonitorIntervalMs(long monitorIntervalMs) {
       this.monitorIntervalMs = monitorIntervalMs;
     }
 
@@ -332,5 +335,14 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     CONTEXTS.forEach((k, v) -> {
       v.close();
     });
+  }
+
+  @Deprecated
+  @Override
+  protected final void finalize() {
+    /*
+     * unused; this is final to finalizer attacks since the constructor throws exceptions (see
+     * spotbugs CT_CONSTRUCTOR_THROW)
+     */
   }
 }

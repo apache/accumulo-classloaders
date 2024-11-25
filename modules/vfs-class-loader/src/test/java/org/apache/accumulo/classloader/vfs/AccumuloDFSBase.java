@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *   https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
@@ -152,15 +152,15 @@ public class AccumuloDFSBase {
 
   }
 
-  public static Configuration getConfiguration() {
+  protected static Configuration getConfiguration() {
     return conf;
   }
 
-  public static MiniDFSCluster getCluster() {
+  protected static MiniDFSCluster getCluster() {
     return cluster;
   }
 
-  public static DefaultFileSystemManager getDefaultFileSystemManager() {
+  protected static DefaultFileSystemManager getDefaultFileSystemManager() {
     return vfs;
   }
 
