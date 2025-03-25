@@ -60,9 +60,23 @@
         <exclusion>
           <!-- exclude this outdated hadoop client from vfs -->
           <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-common</artifactId>
+        </exclusion>
+        <exclusion>
+          <!-- exclude this outdated hadoop client from vfs -->
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-hdfs</artifactId>
+        </exclusion>
+        <exclusion>
+          <!-- exclude this outdated hadoop client from vfs -->
+          <groupId>org.apache.hadoop</groupId>
           <artifactId>hadoop-hdfs-client</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.httpcomponents.client5</groupId>
+      <artifactId>httpclient5</artifactId>
     </dependency>
     <dependency>
       <!-- provided by accumulo -->
