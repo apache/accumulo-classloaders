@@ -135,14 +135,10 @@ under the License.]]></licenseText>
       <dependency>
         <!-- no longer provided by accumulo after 2.1 -->
         <groupId>org.apache.commons</groupId>
-        <artifactId>commons-vfs2</artifactId>
+        <artifactId>commons-vfs2-bom</artifactId>
         <version>2.10.0</version>
-      </dependency>
-      <dependency>
-        <!-- no longer provided by accumulo after 2.1 -->
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-vfs2-hdfs</artifactId>
-        <version>2.10.0</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents.client5</groupId>
@@ -506,7 +502,10 @@ under the License.]]></licenseText>
             <configuration>
               <failOnWarning>true</failOnWarning>
               <ignoredUnusedDeclaredDependencies>
-                <unused>org.apache.logging.log4j:log4j-slf4j2-impl:jar:*</unused>
+                <!-- ignore false positive runtime dependencies -->
+                <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
+                <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
+                <unused>org.apache.logging.log4j:log4j-slf4j2-impl:*</unused>
               </ignoredUnusedDeclaredDependencies>
             </configuration>
           </execution>
