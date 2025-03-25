@@ -136,7 +136,7 @@ under the License.]]></licenseText>
         <!-- no longer provided by accumulo after 2.1 -->
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-vfs2</artifactId>
-        <version>2.9.0</version>
+        <version>2.10.0</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
