@@ -154,8 +154,8 @@ public class VFSManager {
       VFS.addProvider("file",
           new org.apache.commons.vfs2.provider.local.DefaultLocalFileProvider());
       VFS.addProvider("jar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-      VFS.addProvider("http", new org.apache.commons.vfs2.provider.http.HttpFileProvider());
-      VFS.addProvider("https", new org.apache.commons.vfs2.provider.https.HttpsFileProvider());
+      VFS.addProvider("http", new org.apache.commons.vfs2.provider.http5.Http5FileProvider());
+      VFS.addProvider("https", new org.apache.commons.vfs2.provider.http5s.Http5sFileProvider());
       VFS.addProvider("ftp", new org.apache.commons.vfs2.provider.ftp.FtpFileProvider());
       VFS.addProvider("ftps", new org.apache.commons.vfs2.provider.ftps.FtpsFileProvider());
       VFS.addProvider("war", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
