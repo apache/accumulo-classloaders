@@ -114,8 +114,8 @@ public class AccumuloDFSBase {
       vfs.addProvider("file",
           new org.apache.commons.vfs2.provider.local.DefaultLocalFileProvider());
       vfs.addProvider("jar", new org.apache.commons.vfs2.provider.jar.JarFileProvider());
-      vfs.addProvider("http", new org.apache.commons.vfs2.provider.http.HttpFileProvider());
-      vfs.addProvider("https", new org.apache.commons.vfs2.provider.https.HttpsFileProvider());
+      vfs.addProvider("http", new org.apache.commons.vfs2.provider.http5.Http5FileProvider());
+      vfs.addProvider("https", new org.apache.commons.vfs2.provider.http5s.Http5sFileProvider());
       vfs.addProvider("ftp", new org.apache.commons.vfs2.provider.ftp.FtpFileProvider());
       vfs.addProvider("ftps", new org.apache.commons.vfs2.provider.ftps.FtpsFileProvider());
       vfs.addProvider("war", new org.apache.commons.vfs2.provider.jar.JarFileProvider());

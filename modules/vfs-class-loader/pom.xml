@@ -53,6 +53,18 @@
       </exclusions>
     </dependency>
     <dependency>
+      <!-- no longer provided by accumulo after 2.1 -->
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-vfs2-hdfs</artifactId>
+      <exclusions>
+        <exclusion>
+          <!-- exclude this outdated hadoop client from vfs -->
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-hdfs-client</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <!-- provided by accumulo -->
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>

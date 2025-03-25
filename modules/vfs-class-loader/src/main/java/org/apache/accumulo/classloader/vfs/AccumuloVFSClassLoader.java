@@ -22,6 +22,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.Map;
@@ -262,10 +263,10 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
       this.executor = new ThreadPoolExecutor(1, 1, 1, TimeUnit.SECONDS, queue, factory);
       this.monitor = new DefaultFileMonitor(fileMonitor);
 
-      monitor.setDelay(getMonitorInterval());
+      monitor.setDelay(Duration.ofSeconds(getMonitorInterval()));
       monitor.setRecursive(false);
       monitor.start();
-      printDebug("Monitor started with interval set to: " + monitor.getDelay());
+      printDebug("Monitor started with interval set to: " + monitor.getDelayDuration().toMillis());
     }
 
     private FileMonitor getMonitor() {
