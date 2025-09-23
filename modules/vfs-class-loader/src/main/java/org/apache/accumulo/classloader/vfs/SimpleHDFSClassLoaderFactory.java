@@ -52,45 +52,39 @@ public class SimpleHDFSClassLoaderFactory implements ContextClassLoaderFactory {
 
   @VisibleForTesting
   public static class Context {
-    private String contextName;
-    private List<JarInfo> jars;
+    private final String contextName;
+    private final List<JarInfo> jars;
+
+    public Context(String contextName, List<JarInfo> jars) {
+      this.contextName = contextName;
+      this.jars = List.copyOf(jars);
+    }
 
     public String getContextName() {
       return contextName;
     }
 
-    public void setContextName(String contextName) {
-      this.contextName = contextName;
-    }
-
     public List<JarInfo> getJars() {
       return jars;
-    }
-
-    public void setJars(List<JarInfo> jars) {
-      this.jars = jars;
     }
   }
 
   @VisibleForTesting
   public static class JarInfo {
-    private String jarName;
-    private String checksum;
+    private final String jarName;
+    private final String checksum;
+
+    public JarInfo(String jarName, String checksum) {
+      this.jarName = jarName;
+      this.checksum = checksum;
+    }
 
     public String getJarName() {
       return jarName;
     }
 
-    public void setJarName(String jarName) {
-      this.jarName = jarName;
-    }
-
     public String getChecksum() {
       return checksum;
-    }
-
-    public void setChecksum(String checksum) {
-      this.checksum = checksum;
     }
   }
 
@@ -123,7 +117,12 @@ public class SimpleHDFSClassLoaderFactory implements ContextClassLoaderFactory {
     URL[] urls = new URL[jsonData.getJars().size()];
     int i = 0;
     for (var jar : jsonData.getJars()) {
-      urls[i++] = manifestFile.getParent().resolve(jar.getJarName()).toUri().toURL();
+      var manifestFileParent = manifestFile.getParent();
+      if (manifestFileParent != null) {
+        urls[i++] = manifestFileParent.resolve(jar.getJarName()).toUri().toURL();
+      } else {
+        throw new IllegalStateException("Parent path of " + manifestFile + " does not exist.");
+      }
     }
     classLoaders.put(manifestFile, new URLClassLoader(urls, ClassLoader.getSystemClassLoader()));
   }

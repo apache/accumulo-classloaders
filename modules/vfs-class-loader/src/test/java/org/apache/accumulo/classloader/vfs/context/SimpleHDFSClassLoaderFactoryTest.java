@@ -54,13 +54,8 @@ public class SimpleHDFSClassLoaderFactoryTest {
     assertTrue(contextsDir.toFile().mkdir());
     assertTrue(context1Dir.toFile().mkdir());
 
-    JarInfo jarInfo1 = new JarInfo();
-    jarInfo1.setJarName("HelloWorld.jar");
-    jarInfo1.setChecksum("123abc");
-
-    Context context = new Context();
-    context.setContextName(context1);
-    context.setJars(List.of(jarInfo1));
+    JarInfo jarInfo1 = new JarInfo("HelloWorld.jar", "123abc");
+    Context context = new Context(context1, List.of(jarInfo1));
 
     Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
     try (FileWriter writer = new FileWriter(context1Manifest.toFile(), StandardCharsets.UTF_8)) {
