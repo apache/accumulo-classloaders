@@ -24,4 +24,8 @@ public class HelloWorld {
   public String toString() {
     return "%%";
   }
+
+  public void helloWorld() {
+
+  }
 }
