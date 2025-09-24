@@ -38,13 +38,13 @@ import com.google.gson.Gson;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
- * A ClassLoaderFactory implementation that uses an {@link AccumuloVFSClassLoader} per defined
- * context. Configuration of this class is done with a JSON file whose location is defined by the
- * system property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need
- * to set the Accumulo configuration property <b>general.context.class.loader.factory</b> to the
- * fully qualified name of this class, create a configuration file that defines the supported
- * contexts and their configuration, and set the system property
- * <b>vfs.context.class.loader.config</b> to the location of the configuration file.
+ * A ClassLoaderFactory implementation that uses a ReloadingVFSClassLoader per defined context.
+ * Configuration of this class is done with a JSON file whose location is defined by the system
+ * property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need to set
+ * the Accumulo configuration property <b>general.context.class.loader.factory</b> to the fully
+ * qualified name of this class, create a configuration file that defines the supported contexts and
+ * their configuration, and set the system property <b>vfs.context.class.loader.config</b> to the
+ * location of the configuration file.
  *
  * <p>
  * Example configuration file:
@@ -269,7 +269,6 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
   private void initializeContexts() throws URISyntaxException, IOException {
     if (!CONTEXTS.isEmpty()) {
       LOG.debug("Contexts already initialized, skipping...");
-      // TODO KEVIN RATHBUN should this be returning early?
     }
     // Properties
     String conf = getConfigFileLocation();
