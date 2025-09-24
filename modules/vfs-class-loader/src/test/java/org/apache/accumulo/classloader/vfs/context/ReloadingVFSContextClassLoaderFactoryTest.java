@@ -151,7 +151,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
     FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
         new File(foo, "HelloWorld.jar"));
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
+    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld2.jar"),
         new File(bar, "HelloWorld2.jar"));
 
     String testMethodName = testInfo.getTestMethod().orElseThrow().getName();
