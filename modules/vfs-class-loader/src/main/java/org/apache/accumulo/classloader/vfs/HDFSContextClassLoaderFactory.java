@@ -24,7 +24,9 @@ import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.util.List;
 
+import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
@@ -41,12 +43,11 @@ import com.google.gson.Gson;
  * <b>general.context.class.loader.factory</b> to the fully qualified name of this class. <br>
  * <br>
  * Configuration of this class is done by having a base directory in HDFS which stores context
- * directories (e.g., hdfs://test:1234/contexts could be the base directory) and where the children
- * are specific contexts (e.g., contextA, contextB). To set the HDFS file system for this class, use
- * {@link HDFSContextClassLoaderFactory#setHDFSFileSystem(FileSystem)}. The "contexts" directory
- * should not contain any other files or directories. Each context directory should contain a
- * manifest file <b>manifest.json</b> and JAR files. The manifest file defines the context name and
- * the JAR info for what JARs should be in the {@link URLClassLoader} for that context. For example:
+ * directories (e.g., "hdfs://test:1234/contexts" could be the base directory) and where the
+ * children are specific contexts (e.g., contextA, contextB). The "contexts" directory should not
+ * contain any other files or directories. Each context directory should contain a manifest file
+ * <b>manifest.json</b> and JAR files. The manifest file defines the context name and the JAR info
+ * for what JARs should be in the {@link URLClassLoader} for that context. For example:
  *
  * <pre>
  * {
@@ -66,8 +67,8 @@ import com.google.gson.Gson;
  *
  * Two system properties need to be set to use this class: <br>
  * <b>hdfs.contexts.class.loader.base.dir</b> <br>
- * This defines where the context directories exist within HDFS (e.g., hdfs://test:1234/contexts in
- * our example) <br>
+ * This defines where the context directories exist within HDFS (e.g., "hdfs://test:1234/contexts"
+ * in our example) <br>
  * <b>local.contexts.class.loader.download.dir</b> <br>
  * This defines where the context info will be locally downloaded to. This includes the manifest
  * file(s) and JAR(s). For example, if set to "/path/to/contexts" and
@@ -91,10 +92,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
   private final Cache<Path,URLClassLoader> classLoaders =
       CacheBuilder.newBuilder().weakValues().build();
   private FileSystem fs;
-
-  public void setHDFSFileSystem(FileSystem fs) {
-    this.fs = fs;
-  }
+  private final Configuration hadoopConf = new Configuration();
 
   @VisibleForTesting
   public static class Context {
@@ -131,6 +129,17 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
 
     public String getChecksum() {
       return checksum;
+    }
+  }
+
+  @Override
+  public void init(ContextClassLoaderEnvironment env) {
+    var hdfsContextsBaseDir = new Path(System.getProperty(HDFS_CONTEXTS_BASE_DIR)).toUri();
+    try {
+      fs = FileSystem.get(hdfsContextsBaseDir, hadoopConf);
+    } catch (IOException e) {
+      throw new IllegalStateException("could not obtain FileSystem for path " + hdfsContextsBaseDir,
+          e);
     }
   }
 

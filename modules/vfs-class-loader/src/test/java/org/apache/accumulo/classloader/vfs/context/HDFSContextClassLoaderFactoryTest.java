@@ -20,14 +20,12 @@ package org.apache.accumulo.classloader.vfs.context;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import org.apache.accumulo.classloader.vfs.HDFSContextClassLoaderFactory;
 import org.apache.accumulo.classloader.vfs.HDFSContextClassLoaderFactory.Context;
 import org.apache.accumulo.classloader.vfs.HDFSContextClassLoaderFactory.JarInfo;
-import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -46,32 +44,31 @@ public class HDFSContextClassLoaderFactoryTest {
       LoggerFactory.getLogger(HDFSContextClassLoaderFactoryTest.class);
   private static final String CONTEXT1 = "context1";
   private static final String HELLO_WORLD_JAR = "HelloWorld.jar";
-  private static final String HDFS_BASE_DIR = System.getProperty("user.dir") + "/target/hdfs";
-  private static final String HDFS_CONTEXTS_DIR = HDFS_BASE_DIR + "/contexts";
-  private static final String HDFS_CONTEXT1_DIR = HDFS_CONTEXTS_DIR + "/" + CONTEXT1;
-  private static final String HDFS_MANIFEST_FILE =
-      HDFS_CONTEXT1_DIR + "/" + HDFSContextClassLoaderFactory.MANIFEST_FILE_NAME;
-  private static final String LOCAL_CONTEXTS_DIR =
-      System.getProperty("user.dir") + "/target/local/contexts";
   private MiniDFSCluster hdfsCluster;
   private FileSystem fs;
 
   @BeforeEach
   public void setup() throws Exception {
+    final String hdfsBaseDir = "/hdfs";
+    final String hdfsContextsDir = hdfsBaseDir + "/contexts";
+    final String hdfsContext1Dir = hdfsContextsDir + "/" + CONTEXT1;
+    final String hdfsManifestFile =
+        hdfsContext1Dir + "/" + HDFSContextClassLoaderFactory.MANIFEST_FILE_NAME;
+    final String localContextsDir = System.getProperty("user.dir") + "/target/local/contexts";
+
     final JarInfo jarInfo1 = new JarInfo(HELLO_WORLD_JAR, "123abc");
     final Context context = new Context(CONTEXT1, jarInfo1);
 
-    Configuration conf = new Configuration();
-    conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, HDFS_BASE_DIR);
-    hdfsCluster = new MiniDFSCluster.Builder(conf).build();
+    Configuration hadoopConf = new Configuration();
+    hdfsCluster = new MiniDFSCluster.Builder(hadoopConf).build();
     hdfsCluster.waitClusterUp();
     fs = hdfsCluster.getFileSystem();
 
-    Path HDFSContext1Path = new Path(HDFS_CONTEXT1_DIR);
+    Path HDFSContext1Path = new Path(hdfsContext1Dir);
     fs.mkdirs(HDFSContext1Path, FsPermission.getDirDefault());
     LOG.debug("Created dir(s) " + HDFSContext1Path);
 
-    Path HDFSManifestPath = new Path(HDFS_MANIFEST_FILE);
+    Path HDFSManifestPath = new Path(hdfsManifestFile);
     try (var os = fs.create(HDFSManifestPath)) {
       Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
       os.write(gson.toJson(context).getBytes(StandardCharsets.UTF_8));
@@ -85,23 +82,21 @@ public class HDFSContextClassLoaderFactoryTest {
     LOG.debug("Copied from {} to {}", localHelloWorldJar, HDFSHelloWorldJar);
 
     // set required system props for the factory
-    System.setProperty(HDFSContextClassLoaderFactory.HDFS_CONTEXTS_BASE_DIR, HDFS_CONTEXTS_DIR);
-    System.setProperty(HDFSContextClassLoaderFactory.LOCAL_CONTEXTS_DOWNLOAD_DIR,
-        LOCAL_CONTEXTS_DIR);
+    System.setProperty(HDFSContextClassLoaderFactory.HDFS_CONTEXTS_BASE_DIR,
+        fs.getUri() + hdfsContextsDir);
+    System.setProperty(HDFSContextClassLoaderFactory.LOCAL_CONTEXTS_DOWNLOAD_DIR, localContextsDir);
   }
 
   @AfterEach
   public void teardown() throws Exception {
     hdfsCluster.close();
-    hdfsCluster.shutdown();
-    FileUtils.deleteDirectory(new File(HDFS_BASE_DIR));
-    FileUtils.deleteDirectory(new File(LOCAL_CONTEXTS_DIR));
+    hdfsCluster.shutdown(true);
   }
 
   @Test
   public void test() throws Exception {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
-    factory.setHDFSFileSystem(fs);
+    factory.init(null);
     var classLoader = factory.getClassLoader(CONTEXT1);
     var clazz = classLoader.loadClass("test.HelloWorld");
     var methods = clazz.getMethods();
