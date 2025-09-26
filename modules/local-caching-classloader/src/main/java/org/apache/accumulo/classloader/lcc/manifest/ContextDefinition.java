@@ -26,7 +26,6 @@ public class ContextDefinition {
   private final List<Resource> resources;
 
   public ContextDefinition(int contextMonitorIntervalSeconds, List<Resource> resources) {
-    super();
     this.contextMonitorIntervalSeconds = contextMonitorIntervalSeconds;
     this.resources = resources;
   }

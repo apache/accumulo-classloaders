@@ -28,7 +28,6 @@ public class Resource {
   private final String checksum;
 
   public Resource(String location, String checksum) {
-    super();
     this.location = location;
     this.checksum = checksum;
   }

@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloaders.lcc.state;
+package org.apache.accumulo.classloader.lcc.state;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -100,6 +100,7 @@ public class Contexts {
   }
 
   public ClassLoader getContextClassLoader(String context) {
+    // TODO: Wait while updating?
     return contexts.get(context).getClassloader();
   }
 

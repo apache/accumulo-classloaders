@@ -31,19 +31,18 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.manifest.Manifest;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
-import org.apache.accumulo.classloaders.lcc.state.Contexts;
+import org.apache.accumulo.classloader.lcc.state.Contexts;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A ContextClassLoaderFactory implementation that does the following creates and maintains a
- * ClassLoader for a named context. This factory expects the system property
- * {@code Constants#MANIFEST_URL_PROPERTY} to be set to the URL of a json formatted manifest file.
- * The manifest file contains an interval at which this class should monitor the manifest file for
- * changes and a mapping of context names to ContextDefinitions. Each ContextDefinition contains a
- * monitoring interval and a list of resources. Each resource is defined by a URL to the file and an
- * expected MD5 hash value.
+ * A ContextClassLoaderFactory implementation that does the creates and maintains a ClassLoader for
+ * a named context. This factory expects the system property {@code Constants#MANIFEST_URL_PROPERTY}
+ * to be set to the URL of a json formatted manifest file. The manifest file contains an interval at
+ * which this class should monitor the manifest file for changes and a mapping of context names to
+ * ContextDefinitions. Each ContextDefinition contains a monitoring interval and a list of
+ * resources. Each resource is defined by a URL to the file and an expected MD5 hash value.
  *
  * The URLs supplied for the manifest file and for the resources can use one of the following
  * protocols: file://, http://, or hdfs://.

@@ -32,7 +32,6 @@ public class Manifest {
   private volatile transient byte[] checksum = null;
 
   public Manifest(int monitorIntervalSeconds, Map<String,ContextDefinition> contexts) {
-    super();
     this.monitorIntervalSeconds = monitorIntervalSeconds;
     this.contexts = contexts;
   }

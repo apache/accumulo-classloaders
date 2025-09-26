@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloaders.lcc.state;
+package org.apache.accumulo.classloader.lcc.state;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
@@ -55,7 +55,6 @@ public class ContextClassLoader {
 
     public ClassPathElement(FileResolver remote, URL localCachedCopy,
         String localCachedCopyDigest) {
-      super();
       this.remote = remote;
       this.localCachedCopy = localCachedCopy;
       this.localCachedCopyDigest = localCachedCopyDigest;
@@ -84,8 +83,8 @@ public class ContextClassLoader {
     if (!Files.exists(cacheLocation)) {
       Files.copy(source.getInputStream(), cacheLocation);
       String md5 = digest.digestAsHex(cacheFile);
-      if (!resource.getChecksum().equals(digest)) {
-        // What we just wrote does not match the Manifest.
+      if (!resource.getChecksum().equals(md5)) {
+        // TODO: What we just wrote does not match the Manifest.
       }
       return new ClassPathElement(source, cacheFile.toURI().toURL(), md5);
     } else {
