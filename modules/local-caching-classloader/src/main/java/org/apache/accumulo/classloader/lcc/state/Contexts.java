@@ -76,7 +76,7 @@ public class Contexts {
           contexts.put(e.getKey(), ccl);
           futures.add(Constants.EXECUTOR.submit(() -> ccl.initialize()));
         } catch (ContextClassLoaderException e1) {
-          LOG.error("Error creating new ContextClassLoader for context: " + e.getKey(), e1);
+          LOG.error("Error creating new ContextClassLoader for context: {}", e.getKey(), e1);
         }
       }
     }

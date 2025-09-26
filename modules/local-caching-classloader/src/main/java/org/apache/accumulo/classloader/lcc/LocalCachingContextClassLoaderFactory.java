@@ -123,7 +123,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
             contexts.update();
           }
         } catch (Exception e) {
-          LOG.error("Error parsing manifest at " + url);
+          LOG.error("Error parsing manifest at {}", url);
         }
       }, m.getMonitorIntervalSeconds(), m.getMonitorIntervalSeconds(), TimeUnit.SECONDS);
       LOG.debug("Monitoring manifest file {} for changes at {} second intervals", url,
