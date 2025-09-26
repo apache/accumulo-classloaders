@@ -73,6 +73,7 @@
     </mailingList>
   </mailingLists>
   <modules>
+    <module>modules/local-caching-classloader</module>
     <module>modules/example-iterators-a</module>
     <module>modules/example-iterators-b</module>
     <module>modules/vfs-class-loader</module>
