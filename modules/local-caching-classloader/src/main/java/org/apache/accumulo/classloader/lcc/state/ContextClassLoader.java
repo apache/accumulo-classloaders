@@ -30,11 +30,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.manifest.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.manifest.Manifest;
@@ -98,7 +96,6 @@ public class ContextClassLoader {
 
   private static final Logger LOG = LoggerFactory.getLogger(ContextClassLoader.class);
 
-  private final AtomicReference<Manifest> manifest;
   private final Path contextCacheDir;
   private final String contextName;
   private final Set<ClassPathElement> elements = new HashSet<>();
@@ -109,7 +106,6 @@ public class ContextClassLoader {
 
   public ContextClassLoader(AtomicReference<Manifest> manifest, String name)
       throws ContextClassLoaderException {
-    this.manifest = manifest;
     this.contextName = name;
     this.definition = manifest.get().getContexts().get(contextName);
     this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(contextName);
@@ -117,19 +113,6 @@ public class ContextClassLoader {
 
   public ContextDefinition getDefinition() {
     return definition;
-  }
-
-  private void scheduleRefresh() {
-    // Schedule a one-shot task in the event the monitor interval changes
-    this.refreshTask = Constants.EXECUTOR.schedule(() -> update(),
-        this.definition.getContextMonitorIntervalSeconds(), TimeUnit.SECONDS);
-  }
-
-  private void update() {
-    ContextDefinition update = manifest.get().getContexts().get(contextName);
-    if (update != null) {
-      updateDefinition(update);
-    }
   }
 
   public void initialize() {
@@ -145,7 +128,6 @@ public class ContextClassLoader {
             ClassPathElement cpe = cacheResource(r);
             addElement(cpe);
           }
-          scheduleRefresh();
         } finally {
           lockPair.getSecond().release();
           lockPair.getFirst().close();
@@ -156,7 +138,10 @@ public class ContextClassLoader {
     }
   }
 
-  private void updateDefinition(ContextDefinition update) {
+  public void update(ContextDefinition update) {
+    if (!definition.getResources().equals(update.getResources())) {
+      return;
+    }
     synchronized (elements) {
       try {
         final Pair<FileChannel,FileLock> lockPair = CacheUtils.lockContextCacheDir(contextCacheDir);
@@ -183,7 +168,6 @@ public class ContextClassLoader {
             }
           }
           this.definition = update;
-          scheduleRefresh();
         } finally {
           lockPair.getSecond().release();
           lockPair.getFirst().close();

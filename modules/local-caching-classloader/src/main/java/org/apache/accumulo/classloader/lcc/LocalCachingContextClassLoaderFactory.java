@@ -41,8 +41,8 @@ import org.slf4j.LoggerFactory;
  * a named context. This factory expects the system property {@code Constants#MANIFEST_URL_PROPERTY}
  * to be set to the URL of a json formatted manifest file. The manifest file contains an interval at
  * which this class should monitor the manifest file for changes and a mapping of context names to
- * ContextDefinitions. Each ContextDefinition contains a monitoring interval and a list of
- * resources. Each resource is defined by a URL to the file and an expected MD5 hash value.
+ * ContextDefinitions. Each ContextDefinition contains a list of resources. Each resource is defined
+ * by a URL to the file and an expected MD5 hash value.
  *
  * The URLs supplied for the manifest file and for the resources can use one of the following
  * protocols: file://, http://, or hdfs://.

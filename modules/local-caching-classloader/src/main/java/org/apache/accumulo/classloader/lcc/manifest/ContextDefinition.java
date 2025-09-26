@@ -22,16 +22,10 @@ import java.util.List;
 import java.util.Objects;
 
 public class ContextDefinition {
-  private final int contextMonitorIntervalSeconds;
   private final List<Resource> resources;
 
-  public ContextDefinition(int contextMonitorIntervalSeconds, List<Resource> resources) {
-    this.contextMonitorIntervalSeconds = contextMonitorIntervalSeconds;
+  public ContextDefinition(List<Resource> resources) {
     this.resources = resources;
-  }
-
-  public int getContextMonitorIntervalSeconds() {
-    return contextMonitorIntervalSeconds;
   }
 
   public List<Resource> getResources() {
@@ -40,7 +34,7 @@ public class ContextDefinition {
 
   @Override
   public int hashCode() {
-    return Objects.hash(contextMonitorIntervalSeconds, resources);
+    return Objects.hash(resources);
   }
 
   @Override
@@ -52,7 +46,6 @@ public class ContextDefinition {
     if (getClass() != obj.getClass())
       return false;
     ContextDefinition other = (ContextDefinition) obj;
-    return contextMonitorIntervalSeconds == other.contextMonitorIntervalSeconds
-        && Objects.equals(resources, other.resources);
+    return Objects.equals(resources, other.resources);
   }
 }

@@ -68,16 +68,21 @@ public class Contexts {
 
     final List<Future<?>> futures = new ArrayList<>();
     for (Entry<String,ContextDefinition> e : ctx.entrySet()) {
-      if (contexts.get(e.getKey()) == null) {
+      ContextClassLoader ccl = contexts.get(e.getKey());
+      if (ccl == null) {
         // This is a newly defined context
         LOG.debug("Context {} is new in the Manifest, creating new ContextClassLoader", e.getKey());
         try {
-          ContextClassLoader ccl = new ContextClassLoader(manifest, e.getKey());
-          contexts.put(e.getKey(), ccl);
-          futures.add(Constants.EXECUTOR.submit(() -> ccl.initialize()));
+          ContextClassLoader newCcl = new ContextClassLoader(manifest, e.getKey());
+          contexts.put(e.getKey(), newCcl);
+          futures.add(Constants.EXECUTOR.submit(() -> newCcl.initialize()));
         } catch (ContextClassLoaderException e1) {
           LOG.error("Error creating new ContextClassLoader for context: {}", e.getKey(), e1);
         }
+      } else {
+        // Need to update an existing context
+        LOG.debug("Evaluating context {} to see if it needs to be updated", e.getKey());
+        futures.add(Constants.EXECUTOR.submit(() -> ccl.update(e.getValue())));
       }
     }
 
