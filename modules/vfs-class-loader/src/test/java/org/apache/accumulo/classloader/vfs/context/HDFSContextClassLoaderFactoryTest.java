@@ -19,6 +19,7 @@
 package org.apache.accumulo.classloader.vfs.context;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -56,6 +57,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.gson.Gson;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public class HDFSContextClassLoaderFactoryTest {
   private static final Logger LOG =
@@ -202,6 +205,8 @@ public class HDFSContextClassLoaderFactoryTest {
    * the context entry in the internal store to be updated.
    */
   @Test
+  @SuppressFBWarnings(value = "PREDICTABLE_RANDOM",
+      justification = "predictable random fine for testing")
   public void testConcurrent() throws Exception {
     // have the manifest file checks run more often
     final int manifestFileCheckIntervalSec = 1;
@@ -210,6 +215,7 @@ public class HDFSContextClassLoaderFactoryTest {
     final int numTotalThreads = 128;
     final int numClassLoaderThreads = numTotalThreads / 2;
     final int numManifestFileCheckerThreads = numTotalThreads / 2;
+    final Random rand = new Random();
     ExecutorService classLoaderPool = Executors.newFixedThreadPool(numClassLoaderThreads);
     ExecutorService manifestFileCheckerPool =
         Executors.newFixedThreadPool(numManifestFileCheckerThreads);
@@ -235,7 +241,7 @@ public class HDFSContextClassLoaderFactoryTest {
             // class loader for the HelloWorld jar), make the other ~1/2 race to call after
             // the manifest file change occurs and would be picked up (racing to get the class
             // loader for the Test jar)
-            if (new Random().nextInt(2) == 0) {
+            if (rand.nextInt(2) == 0) {
               Thread.sleep(TimeUnit.SECONDS.toMillis(manifestFileCheckIntervalSec + 1));
             }
             var classLoader = factory.getClassLoader(CONTEXT1);
@@ -304,8 +310,10 @@ public class HDFSContextClassLoaderFactoryTest {
           // The jar itself and the Hadoop CRC file for the jar
           assertEquals(2, pathsSeen.size());
           for (var pathSeen : pathsSeen) {
-            var fileName = pathSeen.getFileName().toString();
-            assertTrue(fileName.contains(".crc") || fileName.equals(TEST_JAR));
+            var fileName = pathSeen.getFileName();
+            assertNotNull(fileName);
+            assertTrue(
+                fileName.toString().contains(".crc") || fileName.toString().equals(TEST_JAR));
           }
         }
       }

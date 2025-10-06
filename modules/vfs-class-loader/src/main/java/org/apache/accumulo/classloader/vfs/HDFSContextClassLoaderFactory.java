@@ -50,6 +50,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.gson.Gson;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 /**
  * A {@link ContextClassLoaderFactory} implementation which uses a {@link URLClassLoader} per
  * defined context. To use this class, need to set the Accumulo configuration property
@@ -208,6 +210,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
       return contextName;
     }
 
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "returned list is not modifiable")
     public List<JarInfo> getJars() {
       return jars;
     }
