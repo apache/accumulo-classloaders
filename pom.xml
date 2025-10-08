@@ -75,7 +75,8 @@
   <modules>
     <module>modules/example-iterators-a</module>
     <module>modules/example-iterators-b</module>
-    <module>modules/vfs-class-loader</module>
+    <module>modules/classloaders/vfs-class-loader</module>
+    <module>modules/classloaders/hdfs-class-loader</module>
   </modules>
   <scm>
     <connection>scm:git:https://gitbox.apache.org/repos/asf/accumulo-classloaders.git</connection>
