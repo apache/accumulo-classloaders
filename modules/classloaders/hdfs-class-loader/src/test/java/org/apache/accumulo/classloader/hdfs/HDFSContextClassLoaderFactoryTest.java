@@ -121,7 +121,7 @@ public class HDFSContextClassLoaderFactoryTest {
     LOG.debug("Copied from {} to {}", localJar, hdfsJarPath);
   }
 
-  private void writeManfiestAndJarToHDFS(String jarName, String resourceName, String contextName,
+  private void writeManifestAndJarToHDFS(String jarName, String resourceName, String contextName,
       boolean validChecksum) throws Exception {
     var hdfsJarPath = new Path(HDFS_CONTEXT1_DIR, jarName);
     writeJarFileToHDFS(hdfsJarPath, resourceName);
@@ -143,7 +143,7 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManfiestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
 
     var classLoader = factory.getClassLoader(CONTEXT1);
     var clazz = classLoader.loadClass(HELLO_WORLD_CLASS);
@@ -157,7 +157,7 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManfiestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
 
     var classLoaderA = factory.getClassLoader(CONTEXT1);
     assertThrows(ClassNotFoundException.class, () -> classLoaderA.loadClass(TEST_CLASS));
@@ -168,7 +168,7 @@ public class HDFSContextClassLoaderFactoryTest {
 
     // note that we are writing the manifest file with the same context name but without the
     // hello world jar but with the test jar
-    writeManfiestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
 
     // wait for manifest file check to take place
     Thread.sleep(TimeUnit.SECONDS.toMillis(CHECK_INTERVAL_SEC + 1));
@@ -186,7 +186,7 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManfiestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, false);
+    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, false);
 
     assertThrows(ContextClassLoaderFactory.ContextClassLoaderException.class,
         () -> factory.getClassLoader(CONTEXT1));
@@ -229,7 +229,7 @@ public class HDFSContextClassLoaderFactoryTest {
       factory.init(null);
 
       // context1 -> HelloWorld jar
-      writeManfiestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+      writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
 
       for (int i = 0; i < numClassLoaderThreads; i++) {
         classLoaderFutures.add(classLoaderPool.submit(() -> {
@@ -264,7 +264,7 @@ public class HDFSContextClassLoaderFactoryTest {
       }
 
       // context1 -> Test jar
-      writeManfiestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
+      writeManifestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
 
       for (var future : classLoaderFutures) {
         classLoaderPoolResults.add(future.get());
