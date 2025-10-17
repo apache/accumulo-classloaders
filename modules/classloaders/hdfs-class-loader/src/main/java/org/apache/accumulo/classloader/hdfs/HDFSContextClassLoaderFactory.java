@@ -114,7 +114,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
   private final Cache<Path,Pair<String,URLClassLoader>> classLoaders =
       CacheBuilder.newBuilder().weakValues().build();
   private FileSystem hdfs;
-  private Path HDFSContextsDir;
+  private Path hdfsContextsDir;
   private java.nio.file.Path localContextsDir;
   private final Configuration hadoopConf = new Configuration();
   private final Thread manifestFileChecker = new Thread(new ManifestFileChecker());
@@ -129,20 +129,20 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
         long sleepTime = manifestFileCheckInterval == null ? DEFAULT_MANIFEST_CHECK_INTERVAL
             : TimeUnit.SECONDS.toMillis(Integer.parseInt(manifestFileCheckInterval));
 
-        classLoaders.asMap().keySet().forEach(HDFSManifestFile -> classLoaders.asMap()
-            .computeIfPresent(HDFSManifestFile, (key, existingVal) -> {
+        classLoaders.asMap().keySet().forEach(hdfsManifestFile -> classLoaders.asMap()
+            .computeIfPresent(hdfsManifestFile, (key, existingVal) -> {
               var existingChecksum = existingVal.getFirst();
-              try (var HDFSManifestFileIn = hdfs.open(HDFSManifestFile)) {
-                var HDFSManifestFileBytes = HDFSManifestFileIn.readAllBytes();
-                var computedChecksum = checksum(HDFSManifestFileBytes);
+              try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
+                var hdfsManifestFileBytes = hdfsManifestFileIn.readAllBytes();
+                var computedChecksum = checksum(hdfsManifestFileBytes);
                 if (!existingChecksum.equals(computedChecksum)) {
                   // This manifest file has changed since the class loader for it was computed.
                   // Need to update the class loader entry.
                   LOG.debug("HDFS manifest file {} existing checksum {} computed checksum {}",
-                      HDFSManifestFile, existingChecksum, computedChecksum);
+                      hdfsManifestFile, existingChecksum, computedChecksum);
                   try (var tempState =
-                      createTempState(HDFSManifestFile.getParent().getName(), HDFSManifestFile,
-                          new ByteArrayInputStream(HDFSManifestFileBytes), computedChecksum)) {
+                      createTempState(hdfsManifestFile.getParent().getName(), hdfsManifestFile,
+                          new ByteArrayInputStream(hdfsManifestFileBytes), computedChecksum)) {
                     return createClassLoader(tempState);
                   }
                 }
@@ -237,23 +237,23 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
 
   @Override
   public void init(ContextClassLoaderEnvironment env) {
-    HDFSContextsDir = new Path(System.getProperty(HDFS_CONTEXTS_BASE_DIR));
+    hdfsContextsDir = new Path(System.getProperty(HDFS_CONTEXTS_BASE_DIR));
     localContextsDir = java.nio.file.Path.of(System.getProperty(LOCAL_CONTEXTS_DOWNLOAD_DIR));
     // create the directory to store all the context info, if needed
     if (localContextsDir.toFile().mkdirs()) {
       LOG.info("Created dir(s) " + localContextsDir);
     }
     try {
-      hdfs = FileSystem.get(HDFSContextsDir.toUri(), hadoopConf);
+      hdfs = FileSystem.get(hdfsContextsDir.toUri(), hadoopConf);
     } catch (IOException e) {
-      throw new IllegalStateException("could not obtain FileSystem for " + HDFSContextsDir.toUri(),
+      throw new IllegalStateException("could not obtain FileSystem for " + hdfsContextsDir.toUri(),
           e);
     }
     manifestFileChecker.start();
   }
 
-  private TempState createTempState(String contextName, Path HDFSManifestFile,
-      InputStream HDFSManifestFileIn, String HDFSManifestFileChecksum)
+  private TempState createTempState(String contextName, Path hdfsManifestFile,
+      InputStream hdfsManifestFileIn, String hdfsManifestFileChecksum)
       throws IOException, ContextClassLoaderException, ExecutionException {
     URL[] urls;
 
@@ -270,17 +270,17 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
 
     // read the context info from the HDFS manifest file and download the jars referenced to the
     // temp directory in the local file system
-    try (var reader = new InputStreamReader(HDFSManifestFileIn, StandardCharsets.UTF_8)) {
+    try (var reader = new InputStreamReader(hdfsManifestFileIn, StandardCharsets.UTF_8)) {
       Context context = new Gson().fromJson(reader, Context.class);
       urls = new URL[context.getJars().size()];
       int i = 0;
-      if (HDFSManifestFile.getParent() != null) {
+      if (hdfsManifestFile.getParent() != null) {
         for (var jar : context.getJars()) {
           // download to temp dir
-          var HDFSJarPath = new Path(HDFSManifestFile.getParent(), jar.getJarName());
+          var hdfsJarPath = new Path(hdfsManifestFile.getParent(), jar.getJarName());
           var localTempJarPath = localTempContextDir.resolve(jar.getJarName());
-          hdfs.copyToLocalFile(HDFSJarPath, new Path(localTempJarPath.toUri()));
-          LOG.info("Copied from {} to {}", HDFSJarPath, localTempJarPath);
+          hdfs.copyToLocalFile(hdfsJarPath, new Path(localTempJarPath.toUri()));
+          LOG.info("Copied from {} to {}", hdfsJarPath, localTempJarPath);
           // verify downloaded jar checksum matches what is in the manifest file
           var computedChecksumLocalJar = checksumLocalFile(localTempJarPath);
           if (!computedChecksumLocalJar.equals(jar.getChecksum())) {
@@ -289,8 +289,8 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
                     "checksum: %s of downloaded jar: %s (downloaded from %s to %s) did not match "
                         + "checksum present: %s in manifest file: %s. Consider retrying and/or "
                         + "updating the checksum for this jar in the manifest file",
-                    computedChecksumLocalJar, jar.getJarName(), HDFSJarPath, localTempJarPath,
-                    jar.getChecksum(), HDFSManifestFile)));
+                    computedChecksumLocalJar, jar.getJarName(), hdfsJarPath, localTempJarPath,
+                    jar.getChecksum(), hdfsManifestFile)));
           }
           // use final (non-temp) jar path for the URL as that is what will exist if this op
           // completes
@@ -303,7 +303,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     }
 
     return new TempState(contextName, localTempContextDir, localFinalContextDir,
-        HDFSManifestFileChecksum, urls);
+        hdfsManifestFileChecksum, urls);
   }
 
   private Pair<String,URLClassLoader> createClassLoader(TempState tempState) throws IOException {
@@ -340,10 +340,10 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
 
   @Override
   public ClassLoader getClassLoader(String contextName) throws ContextClassLoaderException {
-    Path HDFSContextPath = new Path(HDFSContextsDir, contextName);
-    Path HDFSManifestFile = new Path(HDFSContextPath, MANIFEST_FILE_NAME);
+    Path hdfsContextPath = new Path(hdfsContextsDir, contextName);
+    Path hdfsManifestFile = new Path(hdfsContextPath, MANIFEST_FILE_NAME);
 
-    try (var HDFSManifestFileIn = hdfs.open(HDFSManifestFile)) {
+    try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
       // if another thread has already started creating the class loader for this context:
       // wait a short time for it to succeed in creating and caching the classloader, otherwise
       // continue and try to create and cache the classloader ourselves (only one result will be
@@ -359,7 +359,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
               "Waiting for another thread to finish creating/caching the class loader for context "
                   + contextName;
           Pair<String,URLClassLoader> valInCache;
-          while ((valInCache = classLoaders.getIfPresent(HDFSManifestFile)) == null
+          while ((valInCache = classLoaders.getIfPresent(hdfsManifestFile)) == null
               && retry.canRetry()) {
             retry.useRetry();
             try {
@@ -380,14 +380,14 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
         }
       }
 
-      var HDFSManifestFileBytes = HDFSManifestFileIn.readAllBytes();
-      try (var tempState = createTempState(contextName, HDFSManifestFile,
-          new ByteArrayInputStream(HDFSManifestFileBytes), checksum(HDFSManifestFileBytes))) {
+      var hdfsManifestFileBytes = hdfsManifestFileIn.readAllBytes();
+      try (var tempState = createTempState(contextName, hdfsManifestFile,
+          new ByteArrayInputStream(hdfsManifestFileBytes), checksum(hdfsManifestFileBytes))) {
         // atomically return cached value if it exists OR rename the temp dir to the final dir and
         // create and cache the new class loader
         // Guava Cache get() will not work here as that requires the same key to always map to the
         // same value (see documentation). Using the map view as a work-around
-        return classLoaders.asMap().computeIfAbsent(HDFSManifestFile, key -> {
+        return classLoaders.asMap().computeIfAbsent(hdfsManifestFile, key -> {
           try {
             return createClassLoader(tempState);
           } catch (IOException e) {

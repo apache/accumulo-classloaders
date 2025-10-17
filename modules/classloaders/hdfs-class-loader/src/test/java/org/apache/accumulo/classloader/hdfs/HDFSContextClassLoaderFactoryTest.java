@@ -86,9 +86,9 @@ public class HDFSContextClassLoaderFactoryTest {
     hdfsCluster.waitClusterUp();
     hdfs = hdfsCluster.getFileSystem();
 
-    Path HDFSContext1Path = new Path(HDFS_CONTEXT1_DIR);
-    hdfs.mkdirs(HDFSContext1Path, FsPermission.getDirDefault());
-    LOG.debug("Created dir(s) " + HDFSContext1Path);
+    Path hdfsContext1Path = new Path(HDFS_CONTEXT1_DIR);
+    hdfs.mkdirs(hdfsContext1Path, FsPermission.getDirDefault());
+    LOG.debug("Created dir(s) " + hdfsContext1Path);
 
     System.setProperty(HDFSContextClassLoaderFactory.HDFS_CONTEXTS_BASE_DIR,
         hdfs.getUri() + HDFS_CONTEXTS_DIR);
@@ -106,30 +106,30 @@ public class HDFSContextClassLoaderFactoryTest {
   }
 
   private void writeManifestFileToHDFS(Context context) throws Exception {
-    Path HDFSManifestPath = new Path(HDFS_MANIFEST_FILE);
-    try (var os = hdfs.create(HDFSManifestPath)) {
+    Path hdfsManifestPath = new Path(HDFS_MANIFEST_FILE);
+    try (var os = hdfs.create(hdfsManifestPath)) {
       Gson gson = new Gson().newBuilder().setPrettyPrinting().create();
       os.write(gson.toJson(context).getBytes(StandardCharsets.UTF_8));
       LOG.debug("Wrote {}{}{} to {}", System.lineSeparator(), gson.toJson(context),
-          System.lineSeparator(), HDFSManifestPath);
+          System.lineSeparator(), hdfsManifestPath);
     }
   }
 
-  private void writeJarFileToHDFS(Path HDFSJarPath, String resourceName) throws Exception {
+  private void writeJarFileToHDFS(Path hdfsJarPath, String resourceName) throws Exception {
     Path localJar = new Path(this.getClass().getResource(resourceName).toURI());
-    hdfs.copyFromLocalFile(localJar, HDFSJarPath);
-    LOG.debug("Copied from {} to {}", localJar, HDFSJarPath);
+    hdfs.copyFromLocalFile(localJar, hdfsJarPath);
+    LOG.debug("Copied from {} to {}", localJar, hdfsJarPath);
   }
 
   private void writeManfiestAndJarToHDFS(String jarName, String resourceName, String contextName,
       boolean validChecksum) throws Exception {
-    var HDFSJarPath = new Path(HDFS_CONTEXT1_DIR, jarName);
-    writeJarFileToHDFS(HDFSJarPath, resourceName);
+    var hdfsJarPath = new Path(HDFS_CONTEXT1_DIR, jarName);
+    writeJarFileToHDFS(hdfsJarPath, resourceName);
 
     final JarInfo jarInfo;
     if (validChecksum) {
       jarInfo = new JarInfo(jarName,
-          HDFSContextClassLoaderFactory.checksum(hdfs.open(HDFSJarPath).readAllBytes()));
+          HDFSContextClassLoaderFactory.checksum(hdfs.open(hdfsJarPath).readAllBytes()));
     } else {
       jarInfo = new JarInfo(jarName, "badchecksum");
     }
