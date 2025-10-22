@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.hdfs;
 
+import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,6 +29,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -36,7 +39,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
-import org.apache.accumulo.core.util.Pair;
 import org.apache.accumulo.core.util.Retry;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -48,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.RemovalListener;
 import com.google.gson.Gson;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -108,52 +111,66 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
       "local.contexts.class.loader.download.dir";
   public static final String MANIFEST_FILE_CHECK_INTERVAL = "manifest.file.check.interval.sec";
   // Cache the class loaders for re-use
-  // WeakReferences are used so that the class loaders can be cleaned up when no longer needed
-  // Classes that are loaded contain a reference to the class loader used to load them
-  // so the class loader will be garbage collected when no more classes are loaded that reference it
-  private final Cache<Path,Pair<String,URLClassLoader>> classLoaders =
-      CacheBuilder.newBuilder().weakValues().build();
+  final Cache<Path,
+      FinalState> classLoaders =
+          CacheBuilder.newBuilder()
+              .removalListener((RemovalListener<Path,
+                  FinalState>) notif -> LOG
+                      .debug("Removed: key=" + notif.getKey() + " val=" + notif.getValue()))
+              .build();
   private FileSystem hdfs;
   private Path hdfsContextsDir;
   private java.nio.file.Path localContextsDir;
+  private MessageDigest messageDigest;
   private final Configuration hadoopConf = new Configuration();
   private final Thread manifestFileChecker = new Thread(new ManifestFileChecker());
   private final AtomicBoolean shutdownManifestFileChecker = new AtomicBoolean(false);
 
   @VisibleForTesting
-  public class ManifestFileChecker implements Runnable {
+  class ManifestFileChecker implements Runnable {
     @Override
     public void run() {
       while (!shutdownManifestFileChecker.get()) {
-        var manifestFileCheckInterval = System.getProperty(MANIFEST_FILE_CHECK_INTERVAL);
-        long sleepTime = manifestFileCheckInterval == null ? DEFAULT_MANIFEST_CHECK_INTERVAL
-            : TimeUnit.SECONDS.toMillis(Integer.parseInt(manifestFileCheckInterval));
+        var intervalProp = System.getProperty(MANIFEST_FILE_CHECK_INTERVAL);
+        long interval = intervalProp == null ? DEFAULT_MANIFEST_CHECK_INTERVAL
+            : TimeUnit.SECONDS.toMillis(Integer.parseInt(intervalProp));
 
         classLoaders.asMap().keySet().forEach(hdfsManifestFile -> classLoaders.asMap()
             .computeIfPresent(hdfsManifestFile, (key, existingVal) -> {
-              var existingChecksum = existingVal.getFirst();
-              try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
-                var hdfsManifestFileBytes = hdfsManifestFileIn.readAllBytes();
-                var computedChecksum = checksum(hdfsManifestFileBytes);
-                if (!existingChecksum.equals(computedChecksum)) {
-                  // This manifest file has changed since the class loader for it was computed.
-                  // Need to update the class loader entry.
-                  LOG.debug("HDFS manifest file {} existing checksum {} computed checksum {}",
-                      hdfsManifestFile, existingChecksum, computedChecksum);
-                  try (var tempState =
-                      createTempState(hdfsManifestFile.getParent().getName(), hdfsManifestFile,
-                          new ByteArrayInputStream(hdfsManifestFileBytes), computedChecksum)) {
-                    return createClassLoader(tempState);
-                  }
-                }
-              } catch (IOException | ContextClassLoaderException | ExecutionException e) {
+              var existingModTime = existingVal.hdfsManifestLastMod;
+              long computedModTime = 0L;
+              // check file metadata first to avoid reading the whole file unless necessary
+              try {
+                computedModTime = hdfs.getFileStatus(hdfsManifestFile).getModificationTime();
+              } catch (IOException e) {
                 LOG.error("Exception occurred in thread {}", Thread.currentThread().getName(), e);
+              }
+              if (computedModTime > existingModTime) {
+                var existingChecksum = existingVal.hdfsManifestChecksum;
+                try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
+                  // readAllBytes is okay - manifest files should be small
+                  var hdfsManifestFileBytes = hdfsManifestFileIn.readAllBytes();
+                  var computedChecksum = checksum(new ByteArrayInputStream(hdfsManifestFileBytes));
+                  if (!existingChecksum.equals(computedChecksum)) {
+                    // This manifest file has changed since the class loader for it was computed.
+                    // Need to update the class loader entry.
+                    LOG.debug("HDFS manifest file {} existing checksum {} computed checksum {}",
+                        hdfsManifestFile, existingChecksum, computedChecksum);
+                    try (var tempState = createTempState(hdfsManifestFile.getParent().getName(),
+                        hdfsManifestFile, new ByteArrayInputStream(hdfsManifestFileBytes),
+                        computedModTime, computedChecksum)) {
+                      return createClassLoader(tempState);
+                    }
+                  }
+                } catch (IOException | ContextClassLoaderException | ExecutionException e) {
+                  LOG.error("Exception occurred in thread {}", Thread.currentThread().getName(), e);
+                }
               }
               return existingVal;
             }));
 
         try {
-          Thread.sleep(sleepTime);
+          Thread.sleep(interval);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
           throw new IllegalStateException(e);
@@ -162,75 +179,98 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     }
   }
 
+  @VisibleForTesting
+  void shutdownManifestFileChecker() {
+    shutdownManifestFileChecker.set(true);
+  }
+
   /**
    * Used to store info needed to create the value in the Cache
    */
-  private static class TempState implements AutoCloseable {
+  private static final class TempState implements AutoCloseable {
     private final String contextName;
-    private final java.nio.file.Path tempPath;
-    private final java.nio.file.Path finalPath;
-    private final String checksum;
+    private final java.nio.file.Path localTempContextDir;
+    private final java.nio.file.Path localFinalContextDir;
+    private final long hdfsManifestLastMod;
+    private final String hdfsManifestChecksum;
     private final URL[] urls;
 
-    private TempState(String contextName, java.nio.file.Path tempPath, java.nio.file.Path finalPath,
-        String checksum, URL[] urls) {
+    private TempState(String contextName, java.nio.file.Path localTempContextDir,
+        java.nio.file.Path localFinalContextDir, long hdfsManifestLastMod,
+        String hdfsManifestChecksum, URL[] urls) {
       this.contextName = contextName;
-      this.tempPath = tempPath;
-      this.finalPath = finalPath;
-      this.checksum = checksum;
+      this.localTempContextDir = localTempContextDir;
+      this.localFinalContextDir = localFinalContextDir;
+      this.hdfsManifestLastMod = hdfsManifestLastMod;
+      this.hdfsManifestChecksum = hdfsManifestChecksum;
       this.urls = urls;
     }
 
     @Override
     public void close() throws IOException {
-      if (tempPath.toFile().exists()) {
-        FileUtils.deleteDirectory(tempPath.toFile());
+      if (localTempContextDir.toFile().exists()) {
+        FileUtils.deleteDirectory(localTempContextDir.toFile());
         LOG.debug("Creating the class loader for context {} did not fully complete. Deleted the "
-            + "temp directory {} and all of its contents.", contextName, tempPath);
+            + "temp directory {} and all of its contents.", contextName, localTempContextDir);
       }
     }
   }
 
-  @VisibleForTesting
-  public void shutdownManifestFileChecker() {
-    shutdownManifestFileChecker.set(true);
+  private static final class FinalState {
+    private final URLClassLoader classLoader;
+    private final long hdfsManifestLastMod;
+    private final String hdfsManifestChecksum;
+
+    private FinalState(URLClassLoader classLoader, long hdfsManifestLastMod,
+        String hdfsManifestChecksum) {
+      this.classLoader = classLoader;
+      this.hdfsManifestLastMod = hdfsManifestLastMod;
+      this.hdfsManifestChecksum = hdfsManifestChecksum;
+    }
+
+    @Override
+    public String toString() {
+      return "FinalState[loader object: " + classLoader + ", loader URLs: "
+          + Arrays.toString(classLoader.getURLs()) + ", manifest file checksum: "
+          + hdfsManifestChecksum + ", last modification: " + new Date(hdfsManifestLastMod) + "]";
+    }
   }
 
   @VisibleForTesting
-  public static class Context {
+  static class Context {
     private final String contextName;
     private final List<JarInfo> jars;
 
-    public Context(String contextName, JarInfo... jars) {
+    Context(String contextName, JarInfo... jars) {
       this.contextName = contextName;
       this.jars = List.of(jars);
     }
 
-    public String getContextName() {
+    String getContextName() {
       return contextName;
     }
 
     @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "returned list is not modifiable")
-    public List<JarInfo> getJars() {
+    List<JarInfo> getJars() {
       return jars;
     }
   }
 
   @VisibleForTesting
-  public static class JarInfo {
+  static class JarInfo {
     private final String jarName;
     private final String checksum;
 
-    public JarInfo(String jarName, String checksum) {
+    JarInfo(String jarName, String checksum) {
       this.jarName = jarName;
       this.checksum = checksum;
     }
 
-    public String getJarName() {
+    String getJarName() {
       return jarName;
     }
 
-    public String getChecksum() {
+    String getChecksum() {
       return checksum;
     }
   }
@@ -245,15 +285,18 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     }
     try {
       hdfs = FileSystem.get(hdfsContextsDir.toUri(), hadoopConf);
+      messageDigest = MessageDigest.getInstance(HASH_ALG);
     } catch (IOException e) {
       throw new IllegalStateException("could not obtain FileSystem for " + hdfsContextsDir.toUri(),
           e);
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("no such algorithm: " + HASH_ALG, e);
     }
     manifestFileChecker.start();
   }
 
   private TempState createTempState(String contextName, Path hdfsManifestFile,
-      InputStream hdfsManifestFileIn, String hdfsManifestFileChecksum)
+      InputStream hdfsManifestFileIn, long hdfsManifestFileModTime, String hdfsManifestFileChecksum)
       throws IOException, ContextClassLoaderException, ExecutionException {
     URL[] urls;
 
@@ -303,38 +346,57 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     }
 
     return new TempState(contextName, localTempContextDir, localFinalContextDir,
-        hdfsManifestFileChecksum, urls);
+        hdfsManifestFileModTime, hdfsManifestFileChecksum, urls);
   }
 
-  private Pair<String,URLClassLoader> createClassLoader(TempState tempState) throws IOException {
+  private FinalState createClassLoader(TempState tempState) throws IOException {
     // if the final path already exists, we are replacing it with temp path, so recursively delete
     // the final path
-    if (Files.exists(tempState.finalPath)) {
-      FileUtils.deleteDirectory(tempState.finalPath.toFile());
+    if (Files.exists(tempState.localFinalContextDir)) {
+      FileUtils.deleteDirectory(tempState.localFinalContextDir.toFile());
     }
-    // rename temp path to final path
-    if (tempState.tempPath.toFile().renameTo(tempState.finalPath.toFile())) {
-      LOG.info("Renamed {} to {}", tempState.tempPath, tempState.finalPath);
+    if (tempState.localTempContextDir.toFile().renameTo(tempState.localFinalContextDir.toFile())) {
+      LOG.info("Renamed {} to {}", tempState.localTempContextDir, tempState.localFinalContextDir);
     }
     var classLoader = new URLClassLoader(tempState.urls, ClassLoader.getSystemClassLoader());
-    return new Pair<>(tempState.checksum, classLoader);
+    return new FinalState(classLoader, tempState.hdfsManifestLastMod,
+        tempState.hdfsManifestChecksum);
   }
 
-  public String checksumLocalFile(java.nio.file.Path path) throws IOException {
+  private String checksumLocalFile(java.nio.file.Path path) throws IOException {
     try (var in = FileUtils.openInputStream(path.toFile())) {
-      return checksum(in.readAllBytes());
+      return checksum(in);
     }
   }
 
-  public static String checksum(byte[] fileBytes) {
+  @VisibleForTesting
+  String checksum(InputStream fileStream) throws IOException {
+    StringBuilder checksum = new StringBuilder();
     try {
-      StringBuilder checksum = new StringBuilder();
-      for (byte b : MessageDigest.getInstance(HASH_ALG).digest(fileBytes)) {
+      // optimization: clone if we can (MessageDigest is not thread safe: can't use directly)
+      computeChecksum((MessageDigest) messageDigest.clone(), fileStream, checksum);
+    } catch (CloneNotSupportedException cnse) {
+      // otherwise fall back to creating a new MessageDigest
+      try {
+        computeChecksum(MessageDigest.getInstance(HASH_ALG), fileStream, checksum);
+      } catch (NoSuchAlgorithmException e) {
+        throw new IllegalStateException(e);
+      }
+    }
+    return checksum.toString();
+  }
+
+  private void computeChecksum(MessageDigest messageDigest, InputStream fileStream,
+      StringBuilder checksum) throws IOException {
+    try (BufferedInputStream bis = new BufferedInputStream(fileStream)) {
+      byte[] buffer = new byte[8192];
+      int bytesRead;
+      while ((bytesRead = bis.read(buffer)) != -1) {
+        messageDigest.update(buffer, 0, bytesRead);
+      }
+      for (byte b : messageDigest.digest()) {
         checksum.append(String.format("%02x", b));
       }
-      return checksum.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
     }
   }
 
@@ -343,46 +405,53 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     Path hdfsContextPath = new Path(hdfsContextsDir, contextName);
     Path hdfsManifestFile = new Path(hdfsContextPath, MANIFEST_FILE_NAME);
 
-    try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
-      // if another thread has already started creating the class loader for this context:
-      // wait a short time for it to succeed in creating and caching the classloader, otherwise
-      // continue and try to create and cache the classloader ourselves (only one result will be
-      // cached)
-      try (var allContextDirs = Files.list(localContextsDir)) {
-        // will match temp directories or final directories for this context name
-        if (allContextDirs.map(java.nio.file.Path::getFileName)
-            .anyMatch(path -> path.toString().contains(contextName))) {
-          var retry = Retry.builder().maxRetries(5).retryAfter(50, TimeUnit.MILLISECONDS)
-              .incrementBy(50, TimeUnit.MILLISECONDS).maxWait(1, TimeUnit.SECONDS).backOffFactor(2)
-              .logInterval(500, TimeUnit.MILLISECONDS).createRetry();
-          final String operationDesc =
-              "Waiting for another thread to finish creating/caching the class loader for context "
-                  + contextName;
-          Pair<String,URLClassLoader> valInCache;
-          while ((valInCache = classLoaders.getIfPresent(hdfsManifestFile)) == null
-              && retry.canRetry()) {
-            retry.useRetry();
-            try {
-              retry.waitForNextAttempt(LOG, operationDesc);
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              throw new IllegalStateException(e);
-            }
-          }
-
-          if (valInCache != null) {
-            retry.logCompletion(LOG, operationDesc);
-            return valInCache.getSecond();
-          } else {
-            LOG.debug(
-                "Operation '" + operationDesc + "' has not yet succeeded. Attempting ourselves.");
+    // if another thread has already started creating the class loader for this context:
+    // wait a short time for it to succeed in creating and caching the classloader, otherwise
+    // continue and try to create and cache the classloader ourselves (only one result will be
+    // cached)
+    try (var allContextDirs = Files.list(localContextsDir)) {
+      // will match temp directories or final directories for this context name
+      if (allContextDirs.map(java.nio.file.Path::getFileName)
+          .anyMatch(path -> path.toString().contains(contextName))) {
+        var retry = Retry.builder().maxRetries(5).retryAfter(50, TimeUnit.MILLISECONDS)
+            .incrementBy(50, TimeUnit.MILLISECONDS).maxWait(1, TimeUnit.SECONDS).backOffFactor(2)
+            .logInterval(500, TimeUnit.MILLISECONDS).createRetry();
+        final String operationDesc =
+            "Waiting for another thread to finish creating/caching the class loader for context "
+                + contextName;
+        FinalState valInCache;
+        while ((valInCache = classLoaders.getIfPresent(hdfsManifestFile)) == null
+            && retry.canRetry()) {
+          retry.useRetry();
+          try {
+            retry.waitForNextAttempt(LOG, operationDesc);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
           }
         }
-      }
 
+        if (valInCache != null) {
+          if (retry.retriesCompleted() > 0) {
+            retry.logCompletion(LOG, operationDesc);
+          }
+          return valInCache.classLoader;
+        } else {
+          LOG.debug(
+              "Operation '" + operationDesc + "' has not yet succeeded. Attempting ourselves.");
+        }
+      }
+    } catch (IOException e) {
+      throw new ContextClassLoaderException(contextName, e);
+    }
+
+    try (var hdfsManifestFileIn = hdfs.open(hdfsManifestFile)) {
+      // readAllBytes is okay - manifest files should be small
       var hdfsManifestFileBytes = hdfsManifestFileIn.readAllBytes();
       try (var tempState = createTempState(contextName, hdfsManifestFile,
-          new ByteArrayInputStream(hdfsManifestFileBytes), checksum(hdfsManifestFileBytes))) {
+          new ByteArrayInputStream(hdfsManifestFileBytes),
+          hdfs.getFileStatus(hdfsManifestFile).getModificationTime(),
+          checksum(new ByteArrayInputStream(hdfsManifestFileBytes)))) {
         // atomically return cached value if it exists OR rename the temp dir to the final dir and
         // create and cache the new class loader
         // Guava Cache get() will not work here as that requires the same key to always map to the
@@ -393,7 +462,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
           } catch (IOException e) {
             throw new IllegalStateException(e);
           }
-        }).getSecond();
+        }).classLoader;
       }
     } catch (IOException | ExecutionException e) {
       throw new ContextClassLoaderException(contextName, e);
