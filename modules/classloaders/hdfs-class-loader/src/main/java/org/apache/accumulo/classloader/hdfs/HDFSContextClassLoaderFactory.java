@@ -62,14 +62,14 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  * <br>
  * Configuration of this class is done by having a base directory in HDFS which stores context
  * directories. It must be named "contexts" (e.g., "hdfs://test:1234/contexts" could be the base
- * directory). The children are specific contexts (names can be anything). The "contexts" directory
- * should not contain any other files or directories. Each context directory should contain a
- * manifest file <b>manifest.json</b> and JAR files. The manifest file defines the context name and
- * the JAR info for what JARs should be in the {@link URLClassLoader} for that context. For example:
+ * directory). The children are specific contexts (names can be anything e.g., "contextA"). The
+ * "contexts" directory should not contain any other files or directories. Each context directory
+ * should contain a manifest file <b>manifest.json</b> and JAR files. The context directory defines
+ * the context name (e.g., "contextA") and the manifest file defines the JAR info for what JARs
+ * should be in the {@link URLClassLoader} for that context. For example:
  *
  * <pre>
  * {
- *   "context": "contextA",
  *   "jars": [
  *     {
  *       "name": "Iterators.jar",
@@ -209,16 +209,10 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
 
   @VisibleForTesting
   static class Context {
-    private final String contextName;
     private final List<JarInfo> jars;
 
-    Context(String contextName, JarInfo... jars) {
-      this.contextName = contextName;
+    Context(JarInfo... jars) {
       this.jars = List.of(jars);
-    }
-
-    String getContextName() {
-      return contextName;
     }
 
     @SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "returned list is not modifiable")
