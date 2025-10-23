@@ -102,6 +102,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
   private static final Logger LOG = LoggerFactory.getLogger(HDFSContextClassLoaderFactory.class);
   public static final String MANIFEST_FILE_NAME = "manifest.json";
   private static final String HASH_ALG = "SHA-256";
+  private static final String TEMP_DIR_PREFIX = "tmp-";
   public static final String HDFS_CONTEXTS_BASE_DIR = "hdfs.contexts.class.loader.base.dir";
   public static final String LOCAL_CONTEXTS_DOWNLOAD_DIR =
       "local.contexts.class.loader.download.dir";
@@ -278,7 +279,7 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     var localFinalContextDir = localContextsDir.resolve(contextName);
     // create the temp directory, will eventually be renamed to the above or deleted
     var localTempContextDir =
-        localContextsDir.resolve("tmp-" + contextName + "-" + UUID.randomUUID());
+        localContextsDir.resolve(TEMP_DIR_PREFIX + contextName + "-" + UUID.randomUUID());
 
     if (localTempContextDir.toFile().mkdir()) {
       LOG.debug("Created dir " + localTempContextDir);
@@ -438,9 +439,9 @@ public class HDFSContextClassLoaderFactory implements ContextClassLoaderFactory 
     // continue and try to create and store the classloader ourselves (only one result will be
     // stored)
     try (var allContextDirs = Files.list(localContextsDir)) {
-      // will match temp directories or final directories for this context name
+      // will match only temp directories for this context name
       if (allContextDirs.map(java.nio.file.Path::getFileName)
-          .anyMatch(path -> path.toString().contains(contextName))) {
+          .anyMatch(path -> path.toString().contains(TEMP_DIR_PREFIX + contextName))) {
         var retry = Retry.builder().maxRetries(5).retryAfter(50, TimeUnit.MILLISECONDS)
             .incrementBy(50, TimeUnit.MILLISECONDS).maxWait(1, TimeUnit.SECONDS).backOffFactor(2)
             .logInterval(500, TimeUnit.MILLISECONDS).createRetry();
