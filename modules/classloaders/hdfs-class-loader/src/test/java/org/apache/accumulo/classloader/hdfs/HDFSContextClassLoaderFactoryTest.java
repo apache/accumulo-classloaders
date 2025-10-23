@@ -19,6 +19,7 @@
 package org.apache.accumulo.classloader.hdfs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,17 +32,18 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.hdfs.HDFSContextClassLoaderFactory.Context;
 import org.apache.accumulo.classloader.hdfs.HDFSContextClassLoaderFactory.JarInfo;
+import org.apache.accumulo.classloader.hdfs.HDFSContextClassLoaderFactory.StoreCleaner;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -93,8 +95,6 @@ public class HDFSContextClassLoaderFactoryTest {
     System.setProperty(HDFSContextClassLoaderFactory.HDFS_CONTEXTS_BASE_DIR,
         hdfs.getUri() + HDFS_CONTEXTS_DIR);
     System.setProperty(HDFSContextClassLoaderFactory.LOCAL_CONTEXTS_DOWNLOAD_DIR, localContextsDir);
-    System.setProperty(HDFSContextClassLoaderFactory.MANIFEST_FILE_CHECK_INTERVAL,
-        CHECK_INTERVAL_SEC + "");
   }
 
   @AfterEach
@@ -121,15 +121,14 @@ public class HDFSContextClassLoaderFactoryTest {
     LOG.debug("Copied from {} to {}", localJar, hdfsJarPath);
   }
 
-  private void writeManifestAndJarToHDFS(String jarName, String resourceName, String contextName,
-      boolean validChecksum) throws Exception {
+  private void writeManifestAndJarToHDFS(HDFSContextClassLoaderFactory factory, String jarName,
+      String resourceName, String contextName, boolean validChecksum) throws Exception {
     var hdfsJarPath = new Path(HDFS_CONTEXT1_DIR, jarName);
     writeJarFileToHDFS(hdfsJarPath, resourceName);
 
     final JarInfo jarInfo;
     if (validChecksum) {
-      jarInfo = new JarInfo(jarName,
-          HDFSContextClassLoaderFactory.checksum(hdfs.open(hdfsJarPath).readAllBytes()));
+      jarInfo = new JarInfo(jarName, factory.checksum(hdfs.open(hdfsJarPath)));
     } else {
       jarInfo = new JarInfo(jarName, "badchecksum");
     }
@@ -143,7 +142,8 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(factory, HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1,
+        true);
 
     var classLoader = factory.getClassLoader(CONTEXT1);
     var clazz = classLoader.loadClass(HELLO_WORLD_CLASS);
@@ -157,7 +157,8 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(factory, HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1,
+        true);
 
     var classLoaderA = factory.getClassLoader(CONTEXT1);
     assertThrows(ClassNotFoundException.class, () -> classLoaderA.loadClass(TEST_CLASS));
@@ -168,7 +169,7 @@ public class HDFSContextClassLoaderFactoryTest {
 
     // note that we are writing the manifest file with the same context name but without the
     // hello world jar but with the test jar
-    writeManifestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
+    writeManifestAndJarToHDFS(factory, TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
 
     // wait for manifest file check to take place
     Thread.sleep(TimeUnit.SECONDS.toMillis(CHECK_INTERVAL_SEC + 1));
@@ -186,7 +187,8 @@ public class HDFSContextClassLoaderFactoryTest {
     HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
     factory.init(null);
 
-    writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, false);
+    writeManifestAndJarToHDFS(factory, HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1,
+        false);
 
     assertThrows(ContextClassLoaderFactory.ContextClassLoaderException.class,
         () -> factory.getClassLoader(CONTEXT1));
@@ -194,84 +196,77 @@ public class HDFSContextClassLoaderFactoryTest {
 
   /**
    * Tests many threads running calls to
-   * {@link HDFSContextClassLoaderFactory#getClassLoader(String)} and many threads running the
-   * {@link HDFSContextClassLoaderFactory.ManifestFileChecker}. This is to test that there are no
-   * race conditions for shared resources of this factory (the file systems and the internal store
-   * for the class loaders). In the implementation, just one
-   * {@link HDFSContextClassLoaderFactory.ManifestFileChecker} runs, but this tests many of these
-   * running to more thoroughly test for race conditions. This test will also change the manifest
-   * file for the context to reference a new jar, which should be picked up by a checker and cause
-   * the context entry in the internal store to be updated.
+   * {@link HDFSContextClassLoaderFactory#getClassLoader(String)}. This is to test for race
+   * conditions for shared resources of this factory (the file systems and the internal store for
+   * the class loaders).
    */
   @Test
   @SuppressFBWarnings(value = "PREDICTABLE_RANDOM",
       justification = "predictable random fine for testing")
   public void testConcurrent() throws Exception {
-    // have the manifest file checks run more often
-    final int manifestFileCheckIntervalSec = 1;
-    System.setProperty(HDFSContextClassLoaderFactory.MANIFEST_FILE_CHECK_INTERVAL,
-        manifestFileCheckIntervalSec + "");
-    final int numTotalThreads = 128;
-    final int numClassLoaderThreads = numTotalThreads / 2;
-    final int numManifestFileCheckerThreads = numTotalThreads / 2;
-    final Random rand = new Random();
-    ExecutorService classLoaderPool = Executors.newFixedThreadPool(numClassLoaderThreads);
-    ExecutorService manifestFileCheckerPool =
-        Executors.newFixedThreadPool(numManifestFileCheckerThreads);
+    HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
+    factory.init(null);
+
+    int numThreads = 128;
+    ExecutorService classLoaderPool = Executors.newFixedThreadPool(numThreads);
+    // for this test, we don't expect anything to be GC'd or removed from the store. Run these
+    // to confirm this assumption.
+    GCRunner gcRunner = new GCRunner();
+    // use our own cleaner to run the cleans more often than the factory does, increasing
+    // concurrency stress
+    StoreCleaner storeCleaner = factory.new StoreCleaner(10);
 
     try {
-      CountDownLatch latch = new CountDownLatch(numTotalThreads);
-      List<Future<ClassLoader>> classLoaderFutures = new ArrayList<>(numClassLoaderThreads);
-      List<Future<?>> manifestFileCheckerFutures = new ArrayList<>(numManifestFileCheckerThreads);
-      Set<ClassLoader> classLoaderPoolResults = new HashSet<>();
-      HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
+      Thread gcThread = new Thread(gcRunner);
+      gcThread.start();
+      Thread storeCleanerThread = new Thread(storeCleaner);
+      storeCleanerThread.start();
 
-      factory.init(null);
+      CountDownLatch latch1 = new CountDownLatch(numThreads / 2);
+      CountDownLatch latch2 = new CountDownLatch(numThreads / 2);
+      List<Future<ClassLoader>> classLoaderFutures = new ArrayList<>(numThreads / 2);
+      Set<ClassLoader> classLoaderPoolResults = new HashSet<>();
 
       // context1 -> HelloWorld jar
-      writeManifestAndJarToHDFS(HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1, true);
+      writeManifestAndJarToHDFS(factory, HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1,
+          true);
 
-      for (int i = 0; i < numClassLoaderThreads; i++) {
+      for (int i = 0; i < numThreads / 2; i++) {
         classLoaderFutures.add(classLoaderPool.submit(() -> {
           try {
-            latch.countDown();
-            latch.await();
-            // make ~1/2 the threads race to call getClassLoader immediately (racing to get the
-            // class loader for the HelloWorld jar), make the other ~1/2 race to call after
-            // the manifest file change occurs and would be picked up (racing to get the class
-            // loader for the Test jar)
-            if (rand.nextInt(2) == 0) {
-              Thread.sleep(TimeUnit.SECONDS.toMillis(manifestFileCheckIntervalSec + 1));
-            }
-            var classLoader = factory.getClassLoader(CONTEXT1);
-            return classLoader;
+            latch1.countDown();
+            latch1.await();
+            // make 1/2 the threads race to getClassLoader for the HelloWorld jar
+            return factory.getClassLoader(CONTEXT1);
           } catch (ContextClassLoaderFactory.ContextClassLoaderException e) {
             throw new RuntimeException(e);
           }
         }));
       }
-
-      for (int i = 0; i < numManifestFileCheckerThreads; i++) {
-        manifestFileCheckerFutures.add(manifestFileCheckerPool.submit(() -> {
-          latch.countDown();
-          try {
-            latch.await();
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-          }
-          factory.new ManifestFileChecker().run();
-        }));
-      }
-
-      // context1 -> Test jar
-      writeManifestAndJarToHDFS(TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
-
+      // wait for threads to complete
       for (var future : classLoaderFutures) {
         classLoaderPoolResults.add(future.get());
       }
-      factory.shutdownManifestFileChecker();
-      for (var future : manifestFileCheckerFutures) {
-        future.get();
+      classLoaderFutures.clear();
+
+      // context1 -> Test jar
+      writeManifestAndJarToHDFS(factory, TEST_JAR, TEST_JAR_RESOURCE_NAME, CONTEXT1, true);
+
+      for (int i = 0; i < numThreads / 2; i++) {
+        classLoaderFutures.add(classLoaderPool.submit(() -> {
+          try {
+            latch2.countDown();
+            latch2.await();
+            // make 1/2 the threads race to getClassLoader for the Test jar
+            return factory.getClassLoader(CONTEXT1);
+          } catch (ContextClassLoaderFactory.ContextClassLoaderException e) {
+            throw new RuntimeException(e);
+          }
+        }));
+      }
+      // wait for threads to complete
+      for (var future : classLoaderFutures) {
+        classLoaderPoolResults.add(future.get());
       }
 
       // only two unique class loaders should have been created
@@ -317,10 +312,77 @@ public class HDFSContextClassLoaderFactoryTest {
         }
       }
     } finally {
+      factory.shutdownStoreCleaner();
+      gcRunner.shutdown();
       classLoaderPool.shutdown();
-      manifestFileCheckerPool.shutdown();
-      System.setProperty(HDFSContextClassLoaderFactory.MANIFEST_FILE_CHECK_INTERVAL,
-          CHECK_INTERVAL_SEC + "");
+    }
+  }
+
+  /**
+   * Tests that stored values are GC'd when no longer needed
+   */
+  @Test
+  public void testStoreCleanup() throws Exception {
+    HDFSContextClassLoaderFactory factory = new HDFSContextClassLoaderFactory();
+    factory.init(null);
+
+    GCRunner gcRunner = new GCRunner();
+    StoreCleaner storeCleaner = factory.new StoreCleaner(10);
+    try {
+      Thread gcThread = new Thread(gcRunner);
+      gcThread.start();
+      // use our own store cleaner to run the cleans more often than the factory does, reducing
+      // wait times
+      Thread storeCleanerThread = new Thread(storeCleaner);
+      storeCleanerThread.start();
+
+      writeManifestAndJarToHDFS(factory, HELLO_WORLD_JAR, HELLO_WORLD_JAR_RESOURCE_NAME, CONTEXT1,
+          true);
+
+      // create a strong reference to the class loader
+      var classLoader = factory.getClassLoader(CONTEXT1);
+      // wait a bit allowing GCs and store cleans to run
+      Thread.sleep(1_000);
+      assertFalse(factory.classLoaders.isEmpty());
+      try (var contextsDirChildren = Files.list(java.nio.file.Path.of(localContextsDir))) {
+        assertEquals(1, contextsDirChildren.count());
+      }
+
+      // clear strong reference to class loader
+      classLoader = null;
+      // wait a bit allowing GCs and store cleans to run
+      Thread.sleep(1_000);
+      assertTrue(factory.classLoaders.isEmpty());
+      try (var contextsDirChildren = Files.list(java.nio.file.Path.of(localContextsDir))) {
+        assertEquals(0, contextsDirChildren.count());
+      }
+    } finally {
+      factory.shutdownStoreCleaner();
+      gcRunner.shutdown();
+    }
+  }
+
+  /**
+   * Since our factory works with weak references, have a thread to run GC very often to ensure
+   * things are GC'd only when expected
+   */
+  private static class GCRunner implements Runnable {
+    private AtomicBoolean shutdown = new AtomicBoolean(false);
+
+    @Override
+    public void run() {
+      while (!shutdown.get()) {
+        System.gc();
+        try {
+          Thread.sleep(10);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    private void shutdown() {
+      shutdown.set(true);
     }
   }
 }
