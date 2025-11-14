@@ -16,39 +16,63 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.manifest;
+package org.apache.accumulo.classloader.lcc.definition;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Map;
+import java.util.List;
+import java.util.Objects;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 
-public class Manifest {
+public class ContextDefinition {
+  private final String contextName;
   private final int monitorIntervalSeconds;
-  private final Map<String,ContextDefinition> contexts;
+  private final List<Resource> resources;
   private volatile transient byte[] checksum = null;
 
-  public Manifest(int monitorIntervalSeconds, Map<String,ContextDefinition> contexts) {
+  public ContextDefinition(String contextName, int monitorIntervalSeconds,
+      List<Resource> resources) {
+    this.contextName = contextName;
     this.monitorIntervalSeconds = monitorIntervalSeconds;
-    this.contexts = contexts;
+    this.resources = resources;
+  }
+
+  public String getContextName() {
+    return contextName;
   }
 
   public int getMonitorIntervalSeconds() {
     return monitorIntervalSeconds;
   }
 
-  public Map<String,ContextDefinition> getContexts() {
-    return contexts;
+  public List<Resource> getResources() {
+    return resources;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(contextName, monitorIntervalSeconds, resources);
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj)
+      return true;
+    if (obj == null)
+      return false;
+    if (getClass() != obj.getClass())
+      return false;
+    ContextDefinition other = (ContextDefinition) obj;
+    return Objects.equals(contextName, other.contextName)
+        && monitorIntervalSeconds == other.monitorIntervalSeconds
+        && Objects.equals(resources, other.resources);
   }
 
   public synchronized byte[] getChecksum() throws NoSuchAlgorithmException {
     if (checksum == null) {
-      checksum =
-          MessageDigest.getInstance("MD5").digest(Constants.GSON.toJson(this).getBytes(UTF_8));
+      checksum = Constants.getChecksummer().digest(Constants.GSON.toJson(this));
     }
     return checksum;
   }
+
 }

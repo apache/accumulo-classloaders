@@ -37,9 +37,9 @@ public class LocalFileResolver extends FileResolver {
 
   public LocalFileResolver(URL url) throws ContextClassLoaderException {
     super(url);
-    if (url.getHost() != null) {
+    if (url.getHost() != null && !url.getHost().isBlank()) {
       throw new ContextClassLoaderException(
-          "Unsupported file url, only local files are supported. url = " + url);
+          "Unsupported file url, only local files are supported. host = " + url.getHost());
     }
     try {
       final URI uri = url.toURI();
@@ -51,6 +51,11 @@ public class LocalFileResolver extends FileResolver {
     } catch (URISyntaxException e) {
       throw new ContextClassLoaderException("Error creating URI from url: " + url, e);
     }
+  }
+
+  @Override
+  public String getFileName() throws URISyntaxException {
+    return Paths.get(getURL().toURI()).getFileName().toString();
   }
 
   @Override

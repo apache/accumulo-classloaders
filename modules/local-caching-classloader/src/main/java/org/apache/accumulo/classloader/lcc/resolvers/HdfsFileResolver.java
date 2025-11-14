@@ -52,6 +52,11 @@ public class HdfsFileResolver extends FileResolver {
   }
 
   @Override
+  public String getFileName() throws URISyntaxException {
+    return this.path.getName();
+  }
+
+  @Override
   public InputStream getInputStream() throws ContextClassLoaderException {
     try {
       return fs.open(path);

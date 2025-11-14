@@ -21,36 +21,34 @@ package org.apache.accumulo.classloader.lcc;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.ref.SoftReference;
+import java.net.MalformedURLException;
 import java.net.URL;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
-import org.apache.accumulo.classloader.lcc.manifest.Manifest;
+import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
-import org.apache.accumulo.classloader.lcc.state.Contexts;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A ContextClassLoaderFactory implementation that does the creates and maintains a ClassLoader for
- * a named context. This factory expects the system property {@code Constants#MANIFEST_URL_PROPERTY}
- * to be set to the URL of a json formatted manifest file. The manifest file contains an interval at
- * which this class should monitor the manifest file for changes and a mapping of context names to
- * ContextDefinitions. Each ContextDefinition contains a list of resources. Each resource is defined
- * by a URL to the file and an expected MD5 hash value.
+ * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a named
+ * context. This factory expects the parameter passed to {@code {@link #getClassLoader(String)} to
+ * be the URL of a json formatted {@link #ContextDefinition} file. The file contains an interval at
+ * which this class should monitor the file for changes and a list of {@link Resource} objects. Each
+ * resource is defined by a URL to the file and an expected MD5 hash value.
  *
- * The URLs supplied for the manifest file and for the resources can use one of the following
- * protocols: file://, http://, or hdfs://.
+ * The URLs supplied for the context definition file and for the resources can use one of the
+ * following protocols: file://, http://, or hdfs://.
  *
- * As this class processes the ContextDefinitions it fetches the contents of the resource from the
+ * As this class processes the ContextDefinition it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
- * thesystem property {@code Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
- * subdirectory for each context name. Each context cache directory contains a lock file and a copy
+ * the system property {@code Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
+ * sub-directory for each context name. Each context cache directory contains a lock file and a copy
  * of each fetched resource that is named using the following format:
  * fileName_md5Hash.fileNameSuffix.
  *
@@ -69,83 +67,83 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final AtomicReference<URL> manifestLocation = new AtomicReference<>();
-  private final AtomicReference<Manifest> manifest = new AtomicReference<>();
-  private final Contexts contexts = new Contexts(manifest);
+  private final ConcurrentHashMap<String,SoftReference<LocalCachingContextClassLoader>> contexts =
+      new ConcurrentHashMap<>();
 
-  private Manifest parseManifest(URL url) throws ContextClassLoaderException {
-    LOG.trace("Retrieving manifest file from {}", url);
+  private ContextDefinition parseContextDefinition(URL url) throws ContextClassLoaderException {
+    LOG.trace("Retrieving context definition file from {}", url);
     FileResolver resolver = FileResolver.resolve(url);
     try {
       try (InputStream is = resolver.getInputStream()) {
-        return Constants.GSON.fromJson(new InputStreamReader(is), Manifest.class);
+        return Constants.GSON.fromJson(new InputStreamReader(is), ContextDefinition.class);
       }
     } catch (IOException e) {
-      throw new ContextClassLoaderException("Error reading manifest file: " + resolver.getURL(), e);
+      throw new ContextClassLoaderException(
+          "Error reading context definition file: " + resolver.getURL(), e);
     }
   }
 
-  private URL getAndMonitorManifest() throws ContextClassLoaderException {
-    final String manifestPropValue = System.getProperty(Constants.MANIFEST_URL_PROPERTY);
-    if (manifestPropValue == null) {
-      throw new ContextClassLoaderException(
-          "System property " + Constants.MANIFEST_URL_PROPERTY + " not set.");
+  private void monitorContext(final String contextLocation) {
+    final SoftReference<LocalCachingContextClassLoader> ccl = contexts.get(contextLocation);
+    if (ccl == null) {
+      // context has been removed from the map, no need to check for update
+      return;
     }
-    try {
-      final URL url = new URL(manifestPropValue);
-      final Manifest m = parseManifest(url);
-      manifest.compareAndSet(null, m);
-      contexts.update();
-      Constants.EXECUTOR.scheduleWithFixedDelay(() -> {
-        try {
-          final AtomicBoolean updateRequired = new AtomicBoolean(false);
-          final Manifest mUpdate = parseManifest(manifestLocation.get());
-          manifest.getAndAccumulate(mUpdate, (curr, update) -> {
-            try {
-              // If the Manifest file has not changed, then continue to use
-              // the current Manifest. If it has changed, then update the
-              // Contexts and use the new one.
-              if (Arrays.equals(curr.getChecksum(), update.getChecksum())) {
-                LOG.trace("Manifest file has not changed");
-                return curr;
-              } else {
-                LOG.debug("Manifest file has changed, updating contexts");
-                updateRequired.set(true);
-                return update;
-              }
-            } catch (NoSuchAlgorithmException e) {
-              LOG.error(
-                  "Error computing checksum during manifest update, retaining current manifest", e);
-              return curr;
-            }
-          });
-          if (updateRequired.get()) {
-            contexts.update();
-          }
-        } catch (Exception e) {
-          LOG.error("Error parsing manifest at {}", url);
+    final LocalCachingContextClassLoader classLoader = ccl.get();
+    if (classLoader == null) {
+      // classloader has been garbage collected. Remove from the map and return
+      contexts.remove(contextLocation);
+      return;
+    }
+    final ContextDefinition currentDef = classLoader.getDefinition();
+    Constants.EXECUTOR.schedule(() -> {
+      try {
+        URL contextManifest = new URL(contextLocation);
+        final ContextDefinition update = parseContextDefinition(contextManifest);
+        if (!Arrays.equals(currentDef.getChecksum(), update.getChecksum())) {
+          LOG.debug("Context defintion for {} has changed", currentDef.getContextName());
+          classLoader.update(update);
+        } else {
+          LOG.debug("Context defintion for {} has not changed", currentDef.getContextName());
         }
-      }, m.getMonitorIntervalSeconds(), m.getMonitorIntervalSeconds(), TimeUnit.SECONDS);
-      LOG.debug("Monitoring manifest file {} for changes at {} second intervals", url,
-          m.getMonitorIntervalSeconds());
-      return url;
-    } catch (IOException e) {
-      throw new ContextClassLoaderException(
-          "Error parsing manifest at " + Constants.MANIFEST_URL_PROPERTY, e);
-    }
+        monitorContext(contextLocation);
+      } catch (Exception e) {
+        LOG.error("Error parsing context definition at {}", contextLocation);
+      }
+    }, currentDef.getMonitorIntervalSeconds(), TimeUnit.SECONDS);
+    LOG.debug("Monitoring context definition file {} for changes at {} second intervals",
+        contextLocation, currentDef.getMonitorIntervalSeconds());
   }
 
   @Override
-  public ClassLoader getClassLoader(String contextName) throws ContextClassLoaderException {
-
-    // If the location is not already set, get the Manifest location,
-    // parse it, and start a thread to monitor it for updates.
-    if (manifestLocation.get() == null) {
-      CacheUtils.createBaseCacheDir();
-      manifestLocation.compareAndSet(null, getAndMonitorManifest());
+  public ClassLoader getClassLoader(final String contextLocation)
+      throws ContextClassLoaderException {
+    try {
+      SoftReference<LocalCachingContextClassLoader> ccl =
+          contexts.computeIfAbsent(contextLocation, cn -> {
+            try {
+              URL contextManifest = new URL(contextLocation);
+              CacheUtils.createBaseCacheDir();
+              ContextDefinition m = parseContextDefinition(contextManifest);
+              LocalCachingContextClassLoader newCcl = new LocalCachingContextClassLoader(m);
+              newCcl.initialize();
+              monitorContext(contextLocation);
+              return new SoftReference<>(newCcl);
+            } catch (MalformedURLException e) {
+              throw new RuntimeException("Expected valid URL to context definition file", e);
+            } catch (ContextClassLoaderException e) {
+              throw new RuntimeException("Error processing context definition", e);
+            }
+          });
+      return ccl.get().getClassloader();
+    } catch (RuntimeException re) {
+      Throwable t = re.getCause();
+      if (t != null && t instanceof ContextClassLoaderException) {
+        throw (ContextClassLoaderException) t;
+      } else {
+        throw new ContextClassLoaderException(re.getMessage(), re);
+      }
     }
-
-    return contexts.getContextClassLoader(contextName);
   }
 
 }

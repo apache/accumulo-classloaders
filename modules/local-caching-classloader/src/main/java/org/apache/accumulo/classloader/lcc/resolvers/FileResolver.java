@@ -21,7 +21,6 @@ package org.apache.accumulo.classloader.lcc.resolvers;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.file.Paths;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
@@ -52,9 +51,7 @@ public abstract class FileResolver {
     return this.url;
   }
 
-  public String getFileName() throws URISyntaxException {
-    return Paths.get(getURL().toURI()).getFileName().toString();
-  }
+  public abstract String getFileName() throws URISyntaxException;
 
   public abstract InputStream getInputStream() throws ContextClassLoaderException;
 

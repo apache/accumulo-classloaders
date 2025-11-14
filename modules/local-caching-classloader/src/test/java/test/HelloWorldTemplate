@@ -16,33 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.resolvers;
+package test;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URISyntaxException;
-import java.net.URL;
-
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-
-public class HttpFileResolver extends FileResolver {
-
-  protected HttpFileResolver(URL url) throws ContextClassLoaderException {
-    super(url);
-  }
+public class HelloWorld {
 
   @Override
-  public String getFileName() throws URISyntaxException {
-    String path = this.url.getPath();
-    return path.substring(path.lastIndexOf("/") + 1);
-  }
-
-  @Override
-  public InputStream getInputStream() throws ContextClassLoaderException {
-    try {
-      return url.openStream();
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error opening file at url: " + url, e);
-    }
+  public String toString() {
+    return "%%";
   }
 }

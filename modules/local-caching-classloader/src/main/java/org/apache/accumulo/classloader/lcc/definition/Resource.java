@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.manifest;
+package org.apache.accumulo.classloader.lcc.definition;
 
 import java.net.MalformedURLException;
 import java.net.URL;

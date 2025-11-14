@@ -43,6 +43,41 @@
       <artifactId>accumulo-core</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client-minicluster</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j2-impl</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-io</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-server</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlet</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-util</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
     <!--    <dependency>-->
     <!--       provided by accumulo -->
     <!--      <groupId>org.apache.hadoop</groupId>-->
@@ -50,4 +85,34 @@
     <!--      <scope>provided</scope>-->
     <!--    </dependency>-->
   </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>build-test-jars</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>process-test-classes</phase>
+            <configuration>
+              <executable>src/test/shell/makeTestJars.sh</executable>
+            </configuration>
+          </execution>
+          <execution>
+            <id>build-helloworld-jars</id>
+            <goals>
+              <goal>exec</goal>
+            </goals>
+            <phase>process-test-classes</phase>
+            <configuration>
+              <executable>src/test/shell/makeHelloWorldJars.sh</executable>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

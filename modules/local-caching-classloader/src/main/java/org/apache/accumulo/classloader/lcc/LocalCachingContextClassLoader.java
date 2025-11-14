@@ -16,54 +16,52 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.state;
+package org.apache.accumulo.classloader.lcc;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
-import org.apache.accumulo.classloader.lcc.manifest.ContextDefinition;
-import org.apache.accumulo.classloader.lcc.manifest.Manifest;
-import org.apache.accumulo.classloader.lcc.manifest.Resource;
+import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
+import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
+import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.apache.accumulo.core.util.Pair;
-import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class ContextClassLoader {
+public class LocalCachingContextClassLoader {
 
   public static class ClassPathElement {
-    private final FileResolver remote;
-    private final URL localCachedCopy;
+    private final FileResolver resolver;
+    private final URL localCachedCopyLocation;
     private final String localCachedCopyDigest;
 
-    public ClassPathElement(FileResolver remote, URL localCachedCopy,
+    public ClassPathElement(FileResolver resolver, URL localCachedCopy,
         String localCachedCopyDigest) {
-      this.remote = remote;
-      this.localCachedCopy = localCachedCopy;
-      this.localCachedCopyDigest = localCachedCopyDigest;
+      this.resolver = Objects.requireNonNull(resolver, "resolver must be supplied");
+      this.localCachedCopyLocation =
+          Objects.requireNonNull(localCachedCopy, "local cached copy location must be supplied");
+      this.localCachedCopyDigest =
+          Objects.requireNonNull(localCachedCopyDigest, "local cached copy md5 must be supplied");
     }
 
-    public FileResolver getRemote() {
-      return remote;
+    public FileResolver getResolver() {
+      return resolver;
     }
 
-    public URL getLocalCachedCopy() {
-      return localCachedCopy;
+    public URL getLocalCachedCopyLocation() {
+      return localCachedCopyLocation;
     }
 
     public String getLocalCachedCopyDigest() {
@@ -73,64 +71,62 @@ public class ContextClassLoader {
 
   private ClassPathElement cacheResource(final Resource resource) throws Exception {
 
-    final DigestUtils digest = new DigestUtils("MD5");
     final FileResolver source = FileResolver.resolve(resource.getURL());
     final Path cacheLocation =
         contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum());
     final File cacheFile = cacheLocation.toFile();
     if (!Files.exists(cacheLocation)) {
-      Files.copy(source.getInputStream(), cacheLocation);
-      String md5 = digest.digestAsHex(cacheFile);
-      if (!resource.getChecksum().equals(md5)) {
-        // TODO: What we just wrote does not match the Manifest.
+      try (InputStream is = source.getInputStream()) {
+        Files.copy(is, cacheLocation);
       }
-      return new ClassPathElement(source, cacheFile.toURI().toURL(), md5);
+      final String checksum = Constants.getChecksummer().digestAsHex(cacheFile);
+      if (!resource.getChecksum().equals(checksum)) {
+        // TODO: What we just wrote does not match the MD5 in the Resource description.
+      }
+      return new ClassPathElement(source, cacheFile.toURI().toURL(), checksum);
     } else {
       // File exists, return new ClassPathElement based on existing file
       String fileName = cacheFile.getName();
       String[] parts = fileName.split("_");
       return new ClassPathElement(source, cacheFile.toURI().toURL(), parts[1]);
     }
-
   }
 
-  private static final Logger LOG = LoggerFactory.getLogger(ContextClassLoader.class);
+  private static final Logger LOG = LoggerFactory.getLogger(LocalCachingContextClassLoader.class);
 
   private final Path contextCacheDir;
   private final String contextName;
   private final Set<ClassPathElement> elements = new HashSet<>();
   private final AtomicBoolean elementsChanged = new AtomicBoolean(true);
-  private volatile ContextDefinition definition;
-  private volatile WeakReference<URLClassLoader> classloader = null;
-  private volatile ScheduledFuture<?> refreshTask;
+  private final AtomicReference<URLClassLoader> classloader = new AtomicReference<>();
+  private final AtomicReference<ContextDefinition> definition = new AtomicReference<>();
 
-  public ContextClassLoader(AtomicReference<Manifest> manifest, String name)
+  public LocalCachingContextClassLoader(ContextDefinition contextDefinition)
       throws ContextClassLoaderException {
-    this.contextName = name;
-    this.definition = manifest.get().getContexts().get(contextName);
+    this.definition.set(Objects.requireNonNull(contextDefinition, "definition must be supplied"));
+    this.contextName = this.definition.get().getContextName();
     this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(contextName);
   }
 
   public ContextDefinition getDefinition() {
-    return definition;
+    return definition.get();
   }
 
   public void initialize() {
     try {
       synchronized (elements) {
-        final Pair<FileChannel,FileLock> lockPair = CacheUtils.lockContextCacheDir(contextCacheDir);
-        if (lockPair == null) {
+        final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+        if (lockInfo == null) {
           // something else is updating this directory
           return;
         }
         try {
-          for (Resource r : definition.getResources()) {
+          for (Resource r : definition.get().getResources()) {
             ClassPathElement cpe = cacheResource(r);
             addElement(cpe);
           }
         } finally {
-          lockPair.getSecond().release();
-          lockPair.getFirst().close();
+          lockInfo.unlock();
         }
       }
     } catch (Exception e) {
@@ -138,39 +134,34 @@ public class ContextClassLoader {
     }
   }
 
-  public void update(ContextDefinition update) {
-    if (!definition.getResources().equals(update.getResources())) {
+  public void update(final ContextDefinition update) {
+    Objects.requireNonNull(update, "definition must be supplied");
+    if (definition.get().getResources().equals(update.getResources())) {
       return;
     }
     synchronized (elements) {
       try {
-        final Pair<FileChannel,FileLock> lockPair = CacheUtils.lockContextCacheDir(contextCacheDir);
-        if (lockPair == null) {
+        final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+        if (lockInfo == null) {
           // something else is updating this directory
           return;
         }
         try {
-          if (!definition.getResources().equals(update.getResources())) {
-
-            for (Resource updatedResource : update.getResources()) {
-
-              ClassPathElement existing = findElementBySourceLocation(updatedResource.getURL());
-              if (existing == null) {
-                // new resource
-                ClassPathElement cpe = cacheResource(updatedResource);
-                addElement(cpe);
-              } else if (existing.getLocalCachedCopyDigest()
-                  .equals(updatedResource.getChecksum())) {
-                removeElement(existing);
-                ClassPathElement cpe = cacheResource(updatedResource);
-                addElement(cpe);
-              }
+          for (Resource updatedResource : update.getResources()) {
+            ClassPathElement existing = findElementBySourceLocation(updatedResource.getURL());
+            if (existing == null) {
+              // new resource
+              ClassPathElement cpe = cacheResource(updatedResource);
+              addElement(cpe);
+            } else if (existing.getLocalCachedCopyDigest().equals(updatedResource.getChecksum())) {
+              removeElement(existing);
+              ClassPathElement cpe = cacheResource(updatedResource);
+              addElement(cpe);
             }
           }
-          this.definition = update;
+          this.definition.set(update);
         } finally {
-          lockPair.getSecond().release();
-          lockPair.getFirst().close();
+          lockInfo.unlock();
         }
       } catch (Exception e) {
         LOG.error("Error updating context: " + contextName, e);
@@ -180,7 +171,7 @@ public class ContextClassLoader {
 
   private ClassPathElement findElementBySourceLocation(URL source) {
     for (ClassPathElement cpe : elements) {
-      if (cpe.getRemote().getURL().equals(source)) {
+      if (cpe.getResolver().getURL().equals(source)) {
         return cpe;
       }
     }
@@ -201,28 +192,16 @@ public class ContextClassLoader {
     }
   }
 
-  public void clear() {
-    synchronized (elements) {
-      refreshTask.cancel(true);
-      elements.clear();
-      elementsChanged.set(false);
-      if (classloader != null) {
-        classloader.clear();
-      }
-    }
-  }
-
   public ClassLoader getClassloader() {
     synchronized (elements) {
-      if (classloader == null || elementsChanged.get()) {
+      if (classloader.get() == null || elementsChanged.get()) {
         URL[] urls = new URL[elements.size()];
         Iterator<ClassPathElement> iter = elements.iterator();
         for (int x = 0; x < elements.size(); x++) {
-          urls[x] = iter.next().getLocalCachedCopy();
+          urls[x] = iter.next().getLocalCachedCopyLocation();
         }
         elementsChanged.set(false);
-        classloader = new WeakReference<>(
-            new URLClassLoader(contextName, urls, this.getClass().getClassLoader()));
+        classloader.set(new URLClassLoader(contextName, urls, this.getClass().getClassLoader()));
       }
     }
     return classloader.get();

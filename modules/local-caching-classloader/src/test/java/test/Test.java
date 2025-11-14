@@ -16,36 +16,12 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.manifest;
+package test;
 
-import java.util.List;
-import java.util.Objects;
+public interface Test {
 
-public class ContextDefinition {
-  private final List<Resource> resources;
+  String hello();
 
-  public ContextDefinition(List<Resource> resources) {
-    this.resources = resources;
-  }
+  int add();
 
-  public List<Resource> getResources() {
-    return resources;
-  }
-
-  @Override
-  public int hashCode() {
-    return Objects.hash(resources);
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (this == obj)
-      return true;
-    if (obj == null)
-      return false;
-    if (getClass() != obj.getClass())
-      return false;
-    ContextDefinition other = (ContextDefinition) obj;
-    return Objects.equals(resources, other.resources);
-  }
 }

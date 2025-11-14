@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,11 +38,11 @@ import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.apache.accumulo.core.util.Pair;
 
 public class CacheUtils {
 
@@ -51,7 +52,32 @@ public class CacheUtils {
       PosixFilePermissions.asFileAttribute(CACHE_DIR_PERMS);
   private static final String lockFileName = "lock_file";
 
-  public static Path mkdir(Path p) throws ContextClassLoaderException {
+  public static class LockInfo {
+
+    private final FileChannel channel;
+    private final FileLock lock;
+
+    public LockInfo(FileChannel channel, FileLock lock) {
+      this.channel = Objects.requireNonNull(channel, "channel must be supplied");
+      this.lock = Objects.requireNonNull(lock, "lock must be supplied");
+    }
+
+    public FileChannel getChannel() {
+      return channel;
+    }
+
+    public FileLock getLock() {
+      return lock;
+    }
+
+    public void unlock() throws IOException {
+      lock.release();
+      channel.close();
+    }
+
+  }
+
+  private static Path mkdir(Path p) throws ContextClassLoaderException {
     try {
       return Files.createDirectory(p, PERMISSIONS);
     } catch (FileAlreadyExistsException e) {
@@ -77,19 +103,25 @@ public class CacheUtils {
     return mkdir(baseContextDir.resolve(contextName));
   }
 
-  public static Pair<FileChannel,FileLock> lockContextCacheDir(Path contextCacheDir)
+  public static LockInfo lockContextCacheDir(Path contextCacheDir)
       throws ContextClassLoaderException {
     Path lockFilePath = contextCacheDir.resolve(lockFileName);
     try {
       FileChannel channel = FileChannel.open(lockFilePath,
           EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE), PERMISSIONS);
-      FileLock lock = channel.tryLock();
-      if (lock == null) {
+      try {
+        FileLock lock = channel.tryLock();
+        if (lock == null) {
+          // something else has the lock
+          channel.close();
+          return null;
+        } else {
+          return new LockInfo(channel, lock);
+        }
+      } catch (OverlappingFileLockException e) {
         // something else has the lock
         channel.close();
         return null;
-      } else {
-        return new Pair<>(channel, lock);
       }
     } catch (IOException e) {
       throw new ContextClassLoaderException("Error creating lock file in context cache directory "
