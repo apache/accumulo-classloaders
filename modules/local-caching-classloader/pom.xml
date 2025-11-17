@@ -29,7 +29,19 @@
   </parent>
   <artifactId>local-caching-classloader</artifactId>
   <properties>
+    <accumulo.build.extraTestArgs>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED --add-opens java.management/java.lang.management=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens java.base/java.security=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.util.stream=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/java.time=ALL-UNNAMED</accumulo.build.extraTestArgs>
     <eclipseFormatterStyle>../../src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
+    <failsafe.excludedGroups />
+    <failsafe.failIfNoSpecifiedTests>false</failsafe.failIfNoSpecifiedTests>
+    <failsafe.forkCount>1</failsafe.forkCount>
+    <failsafe.groups />
+    <failsafe.reuseForks>false</failsafe.reuseForks>
+    <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
+    <surefire.excludedGroups />
+    <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <surefire.forkCount>1</surefire.forkCount>
+    <surefire.groups />
+    <surefire.reuseForks>false</surefire.reuseForks>
   </properties>
   <dependencies>
     <dependency>
@@ -87,6 +99,36 @@
   </dependencies>
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <forkCount>${surefire.forkCount}</forkCount>
+          <reuseForks>${surefire.reuseForks}</reuseForks>
+          <excludedGroups>${surefire.excludedGroups}</excludedGroups>
+          <groups>${surefire.groups}</groups>
+          <systemPropertyVariables combine.children="append">
+            <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
+          </systemPropertyVariables>
+          <argLine>${accumulo.build.extraTestArgs}</argLine>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <forkCount>${failsafe.forkCount}</forkCount>
+          <reuseForks>${failsafe.reuseForks}</reuseForks>
+          <excludedGroups>${failsafe.excludedGroups}</excludedGroups>
+          <groups>${failsafe.groups}</groups>
+          <systemPropertyVariables combine.children="append">
+            <accumulo.it.uniq.test.dir>${accumulo.it.uniq.test.dir}</accumulo.it.uniq.test.dir>
+            <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
+          </systemPropertyVariables>
+          <argLine>${accumulo.build.extraTestArgs}</argLine>
+          <trimStackTrace>false</trimStackTrace>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
