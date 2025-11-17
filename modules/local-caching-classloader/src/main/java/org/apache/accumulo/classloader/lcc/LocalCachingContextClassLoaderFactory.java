@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
+import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
@@ -40,23 +41,23 @@ import org.slf4j.LoggerFactory;
 /**
  * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a named
  * context. This factory expects the parameter passed to {@link #getClassLoader(String)} to be the
- * URL of a json formatted {@link #ContextDefinition} file. The file contains an interval at which
+ * URL of a json formatted {@link ContextDefinition} file. The file contains an interval at which
  * this class should monitor the file for changes and a list of {@link Resource} objects. Each
  * resource is defined by a URL to the file and an expected MD5 hash value.
- * <p />
+ * <p>
  * The URLs supplied for the context definition file and for the resources can use one of the
  * following protocols: file://, http://, or hdfs://.
- * <p />
+ * <p>
  * As this class processes the ContextDefinition it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
  * the system property {@link Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
  * sub-directory for each context name. Each context cache directory contains a lock file and a copy
  * of each fetched resource that is named using the following format: fileName_checksum.
- * <p />
+ * <p>
  * The lock file prevents processes from manipulating the contexts of the context cache directory
  * concurrently, which enables the cache directories to be shared among multiple processes on the
  * host.
- * <p />
+ * <p>
  * Note that because the cache directory is shared among multiple processes, and one process can't
  * know what the other processes are doing, this class cannot clean up the shared cache directory.
  * It is left to the user to remove unused context cache directories and unused old files within a
