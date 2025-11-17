@@ -25,6 +25,8 @@ import java.net.URL;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 public class HttpFileResolver extends FileResolver {
 
   protected HttpFileResolver(URL url) throws ContextClassLoaderException {
@@ -38,6 +40,7 @@ public class HttpFileResolver extends FileResolver {
   }
 
   @Override
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD")
   public InputStream getInputStream() throws ContextClassLoaderException {
     try {
       return url.openStream();

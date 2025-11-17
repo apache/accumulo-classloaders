@@ -24,16 +24,14 @@ import java.util.Objects;
 
 public class Resource {
 
-  private final String location;
-  private final String checksum;
+  private String location;
+  private String checksum;
+
+  public Resource() {}
 
   public Resource(String location, String checksum) {
     this.location = location;
     this.checksum = checksum;
-  }
-
-  public URL getURL() throws MalformedURLException {
-    return new URL(location);
   }
 
   public String getLocation() {
@@ -42,6 +40,18 @@ public class Resource {
 
   public String getChecksum() {
     return checksum;
+  }
+
+  public void setLocation(String location) {
+    this.location = location;
+  }
+
+  public void setChecksum(String checksum) {
+    this.checksum = checksum;
+  }
+
+  public URL getURL() throws MalformedURLException {
+    return new URL(location);
   }
 
   @Override

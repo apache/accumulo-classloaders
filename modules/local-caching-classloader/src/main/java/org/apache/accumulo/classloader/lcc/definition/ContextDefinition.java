@@ -24,17 +24,26 @@ import java.util.Objects;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 
+import com.google.common.base.Preconditions;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
+@SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class ContextDefinition {
-  private final String contextName;
-  private final int monitorIntervalSeconds;
-  private final List<Resource> resources;
+  private String contextName;
+  private int monitorIntervalSeconds;
+  private List<Resource> resources;
   private volatile transient byte[] checksum = null;
+
+  public ContextDefinition() {}
 
   public ContextDefinition(String contextName, int monitorIntervalSeconds,
       List<Resource> resources) {
-    this.contextName = contextName;
+    this.contextName = Objects.requireNonNull(contextName, "context name must be supplied");
+    Preconditions.checkArgument(monitorIntervalSeconds > 0,
+        "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
-    this.resources = resources;
+    this.resources = Objects.requireNonNull(resources, "resources must be supplied");
   }
 
   public String getContextName() {
@@ -47,6 +56,18 @@ public class ContextDefinition {
 
   public List<Resource> getResources() {
     return resources;
+  }
+
+  public void setContextName(String contextName) {
+    this.contextName = contextName;
+  }
+
+  public void setMonitorIntervalSeconds(int monitorIntervalSeconds) {
+    this.monitorIntervalSeconds = monitorIntervalSeconds;
+  }
+
+  public void setResources(List<Resource> resources) {
+    this.resources = resources;
   }
 
   @Override
@@ -70,9 +91,12 @@ public class ContextDefinition {
 
   public synchronized byte[] getChecksum() throws NoSuchAlgorithmException {
     if (checksum == null) {
-      checksum = Constants.getChecksummer().digest(Constants.GSON.toJson(this));
+      checksum = Constants.getChecksummer().digest(toJson());
     }
     return checksum;
   }
 
+  public String toJson() {
+    return Constants.GSON.toJson(this);
+  }
 }

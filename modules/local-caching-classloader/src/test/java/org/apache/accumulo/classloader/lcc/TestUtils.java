@@ -33,6 +33,8 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.util.resource.PathResource;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 public class TestUtils {
 
   private static String computeDatanodeDirectoryPermission() {
@@ -91,6 +93,7 @@ public class TestUtils {
     return jetty;
   }
 
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD")
   public static String computeResourceChecksum(URL resourceLocation) throws IOException {
     try (InputStream is = resourceLocation.openStream()) {
       return Constants.getChecksummer().digestAsHex(is);

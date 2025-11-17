@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc.resolvers;
 import java.io.InputStream;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.Objects;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
@@ -54,5 +55,22 @@ public abstract class FileResolver {
   public abstract String getFileName() throws URISyntaxException;
 
   public abstract InputStream getInputStream() throws ContextClassLoaderException;
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(url);
+  }
+
+  @Override
+  public boolean equals(Object obj) {
+    if (this == obj)
+      return true;
+    if (obj == null)
+      return false;
+    if (getClass() != obj.getClass())
+      return false;
+    FileResolver other = (FileResolver) obj;
+    return Objects.equals(url, other.url);
+  }
 
 }

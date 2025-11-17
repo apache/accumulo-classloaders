@@ -51,6 +51,15 @@ public class HdfsFileResolver extends FileResolver {
     }
   }
 
+  @Deprecated
+  @Override
+  protected final void finalize() {
+    /*
+     * unused; this is final due to finalizer attacks since the constructor throws exceptions (see
+     * spotbugs CT_CONSTRUCTOR_THROW)
+     */
+  }
+
   @Override
   public String getFileName() throws URISyntaxException {
     return this.path.getName();

@@ -18,9 +18,11 @@
  */
 package org.apache.accumulo.classloader.lcc.cache;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
@@ -31,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
@@ -44,11 +46,20 @@ public class CacheUtilsTest {
   @TempDir
   private static Path tempDir;
 
-  @BeforeAll
-  public static void beforeAll() {
+  @BeforeEach
+  public void beforeEach() {
     String tmp = tempDir.resolve("base").toUri().toString();
     LOG.info("Setting cache base directory to {}", tmp);
     System.setProperty(Constants.CACHE_DIR_PROPERTY, tmp);
+  }
+
+  @Test
+  public void testPropertyNotSet() {
+    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
+    ContextClassLoaderException ex =
+        assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseCacheDir());
+    assertEquals("Error getting classloader for context: System property "
+        + Constants.CACHE_DIR_PROPERTY + " not set.", ex.getMessage());
   }
 
   @Test

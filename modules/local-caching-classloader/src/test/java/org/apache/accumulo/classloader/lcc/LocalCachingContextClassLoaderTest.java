@@ -20,7 +20,9 @@ package org.apache.accumulo.classloader.lcc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -151,19 +153,19 @@ public class LocalCachingContextClassLoaderTest {
     LocalCachingContextClassLoader lcccl = new LocalCachingContextClassLoader(def);
     lcccl.initialize();
 
-    ClassLoader contextClassLoader = lcccl.getClassloader();
+    final ClassLoader contextClassLoader = lcccl.getClassloader();
 
-    Class<? extends test.Test> clazzA =
+    final Class<? extends test.Test> clazzA =
         (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectA");
     test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
     assertEquals("Hello from A", a1.hello());
 
-    Class<? extends test.Test> clazzB =
+    final Class<? extends test.Test> clazzB =
         (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectB");
     test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
     assertEquals("Hello from B", b1.hello());
 
-    Class<? extends test.Test> clazzC =
+    final Class<? extends test.Test> clazzC =
         (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectC");
     test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
     assertEquals("Hello from C", c1.hello());
@@ -194,25 +196,25 @@ public class LocalCachingContextClassLoaderTest {
       assertTrue(Files.exists(base.resolve(CONTEXT_NAME).resolve(filename + "_" + checksum)));
     }
 
-    contextClassLoader = lcccl.getClassloader();
+    final ClassLoader updatedContextClassLoader = lcccl.getClassloader();
 
-    clazzA = (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectA");
-    test.Test a2 = clazzA.getDeclaredConstructor().newInstance();
+    final Class<? extends test.Test> clazzA2 =
+        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectA");
+    test.Test a2 = clazzA2.getDeclaredConstructor().newInstance();
+    assertNotEquals(clazzA, clazzA2);
     assertEquals("Hello from A", a2.hello());
 
-    clazzB = (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectB");
-    test.Test b2 = clazzB.getDeclaredConstructor().newInstance();
+    final Class<? extends test.Test> clazzB2 =
+        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectB");
+    test.Test b2 = clazzB2.getDeclaredConstructor().newInstance();
+    assertNotEquals(clazzB, clazzB2);
     assertEquals("Hello from B", b2.hello());
 
-    // Class C already loaded in the Virtual Machine so this will work even though
-    // removed from context. When the Garbage Collector unloads this class then
-    // TestObjectC will not work anymore.
-    clazzC = (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectC");
-    test.Test c2 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c2.hello());
+    assertThrows(ClassNotFoundException.class,
+        () -> updatedContextClassLoader.loadClass("test.TestObjectC"));
 
-    Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectD");
+    final Class<? extends test.Test> clazzD =
+        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectD");
     test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
     assertEquals("Hello from D", d1.hello());
 

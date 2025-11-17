@@ -44,6 +44,8 @@ import java.util.Set;
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 public class CacheUtils {
 
   private static final Set<PosixFilePermission> CACHE_DIR_PERMS =
@@ -62,11 +64,12 @@ public class CacheUtils {
       this.lock = Objects.requireNonNull(lock, "lock must be supplied");
     }
 
-    public FileChannel getChannel() {
+    @SuppressFBWarnings(value = "EI_EXPOSE_REP")
+    FileChannel getChannel() {
       return channel;
     }
 
-    public FileLock getLock() {
+    FileLock getLock() {
       return lock;
     }
 
