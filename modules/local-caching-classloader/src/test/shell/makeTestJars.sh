@@ -26,7 +26,7 @@ fi
 for x in A B C D; do
   mkdir -p target/generated-sources/$x/test target/test-classes/ClassLoaderTest$x
   sed "s/XXX/$x/" <src/test/java/test/TestTemplate >target/generated-sources/$x/test/TestObject$x.java
-  "$JAVA_HOME/bin/javac" --source 11 --target 11 -cp target/test-classes target/generated-sources/$x/test/TestObject$x.java -d target/generated-sources/$x
+  "$JAVA_HOME/bin/javac" --release 11 -cp target/test-classes target/generated-sources/$x/test/TestObject$x.java -d target/generated-sources/$x
   "$JAVA_HOME/bin/jar" -cf target/test-classes/ClassLoaderTest$x/Test$x.jar -C target/generated-sources/$x test/TestObject$x.class
   rm -r target/generated-sources/$x
 done
