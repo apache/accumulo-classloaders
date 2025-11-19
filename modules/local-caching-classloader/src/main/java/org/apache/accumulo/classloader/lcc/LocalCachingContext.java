@@ -18,6 +18,9 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,7 +28,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Arrays;
@@ -34,7 +36,6 @@ import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
@@ -101,7 +102,6 @@ public final class LocalCachingContext {
   private final Path contextCacheDir;
   private final String contextName;
   private final Set<ClassPathElement> elements = new HashSet<>();
-  private final AtomicBoolean elementsChanged = new AtomicBoolean(true);
   private final AtomicReference<URLClassLoader> classloader = new AtomicReference<>();
   private final AtomicReference<ContextDefinition> definition = new AtomicReference<>();
   private final RetryFactory retryFactory = Retry.builder().infiniteRetries()
@@ -121,18 +121,22 @@ public final class LocalCachingContext {
 
   private ClassPathElement cacheResource(final Resource resource) throws Exception {
     final FileResolver source = FileResolver.resolve(resource.getURL());
-    final Path cacheLocation =
+    final Path tmpCacheLocation =
+        contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum() + "_tmp");
+    final Path finalCacheLocation =
         contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum());
-    final File cacheFile = cacheLocation.toFile();
-    if (!Files.exists(cacheLocation)) {
+    final File cacheFile = finalCacheLocation.toFile();
+    if (!Files.exists(finalCacheLocation)) {
       Retry retry = retryFactory.createRetry();
       boolean successful = false;
       while (!successful) {
         LOG.trace("Caching resource {} at {}", source.getURL(), cacheFile.getAbsolutePath());
         try (InputStream is = source.getInputStream()) {
-          Files.copy(is, cacheLocation, StandardCopyOption.REPLACE_EXISTING);
+          Files.copy(is, tmpCacheLocation, REPLACE_EXISTING);
+          Files.move(tmpCacheLocation, finalCacheLocation, ATOMIC_MOVE);
           successful = true;
-          retry.logCompletion(LOG, "Resource " + source.getURL() + " cached locally");
+          retry.logCompletion(LOG,
+              "Resource " + source.getURL() + " cached locally as " + finalCacheLocation);
         } catch (IOException e) {
           LOG.error("Error copying resource from {}. Retrying...", source.getURL(), e);
           retry.logRetry(LOG, "Unable to cache resource " + source.getURL());
@@ -164,7 +168,7 @@ public final class LocalCachingContext {
         elements.add(cpe);
         LOG.trace("Added element {} to classpath", cpe);
       }
-      elementsChanged.set(true);
+      classloader.set(null);
     }
   }
 
@@ -213,24 +217,27 @@ public final class LocalCachingContext {
   }
 
   public ClassLoader getClassloader() {
-    synchronized (elements) {
-      if (classloader.get() == null || elementsChanged.get()) {
-        LOG.trace("Class path contents have changed, creating new classloader");
-        URL[] urls = new URL[elements.size()];
-        Iterator<ClassPathElement> iter = elements.iterator();
-        for (int x = 0; x < elements.size(); x++) {
-          urls[x] = iter.next().getLocalCachedCopyLocation();
-        }
-        elementsChanged.set(false);
-        final URLClassLoader cl =
-            AccessController.doPrivileged((PrivilegedAction<URLClassLoader>) () -> {
-              return new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
-            });
-        classloader.set(cl);
-        LOG.trace("New classloader created from URLs: {}",
-            Arrays.asList(classloader.get().getURLs()));
-      }
+
+    ClassLoader currentCL = classloader.get();
+    if (currentCL != null) {
+      return currentCL;
     }
-    return classloader.get();
+
+    synchronized (elements) {
+      LOG.trace("Class path contents have changed, creating new classloader");
+      URL[] urls = new URL[elements.size()];
+      Iterator<ClassPathElement> iter = elements.iterator();
+      for (int x = 0; x < elements.size(); x++) {
+        urls[x] = iter.next().getLocalCachedCopyLocation();
+      }
+      final URLClassLoader cl =
+          AccessController.doPrivileged((PrivilegedAction<URLClassLoader>) () -> {
+            return new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
+          });
+      classloader.set(cl);
+      LOG.trace("New classloader created from URLs: {}",
+          Arrays.asList(classloader.get().getURLs()));
+      return cl;
+    }
   }
 }
