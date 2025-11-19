@@ -18,8 +18,11 @@
  */
 package org.apache.accumulo.classloader.lcc.resolvers;
 
+import static java.util.Objects.hash;
+import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Objects;
 
@@ -28,8 +31,8 @@ import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClas
 public abstract class FileResolver {
 
   public static FileResolver resolve(URL url) throws ContextClassLoaderException {
-    String protocol = url.getProtocol();
-    switch (protocol) {
+    requireNonNull(url, "URL must be supplied");
+    switch (url.getProtocol()) {
       case "http":
       case "https":
         return new HttpFileResolver(url);
@@ -38,11 +41,11 @@ public abstract class FileResolver {
       case "hdfs":
         return new HdfsFileResolver(url);
       default:
-        throw new ContextClassLoaderException("Unhandled protocol: " + protocol);
+        throw new ContextClassLoaderException("Unhandled protocol: " + url.getProtocol());
     }
   }
 
-  protected final URL url;
+  private final URL url;
 
   protected FileResolver(URL url) throws ContextClassLoaderException {
     this.url = url;
@@ -52,13 +55,13 @@ public abstract class FileResolver {
     return this.url;
   }
 
-  public abstract String getFileName() throws URISyntaxException;
+  public abstract String getFileName();
 
-  public abstract InputStream getInputStream() throws ContextClassLoaderException;
+  public abstract InputStream getInputStream() throws IOException;
 
   @Override
   public int hashCode() {
-    return Objects.hash(url);
+    return hash(url);
   }
 
   @Override

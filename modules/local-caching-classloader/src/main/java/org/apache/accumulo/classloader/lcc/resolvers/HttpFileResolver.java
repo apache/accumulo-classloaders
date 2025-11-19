@@ -20,32 +20,27 @@ package org.apache.accumulo.classloader.lcc.resolvers;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.net.URL;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-public class HttpFileResolver extends FileResolver {
+public final class HttpFileResolver extends FileResolver {
 
   protected HttpFileResolver(URL url) throws ContextClassLoaderException {
     super(url);
   }
 
   @Override
-  public String getFileName() throws URISyntaxException {
-    String path = this.url.getPath();
+  public String getFileName() {
+    String path = getURL().getPath();
     return path.substring(path.lastIndexOf("/") + 1);
   }
 
   @Override
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD")
-  public InputStream getInputStream() throws ContextClassLoaderException {
-    try {
-      return url.openStream();
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error opening file at url: " + url, e);
-    }
+  public InputStream getInputStream() throws IOException {
+    return getURL().openStream();
   }
 }

@@ -23,6 +23,7 @@ import static java.nio.file.attribute.PosixFilePermission.OTHERS_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
+import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.net.URI;
@@ -38,7 +39,6 @@ import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.EnumSet;
-import java.util.Objects;
 import java.util.Set;
 
 import org.apache.accumulo.classloader.lcc.Constants;
@@ -60,8 +60,8 @@ public class CacheUtils {
     private final FileLock lock;
 
     public LockInfo(FileChannel channel, FileLock lock) {
-      this.channel = Objects.requireNonNull(channel, "channel must be supplied");
-      this.lock = Objects.requireNonNull(lock, "lock must be supplied");
+      this.channel = requireNonNull(channel, "channel must be supplied");
+      this.lock = requireNonNull(lock, "lock must be supplied");
     }
 
     @SuppressFBWarnings(value = "EI_EXPOSE_REP")
@@ -80,7 +80,7 @@ public class CacheUtils {
 
   }
 
-  private static Path mkdir(Path p) throws IOException {
+  private static Path mkdir(final Path p) throws IOException {
     try {
       return Files.createDirectory(p, PERMISSIONS);
     } catch (FileAlreadyExistsException e) {
@@ -97,20 +97,25 @@ public class CacheUtils {
     return mkdir(Paths.get(URI.create(cacheDir)));
   }
 
-  public static Path createOrGetContextCacheDir(String contextName)
+  public static Path createOrGetContextCacheDir(final String contextName)
       throws IOException, ContextClassLoaderException {
     Path baseContextDir = createBaseCacheDir();
     return mkdir(baseContextDir.resolve(contextName));
   }
 
-  public static LockInfo lockContextCacheDir(Path contextCacheDir)
+  /**
+   * Acquire an exclusive lock on the "lock_file" file in the context cache directory. Returns null
+   * if lock can not be acquired. Caller MUST call LockInfo.unlock when done manipulating the cache
+   * directory
+   */
+  public static LockInfo lockContextCacheDir(final Path contextCacheDir)
       throws ContextClassLoaderException {
-    Path lockFilePath = contextCacheDir.resolve(lockFileName);
+    final Path lockFilePath = contextCacheDir.resolve(lockFileName);
     try {
-      FileChannel channel = FileChannel.open(lockFilePath,
+      final FileChannel channel = FileChannel.open(lockFilePath,
           EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE), PERMISSIONS);
       try {
-        FileLock lock = channel.tryLock();
+        final FileLock lock = channel.tryLock();
         if (lock == null) {
           // something else has the lock
           channel.close();

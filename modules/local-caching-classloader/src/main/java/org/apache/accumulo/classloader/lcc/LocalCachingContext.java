@@ -20,6 +20,8 @@ package org.apache.accumulo.classloader.lcc;
 
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.util.Objects.hash;
+import static java.util.Objects.requireNonNull;
 
 import java.io.File;
 import java.io.IOException;
@@ -59,11 +61,11 @@ public final class LocalCachingContext {
 
     public ClassPathElement(FileResolver resolver, URL localCachedCopy,
         String localCachedCopyDigest) {
-      this.resolver = Objects.requireNonNull(resolver, "resolver must be supplied");
+      this.resolver = requireNonNull(resolver, "resolver must be supplied");
       this.localCachedCopyLocation =
-          Objects.requireNonNull(localCachedCopy, "local cached copy location must be supplied");
+          requireNonNull(localCachedCopy, "local cached copy location must be supplied");
       this.localCachedCopyDigest =
-          Objects.requireNonNull(localCachedCopyDigest, "local cached copy md5 must be supplied");
+          requireNonNull(localCachedCopyDigest, "local cached copy md5 must be supplied");
     }
 
     public URL getLocalCachedCopyLocation() {
@@ -72,7 +74,7 @@ public final class LocalCachingContext {
 
     @Override
     public int hashCode() {
-      return Objects.hash(localCachedCopyDigest, localCachedCopyLocation, resolver);
+      return hash(localCachedCopyDigest, localCachedCopyLocation, resolver);
     }
 
     @Override
@@ -111,7 +113,7 @@ public final class LocalCachingContext {
 
   public LocalCachingContext(ContextDefinition contextDefinition)
       throws IOException, ContextClassLoaderException {
-    this.definition.set(Objects.requireNonNull(contextDefinition, "definition must be supplied"));
+    this.definition.set(requireNonNull(contextDefinition, "definition must be supplied"));
     this.contextName = this.definition.get().getContextName();
     this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(contextName);
   }
@@ -201,7 +203,7 @@ public final class LocalCachingContext {
 
   public void update(final ContextDefinition update)
       throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
-    Objects.requireNonNull(update, "definition must be supplied");
+    requireNonNull(update, "definition must be supplied");
     if (definition.get().getResources().equals(update.getResources())) {
       return;
     }
@@ -237,6 +239,12 @@ public final class LocalCachingContext {
     }
 
     synchronized (elements) {
+
+      currentCL = classloader.get();
+      if (currentCL != null) {
+        return currentCL;
+      }
+
       LOG.trace("Class path contents have changed, creating new classloader");
       URL[] urls = new URL[elements.size()];
       Iterator<ClassPathElement> iter = elements.iterator();

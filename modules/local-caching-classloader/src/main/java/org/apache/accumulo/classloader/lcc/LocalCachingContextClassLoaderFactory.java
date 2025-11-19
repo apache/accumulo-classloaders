@@ -19,6 +19,7 @@
 package org.apache.accumulo.classloader.lcc;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +31,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -75,9 +77,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private final Cache<String,LocalCachingContext> contexts =
       Caffeine.newBuilder().weakValues().build();
 
-  private ContextDefinition parseContextDefinition(URL url) throws ContextClassLoaderException {
+  private ContextDefinition parseContextDefinition(final URL url)
+      throws ContextClassLoaderException {
     LOG.trace("Retrieving context definition file from {}", url);
-    FileResolver resolver = FileResolver.resolve(url);
+    final FileResolver resolver = FileResolver.resolve(url);
     try {
       try (InputStream is = resolver.getInputStream()) {
         ContextDefinition def =
@@ -94,6 +97,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
+  /**
+   * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
+   * ContextDefinition has changed. The task schedules a follow-on task at the update interval value
+   * (if it changed).
+   */
   private void monitorContext(final String contextLocation, int interval) {
     Constants.EXECUTOR.schedule(() -> {
       final LocalCachingContext classLoader = contexts.getIfPresent(contextLocation);
@@ -101,10 +109,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         // context has been removed from the map, no need to check for update
         return;
       }
+      final AtomicInteger nextInterval = new AtomicInteger(interval);
       final ContextDefinition currentDef = classLoader.getDefinition();
       try {
-        final URL contextManifest = new URL(contextLocation);
-        final ContextDefinition update = parseContextDefinition(contextManifest);
+        final URL contextLocationUrl = new URL(contextLocation);
+        final ContextDefinition update = parseContextDefinition(contextLocationUrl);
         if (!Arrays.equals(currentDef.getChecksum(), update.getChecksum())) {
           LOG.debug("Context definition for {} has changed", contextLocation);
           if (!currentDef.getContextName().equals(update.getContextName())) {
@@ -113,6 +122,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
                 contextLocation, currentDef.getContextName());
           }
           classLoader.update(update);
+          nextInterval.set(update.getMonitorIntervalSeconds());
         } else {
           LOG.debug("Context definition for {} has not changed", contextLocation);
         }
@@ -121,6 +131,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           | NoSuchAlgorithmException | URISyntaxException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
+      } finally {
+        monitorContext(contextLocation, nextInterval.get());
       }
     }, interval, TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
@@ -130,6 +142,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   @Override
   public ClassLoader getClassLoader(final String contextLocation)
       throws ContextClassLoaderException {
+    requireNonNull(contextLocation, "context name must be supplied");
     try {
       final URL contextLocationUrl = new URL(contextLocation);
       final AtomicBoolean newlyCreated = new AtomicBoolean(false);

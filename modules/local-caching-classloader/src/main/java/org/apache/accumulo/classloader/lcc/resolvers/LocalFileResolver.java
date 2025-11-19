@@ -54,21 +54,12 @@ public final class LocalFileResolver extends FileResolver {
   }
 
   @Override
-  public String getFileName() throws URISyntaxException {
-    Path filePath = Paths.get(getURL().toURI()).getFileName();
-    if (filePath != null) {
-      return filePath.toString();
-    } else {
-      return null;
-    }
+  public String getFileName() {
+    return file.getName();
   }
 
   @Override
-  public FileInputStream getInputStream() throws ContextClassLoaderException {
-    try {
-      return FileUtils.openInputStream(file);
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error opening file at url: " + url, e);
-    }
+  public FileInputStream getInputStream() throws IOException {
+    return FileUtils.openInputStream(file);
   }
 }
