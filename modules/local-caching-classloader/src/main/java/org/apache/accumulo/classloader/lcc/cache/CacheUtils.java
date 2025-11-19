@@ -80,18 +80,15 @@ public class CacheUtils {
 
   }
 
-  private static Path mkdir(Path p) throws ContextClassLoaderException {
+  private static Path mkdir(Path p) throws IOException {
     try {
       return Files.createDirectory(p, PERMISSIONS);
     } catch (FileAlreadyExistsException e) {
       return p;
-    } catch (IOException e) {
-      throw new ContextClassLoaderException(
-          "Error creating cache directory: " + p.toFile().getAbsolutePath(), e);
     }
   }
 
-  public static Path createBaseCacheDir() throws ContextClassLoaderException {
+  public static Path createBaseCacheDir() throws IOException, ContextClassLoaderException {
     final String prop = Constants.CACHE_DIR_PROPERTY;
     final String cacheDir = System.getProperty(prop);
     if (cacheDir == null) {
@@ -101,7 +98,7 @@ public class CacheUtils {
   }
 
   public static Path createOrGetContextCacheDir(String contextName)
-      throws ContextClassLoaderException {
+      throws IOException, ContextClassLoaderException {
     Path baseContextDir = createBaseCacheDir();
     return mkdir(baseContextDir.resolve(contextName));
   }

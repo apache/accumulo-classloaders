@@ -23,12 +23,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.lang.ref.SoftReference;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Arrays;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -37,6 +36,9 @@ import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 
 /**
  * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a named
@@ -68,8 +70,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final ConcurrentHashMap<String,SoftReference<LocalCachingContextClassLoader>> contexts =
-      new ConcurrentHashMap<>();
+  private final Cache<String,LocalCachingContext> contexts =
+      Caffeine.newBuilder().weakValues().build();
 
   private ContextDefinition parseContextDefinition(URL url) throws ContextClassLoaderException {
     LOG.trace("Retrieving context definition file from {}", url);
@@ -90,19 +92,13 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
-  private void monitorContext(final String contextLocation, boolean initialCall, int interval) {
-    final SoftReference<LocalCachingContextClassLoader> ccl = contexts.get(contextLocation);
-    if (!initialCall && ccl == null) {
-      // context has been removed from the map, no need to check for update
-      return;
-    }
-    if (!initialCall && ccl.get() == null) {
-      // classloader has been garbage collected. Remove from the map and return
-      contexts.remove(contextLocation);
-      return;
-    }
+  private void monitorContext(final String contextLocation, int interval) {
     Constants.EXECUTOR.schedule(() -> {
-      final LocalCachingContextClassLoader classLoader = contexts.get(contextLocation).get();
+      final LocalCachingContext classLoader = contexts.getIfPresent(contextLocation);
+      if (classLoader == null) {
+        // context has been removed from the map, no need to check for update
+        return;
+      }
       final ContextDefinition currentDef = classLoader.getDefinition();
       try {
         final URL contextManifest = new URL(contextLocation);
@@ -113,7 +109,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         } else {
           LOG.debug("Context definition for {} has not changed", currentDef.getContextName());
         }
-        monitorContext(contextLocation, false, update.getMonitorIntervalSeconds());
+        monitorContext(contextLocation, update.getMonitorIntervalSeconds());
       } catch (Exception e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
@@ -127,18 +123,27 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   public ClassLoader getClassLoader(final String contextLocation)
       throws ContextClassLoaderException {
     try {
-      SoftReference<LocalCachingContextClassLoader> ccl =
-          contexts.computeIfAbsent(contextLocation, cn -> {
-            return new SoftReference<>(createContextClassLoader(contextLocation));
-          });
-      final LocalCachingContextClassLoader lcccl = ccl.get();
-      if (ccl.get() == null) {
-        // SoftReference is in the map, but the classloader has been garbage collected.
-        // Need to recreate it
-        contexts.remove(contextLocation);
-        return getClassLoader(contextLocation);
+      final URL contextLocationUrl = new URL(contextLocation);
+      final AtomicBoolean newlyCreated = new AtomicBoolean(false);
+      final LocalCachingContext ccl = contexts.get(contextLocation, cn -> {
+        try {
+          CacheUtils.createBaseCacheDir();
+          ContextDefinition def = parseContextDefinition(contextLocationUrl);
+          LocalCachingContext newCcl = new LocalCachingContext(def);
+          newCcl.initialize();
+          newlyCreated.set(true);
+          return newCcl;
+        } catch (ContextClassLoaderException | IOException e) {
+          throw new RuntimeException("Error creating context classloader", e);
+        }
+      });
+      if (newlyCreated.get()) {
+        monitorContext(contextLocation, ccl.getDefinition().getMonitorIntervalSeconds());
       }
-      return lcccl.getClassloader();
+      return ccl.getClassloader();
+    } catch (MalformedURLException e) {
+      throw new ContextClassLoaderException(
+          "Expected valid URL to context definition file but received: " + contextLocation, e);
     } catch (RuntimeException re) {
       Throwable t = re.getCause();
       if (t != null && t instanceof ContextClassLoaderException) {
@@ -146,23 +151,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } else {
         throw new ContextClassLoaderException(re.getMessage(), re);
       }
-    }
-  }
-
-  private LocalCachingContextClassLoader createContextClassLoader(final String contextLocation) {
-    try {
-      URL contextManifest = new URL(contextLocation);
-      CacheUtils.createBaseCacheDir();
-      ContextDefinition m = parseContextDefinition(contextManifest);
-      LocalCachingContextClassLoader newCcl = new LocalCachingContextClassLoader(m);
-      newCcl.initialize();
-      monitorContext(contextLocation, true, m.getMonitorIntervalSeconds());
-      return newCcl;
-    } catch (MalformedURLException e) {
-      throw new RuntimeException(
-          "Expected valid URL to context definition file but received: " + contextLocation, e);
-    } catch (ContextClassLoaderException e) {
-      throw new RuntimeException("Error processing context definition", e);
     }
   }
 

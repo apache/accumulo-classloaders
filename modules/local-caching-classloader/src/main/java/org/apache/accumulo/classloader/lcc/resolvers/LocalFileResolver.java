@@ -31,7 +31,7 @@ import java.nio.file.Paths;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.hadoop.shaded.org.apache.commons.io.FileUtils;
 
-public class LocalFileResolver extends FileResolver {
+public final class LocalFileResolver extends FileResolver {
 
   private final File file;
 
@@ -51,15 +51,6 @@ public class LocalFileResolver extends FileResolver {
     } catch (URISyntaxException e) {
       throw new ContextClassLoaderException("Error creating URI from url: " + url, e);
     }
-  }
-
-  @Deprecated
-  @Override
-  protected final void finalize() {
-    /*
-     * unused; this is final due to finalizer attacks since the constructor throws exceptions (see
-     * spotbugs CT_CONSTRUCTOR_THROW)
-     */
   }
 
   @Override

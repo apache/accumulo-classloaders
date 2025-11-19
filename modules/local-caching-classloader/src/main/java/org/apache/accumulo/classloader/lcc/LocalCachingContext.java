@@ -19,11 +19,13 @@
 package org.apache.accumulo.classloader.lcc;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Arrays;
@@ -31,6 +33,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -40,10 +43,12 @@ import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+import org.apache.accumulo.core.util.Retry;
+import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class LocalCachingContextClassLoader {
+public final class LocalCachingContext {
 
   private static class ClassPathElement {
     private final FileResolver resolver;
@@ -59,18 +64,8 @@ public class LocalCachingContextClassLoader {
           Objects.requireNonNull(localCachedCopyDigest, "local cached copy md5 must be supplied");
     }
 
-    @SuppressWarnings("unused")
-    public FileResolver getResolver() {
-      return resolver;
-    }
-
     public URL getLocalCachedCopyLocation() {
       return localCachedCopyLocation;
-    }
-
-    @SuppressWarnings("unused")
-    public String getLocalCachedCopyDigest() {
-      return localCachedCopyDigest;
     }
 
     @Override
@@ -101,7 +96,7 @@ public class LocalCachingContextClassLoader {
     }
   }
 
-  private static final Logger LOG = LoggerFactory.getLogger(LocalCachingContextClassLoader.class);
+  private static final Logger LOG = LoggerFactory.getLogger(LocalCachingContext.class);
 
   private final Path contextCacheDir;
   private final String contextName;
@@ -109,21 +104,15 @@ public class LocalCachingContextClassLoader {
   private final AtomicBoolean elementsChanged = new AtomicBoolean(true);
   private final AtomicReference<URLClassLoader> classloader = new AtomicReference<>();
   private final AtomicReference<ContextDefinition> definition = new AtomicReference<>();
+  private final RetryFactory retryFactory = Retry.builder().infiniteRetries()
+      .retryAfter(1, TimeUnit.SECONDS).incrementBy(1, TimeUnit.SECONDS).maxWait(5, TimeUnit.MINUTES)
+      .backOffFactor(2).logInterval(1, TimeUnit.SECONDS).createFactory();
 
-  public LocalCachingContextClassLoader(ContextDefinition contextDefinition)
-      throws ContextClassLoaderException {
+  public LocalCachingContext(ContextDefinition contextDefinition)
+      throws IOException, ContextClassLoaderException {
     this.definition.set(Objects.requireNonNull(contextDefinition, "definition must be supplied"));
     this.contextName = this.definition.get().getContextName();
     this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(contextName);
-  }
-
-  @Deprecated
-  @Override
-  protected final void finalize() {
-    /*
-     * unused; this is final due to finalizer attacks since the constructor throws exceptions (see
-     * spotbugs CT_CONSTRUCTOR_THROW)
-     */
   }
 
   public ContextDefinition getDefinition() {
@@ -131,15 +120,26 @@ public class LocalCachingContextClassLoader {
   }
 
   private ClassPathElement cacheResource(final Resource resource) throws Exception {
-
     final FileResolver source = FileResolver.resolve(resource.getURL());
     final Path cacheLocation =
         contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum());
     final File cacheFile = cacheLocation.toFile();
     if (!Files.exists(cacheLocation)) {
-      LOG.trace("Caching resource {} at {}", source.getURL(), cacheFile.getAbsolutePath());
-      try (InputStream is = source.getInputStream()) {
-        Files.copy(is, cacheLocation);
+      Retry retry = retryFactory.createRetry();
+      boolean successful = false;
+      while (!successful) {
+        LOG.trace("Caching resource {} at {}", source.getURL(), cacheFile.getAbsolutePath());
+        try (InputStream is = source.getInputStream()) {
+          Files.copy(is, cacheLocation, StandardCopyOption.REPLACE_EXISTING);
+          successful = true;
+          retry.logCompletion(LOG, "Resource " + source.getURL() + " cached locally");
+        } catch (IOException e) {
+          LOG.error("Error copying resource from {}. Retrying...", source.getURL(), e);
+          retry.logRetry(LOG, "Unable to cache resource " + source.getURL());
+          retry.waitForNextAttempt(LOG, "Cache resource " + source.getURL());
+        } finally {
+          retry.useRetry();
+        }
       }
       final String checksum = Constants.getChecksummer().digestAsHex(cacheFile);
       if (!resource.getChecksum().equals(checksum)) {
@@ -153,9 +153,18 @@ public class LocalCachingContextClassLoader {
       // File exists, return new ClassPathElement based on existing file
       LOG.trace("Resource {} is already cached at {}", source.getURL(),
           cacheFile.getAbsolutePath());
-      String fileName = cacheFile.getName();
-      String[] parts = fileName.split("_");
-      return new ClassPathElement(source, cacheFile.toURI().toURL(), parts[1]);
+      return new ClassPathElement(source, cacheFile.toURI().toURL(), resource.getChecksum());
+    }
+  }
+
+  private void cacheResources(final ContextDefinition def) throws Exception {
+    synchronized (elements) {
+      for (Resource updatedResource : def.getResources()) {
+        ClassPathElement cpe = cacheResource(updatedResource);
+        elements.add(cpe);
+        LOG.trace("Added element {} to classpath", cpe);
+      }
+      elementsChanged.set(true);
     }
   }
 
@@ -168,10 +177,7 @@ public class LocalCachingContextClassLoader {
           return;
         }
         try {
-          for (Resource r : definition.get().getResources()) {
-            ClassPathElement cpe = cacheResource(r);
-            addElement(cpe);
-          }
+          cacheResources(definition.get());
         } finally {
           lockInfo.unlock();
         }
@@ -195,10 +201,7 @@ public class LocalCachingContextClassLoader {
         }
         try {
           elements.clear();
-          for (Resource updatedResource : update.getResources()) {
-            ClassPathElement cpe = cacheResource(updatedResource);
-            addElement(cpe);
-          }
+          cacheResources(update);
           this.definition.set(update);
         } finally {
           lockInfo.unlock();
@@ -206,14 +209,6 @@ public class LocalCachingContextClassLoader {
       } catch (Exception e) {
         LOG.error("Error updating context: " + contextName, e);
       }
-    }
-  }
-
-  private void addElement(ClassPathElement element) {
-    synchronized (elements) {
-      elements.add(element);
-      elementsChanged.set(true);
-      LOG.trace("Added element {} to classpath", element);
     }
   }
 

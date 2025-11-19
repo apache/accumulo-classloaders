@@ -18,12 +18,12 @@ limitations under the License.
 # Local Caching ClassLoader
 
 The LocalCachingContextClassLoaderFactory is an Accumulo ContextClassLoaderFactory implementation that creates and maintains a
-LocalCachingContextClassLoader. The `LocalCachingContextClassLoaderFactory.getClassLoader(String)` method expects the method
+LocalCachingContext. The `LocalCachingContextClassLoaderFactory.getClassLoader(String)` method expects the method
 argument to be a valid `file`, `hdfs`, `http` or `https` URL to a context definition file.
 
 The context definition file is a JSON formatted file that contains the name of the context, the interval in seconds at which
 the context definition file should be monitored, and a list of classpath resources. The LocalCachingContextClassLoaderFactory
-creates the LocalCachingContextClassLoader based on the initial contents of the context definition file, and updates the classloader
+creates the LocalCachingContext based on the initial contents of the context definition file, and updates the classloader
 as changes are noticed based on the monitoring interval. An example of the context definition file is below.
 
 ```
@@ -48,7 +48,7 @@ as changes are noticed based on the monitoring interval. An example of the conte
 ```
 
 The system property `accumulo.classloader.cache.dir` is required to be set to a local directory on the host. The
-LocalCachingContextClassLoader creates a directory at this location for each named context. Each context cache directory
+LocalCachingContext creates a directory at this location for each named context. Each context cache directory
 contains a lock file and a copy of each fetched resource that is named in the context definition file using the format:
 `fileName_checksum`. The lock file is used with Java's `FileChannel.tryLock` to enable exclusive access (on supported
 platforms) to the directory from different processes on the same host.

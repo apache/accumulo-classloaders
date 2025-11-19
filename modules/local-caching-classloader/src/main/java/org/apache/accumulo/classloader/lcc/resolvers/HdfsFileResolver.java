@@ -29,7 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
-public class HdfsFileResolver extends FileResolver {
+public final class HdfsFileResolver extends FileResolver {
 
   private final Configuration hadoopConf = new Configuration();
   private final FileSystem fs;
@@ -49,15 +49,6 @@ public class HdfsFileResolver extends FileResolver {
     } catch (IOException e) {
       throw new ContextClassLoaderException("Error resolving file from url: " + url, e);
     }
-  }
-
-  @Deprecated
-  @Override
-  protected final void finalize() {
-    /*
-     * unused; this is final due to finalizer attacks since the constructor throws exceptions (see
-     * spotbugs CT_CONSTRUCTOR_THROW)
-     */
   }
 
   @Override

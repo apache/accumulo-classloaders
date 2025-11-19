@@ -108,7 +108,7 @@ public class LocalCachingContextClassLoaderTest {
 
   @Test
   public void testInitialize() throws ContextClassLoaderException, IOException {
-    LocalCachingContextClassLoader lcccl = new LocalCachingContextClassLoader(def);
+    LocalCachingContext lcccl = new LocalCachingContext(def);
     lcccl.initialize();
 
     // Confirm the 3 jars are cached locally
@@ -126,7 +126,7 @@ public class LocalCachingContextClassLoaderTest {
   @Test
   public void testClassLoader() throws Exception {
 
-    LocalCachingContextClassLoader lcccl = new LocalCachingContextClassLoader(def);
+    LocalCachingContext lcccl = new LocalCachingContext(def);
     lcccl.initialize();
     ClassLoader contextClassLoader = lcccl.getClassloader();
 
@@ -150,7 +150,7 @@ public class LocalCachingContextClassLoaderTest {
   @Test
   public void testUpdate() throws Exception {
 
-    LocalCachingContextClassLoader lcccl = new LocalCachingContextClassLoader(def);
+    LocalCachingContext lcccl = new LocalCachingContext(def);
     lcccl.initialize();
 
     final ClassLoader contextClassLoader = lcccl.getClassloader();
