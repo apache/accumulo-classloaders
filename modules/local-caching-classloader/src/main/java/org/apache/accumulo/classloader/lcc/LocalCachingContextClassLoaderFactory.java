@@ -75,7 +75,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
   private final Cache<String,LocalCachingContext> contexts =
-      Caffeine.newBuilder().weakValues().build();
+      Caffeine.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build();
 
   private ContextDefinition parseContextDefinition(final URL url)
       throws ContextClassLoaderException {
