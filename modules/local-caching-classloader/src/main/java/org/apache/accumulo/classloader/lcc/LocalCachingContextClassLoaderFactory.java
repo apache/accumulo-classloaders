@@ -24,7 +24,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -115,7 +117,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           LOG.debug("Context definition for {} has not changed", contextLocation);
         }
         monitorContext(contextLocation, update.getMonitorIntervalSeconds());
-      } catch (Exception e) {
+      } catch (ContextClassLoaderException | InterruptedException | IOException
+          | NoSuchAlgorithmException | URISyntaxException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
       }
@@ -138,7 +141,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           newCcl.initialize();
           newlyCreated.set(true);
           return newCcl;
-        } catch (ContextClassLoaderException | IOException e) {
+        } catch (ContextClassLoaderException | InterruptedException | IOException
+            | URISyntaxException e) {
           throw new RuntimeException("Error creating context classloader", e);
         }
       });
@@ -151,6 +155,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           "Expected valid URL to context definition file but received: " + contextLocation, e);
     } catch (RuntimeException re) {
       Throwable t = re.getCause();
+      if (t != null && t instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      }
       if (t != null && t instanceof ContextClassLoaderException) {
         throw (ContextClassLoaderException) t;
       } else {

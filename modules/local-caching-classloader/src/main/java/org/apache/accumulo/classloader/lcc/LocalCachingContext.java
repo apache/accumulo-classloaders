@@ -24,6 +24,7 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -119,7 +120,8 @@ public final class LocalCachingContext {
     return definition.get();
   }
 
-  private ClassPathElement cacheResource(final Resource resource) throws Exception {
+  private ClassPathElement cacheResource(final Resource resource)
+      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     final FileResolver source = FileResolver.resolve(resource.getURL());
     final Path tmpCacheLocation =
         contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum() + "_tmp");
@@ -161,7 +163,8 @@ public final class LocalCachingContext {
     }
   }
 
-  private void cacheResources(final ContextDefinition def) throws Exception {
+  private void cacheResources(final ContextDefinition def)
+      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     synchronized (elements) {
       for (Resource updatedResource : def.getResources()) {
         ClassPathElement cpe = cacheResource(updatedResource);
@@ -172,14 +175,18 @@ public final class LocalCachingContext {
     }
   }
 
-  public void initialize() {
+  public void initialize()
+      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     try {
+      LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      while (lockInfo == null) {
+        // something else is updating this directory
+        LOG.info("Directory {} locked, another process must be updating the class loader contents. "
+            + "Retrying in 1 second", contextCacheDir);
+        Thread.sleep(1000);
+        lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      }
       synchronized (elements) {
-        final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-        if (lockInfo == null) {
-          // something else is updating this directory
-          return;
-        }
         try {
           cacheResources(definition.get());
         } finally {
@@ -188,21 +195,26 @@ public final class LocalCachingContext {
       }
     } catch (Exception e) {
       LOG.error("Error initializing context: " + contextName, e);
+      throw e;
     }
   }
 
-  public void update(final ContextDefinition update) {
+  public void update(final ContextDefinition update)
+      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     Objects.requireNonNull(update, "definition must be supplied");
     if (definition.get().getResources().equals(update.getResources())) {
       return;
     }
-    synchronized (elements) {
-      try {
-        final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-        if (lockInfo == null) {
-          // something else is updating this directory
-          return;
-        }
+    try {
+      LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      while (lockInfo == null) {
+        // something else is updating this directory
+        LOG.info("Directory {} locked, another process must be updating the class loader contents. "
+            + "Retrying in 1 second", contextCacheDir);
+        Thread.sleep(1000);
+        lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      }
+      synchronized (elements) {
         try {
           elements.clear();
           cacheResources(update);
@@ -210,9 +222,10 @@ public final class LocalCachingContext {
         } finally {
           lockInfo.unlock();
         }
-      } catch (Exception e) {
-        LOG.error("Error updating context: " + contextName, e);
       }
+    } catch (Exception e) {
+      LOG.error("Error updating context: " + contextName, e);
+      throw e;
     }
   }
 

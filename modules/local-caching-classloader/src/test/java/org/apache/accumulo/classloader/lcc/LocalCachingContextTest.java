@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -34,7 +33,6 @@ import java.util.List;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.Path;
@@ -107,7 +105,7 @@ public class LocalCachingContextTest {
   }
 
   @Test
-  public void testInitialize() throws ContextClassLoaderException, IOException {
+  public void testInitialize() throws Exception {
     LocalCachingContext lcccl = new LocalCachingContext(def);
     lcccl.initialize();
 
