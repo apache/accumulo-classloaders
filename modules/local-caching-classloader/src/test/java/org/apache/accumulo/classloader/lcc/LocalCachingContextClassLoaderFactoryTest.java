@@ -73,16 +73,16 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     // Find the Test jar files
     jarAOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
     jarBOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestB/TestB.jar");
     assertNotNull(jarBOrigLocation);
     jarCOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestC/TestC.jar");
     assertNotNull(jarCOrigLocation);
     jarDOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
 
     // Put B into HDFS

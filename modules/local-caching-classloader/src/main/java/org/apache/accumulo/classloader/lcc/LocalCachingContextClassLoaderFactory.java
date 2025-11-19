@@ -105,6 +105,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         final ContextDefinition update = parseContextDefinition(contextManifest);
         if (!Arrays.equals(currentDef.getChecksum(), update.getChecksum())) {
           LOG.debug("Context definition for {} has changed", currentDef.getContextName());
+          if (!currentDef.getContextName().equals(update.getContextName())) {
+            LOG.warn(
+                "Context name changed for context {}, but context cache directory will remain {}",
+                contextLocation, currentDef.getContextName());
+          }
           classLoader.update(update);
         } else {
           LOG.debug("Context definition for {} has not changed", currentDef.getContextName());

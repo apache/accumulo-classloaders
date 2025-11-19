@@ -45,7 +45,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class LocalCachingContextClassLoaderTest {
+public class LocalCachingContextTest {
 
   private static final String CONTEXT_NAME = "TEST_CONTEXT";
   private static final int MONITOR_INTERVAL_SECS = 5;
@@ -63,13 +63,13 @@ public class LocalCachingContextClassLoaderTest {
 
     // Find the Test jar files
     final URL jarAOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+        LocalCachingContextTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
     final URL jarBOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+        LocalCachingContextTest.class.getResource("/ClassLoaderTestB/TestB.jar");
     assertNotNull(jarBOrigLocation);
     final URL jarCOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+        LocalCachingContextTest.class.getResource("/ClassLoaderTestC/TestC.jar");
     assertNotNull(jarCOrigLocation);
 
     // Put B into HDFS
@@ -176,7 +176,7 @@ public class LocalCachingContextClassLoaderTest {
 
     // Add D
     final URL jarDOrigLocation =
-        LocalCachingContextClassLoaderTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+        LocalCachingContextTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
     updatedResources.add(new Resource(jarDOrigLocation.toString(),
         TestUtils.computeResourceChecksum(jarDOrigLocation)));
