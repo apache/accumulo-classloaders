@@ -18,11 +18,19 @@
  */
 package org.apache.accumulo.classloader.lcc.definition;
 
+import static java.util.Objects.hash;
+import static java.util.Objects.requireNonNull;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.security.NoSuchAlgorithmException;
-import java.util.List;
 import java.util.Objects;
+import java.util.TreeSet;
 
 import org.apache.accumulo.classloader.lcc.Constants;
+import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
 import com.google.common.base.Preconditions;
 
@@ -30,20 +38,34 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class ContextDefinition {
+
+  public static ContextDefinition create(String contextName, int monitorIntervalSecs,
+      URL... sources) throws ContextClassLoaderException, IOException {
+    TreeSet<Resource> resources = new TreeSet<>();
+    for (URL u : sources) {
+      FileResolver resolver = FileResolver.resolve(u);
+      try (InputStream is = resolver.getInputStream()) {
+        String checksum = Constants.getChecksummer().digestAsHex(is);
+        resources.add(new Resource(u.toString(), checksum));
+      }
+    }
+    return new ContextDefinition(contextName, monitorIntervalSecs, resources);
+  }
+
   private String contextName;
   private int monitorIntervalSeconds;
-  private List<Resource> resources;
+  private TreeSet<Resource> resources;
   private volatile transient byte[] checksum = null;
 
   public ContextDefinition() {}
 
   public ContextDefinition(String contextName, int monitorIntervalSeconds,
-      List<Resource> resources) {
-    this.contextName = Objects.requireNonNull(contextName, "context name must be supplied");
+      TreeSet<Resource> resources) {
+    this.contextName = requireNonNull(contextName, "context name must be supplied");
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
-    this.resources = Objects.requireNonNull(resources, "resources must be supplied");
+    this.resources = requireNonNull(resources, "resources must be supplied");
   }
 
   public String getContextName() {
@@ -54,7 +76,7 @@ public class ContextDefinition {
     return monitorIntervalSeconds;
   }
 
-  public List<Resource> getResources() {
+  public TreeSet<Resource> getResources() {
     return resources;
   }
 
@@ -66,13 +88,13 @@ public class ContextDefinition {
     this.monitorIntervalSeconds = monitorIntervalSeconds;
   }
 
-  public void setResources(List<Resource> resources) {
+  public void setResources(TreeSet<Resource> resources) {
     this.resources = resources;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(contextName, monitorIntervalSeconds, resources);
+    return hash(contextName, monitorIntervalSeconds, resources);
   }
 
   @Override

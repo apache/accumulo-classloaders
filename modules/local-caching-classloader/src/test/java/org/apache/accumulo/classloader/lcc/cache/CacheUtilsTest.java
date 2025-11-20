@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -51,6 +52,11 @@ public class CacheUtilsTest {
     String tmp = tempDir.resolve("base").toUri().toString();
     LOG.info("Setting cache base directory to {}", tmp);
     System.setProperty(Constants.CACHE_DIR_PROPERTY, tmp);
+  }
+
+  @AfterEach
+  public void afterEach() {
+    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
   }
 
   @Test

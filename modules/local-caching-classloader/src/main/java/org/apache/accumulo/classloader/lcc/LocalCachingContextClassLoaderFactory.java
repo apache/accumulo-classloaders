@@ -118,13 +118,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           LOG.debug("Context definition for {} has changed", contextLocation);
           if (!currentDef.getContextName().equals(update.getContextName())) {
             LOG.warn(
-                "Context name changed for context {}, but context cache directory will remain {}",
-                contextLocation, currentDef.getContextName());
+                "Context name changed for context {}, but context cache directory will remain {} (old={}, new={})",
+                contextLocation, currentDef.getContextName(), currentDef.getContextName(),
+                update.getContextName());
           }
           classLoader.update(update);
           nextInterval.set(update.getMonitorIntervalSeconds());
         } else {
-          LOG.debug("Context definition for {} has not changed", contextLocation);
+          LOG.trace("Context definition for {} has not changed", contextLocation);
         }
         monitorContext(contextLocation, update.getMonitorIntervalSeconds());
       } catch (ContextClassLoaderException | InterruptedException | IOException
@@ -137,6 +138,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }, interval, TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
         contextLocation, interval);
+  }
+
+  // for tests only
+  void resetForTests() {
+    // Removing the contexts will cause the
+    // background monitor task to end
+    contexts.invalidateAll();
+    contexts.cleanUp();
   }
 
   @Override
@@ -154,8 +163,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           newCcl.initialize();
           newlyCreated.set(true);
           return newCcl;
-        } catch (ContextClassLoaderException | InterruptedException | IOException
-            | URISyntaxException e) {
+        } catch (Exception e) {
           throw new RuntimeException("Error creating context classloader", e);
         }
       });
@@ -174,7 +182,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       if (t != null && t instanceof ContextClassLoaderException) {
         throw (ContextClassLoaderException) t;
       } else {
-        throw new ContextClassLoaderException(re.getMessage(), re);
+        throw new ContextClassLoaderException(t.getMessage(), t);
       }
     }
   }

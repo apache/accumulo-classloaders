@@ -22,7 +22,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Objects;
 
-public class Resource {
+public class Resource implements Comparable<Resource> {
 
   private String location;
   private String checksum;
@@ -69,5 +69,14 @@ public class Resource {
       return false;
     Resource other = (Resource) obj;
     return Objects.equals(checksum, other.checksum) && Objects.equals(location, other.location);
+  }
+
+  @Override
+  public int compareTo(Resource other) {
+    int result = this.location.compareTo(other.location);
+    if (result == 0) {
+      return this.checksum.compareTo(other.checksum);
+    }
+    return result;
   }
 }

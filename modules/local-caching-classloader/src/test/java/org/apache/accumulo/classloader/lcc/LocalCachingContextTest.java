@@ -18,19 +18,20 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.TreeSet;
 
+import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.hadoop.fs.FileSystem;
@@ -50,6 +51,10 @@ public class LocalCachingContextTest {
   private static MiniDFSCluster hdfs;
   private static Server jetty;
   private static ContextDefinition def;
+  private static TestClassInfo classA;
+  private static TestClassInfo classB;
+  private static TestClassInfo classC;
+  private static TestClassInfo classD;
 
   @TempDir
   private static java.nio.file.Path tempDir;
@@ -86,7 +91,7 @@ public class LocalCachingContextTest {
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
     // Create ContextDefinition with all three resources
-    final List<Resource> resources = new ArrayList<>();
+    final TreeSet<Resource> resources = new TreeSet<>();
     resources.add(new Resource(jarAOrigLocation.toString(),
         TestUtils.computeResourceChecksum(jarAOrigLocation)));
     resources.add(new Resource(jarBNewLocation.toString(),
@@ -95,13 +100,22 @@ public class LocalCachingContextTest {
         TestUtils.computeResourceChecksum(jarCOrigLocation)));
 
     def = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, resources);
+    classA = new TestClassInfo("test.TestObjectA", "Hello from A");
+    classB = new TestClassInfo("test.TestObjectB", "Hello from B");
+    classC = new TestClassInfo("test.TestObjectC", "Hello from C");
+    classD = new TestClassInfo("test.TestObjectD", "Hello from D");
   }
 
   @AfterAll
   public static void afterAll() throws Exception {
-    jetty.stop();
-    jetty.join();
-    hdfs.shutdown();
+    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
+    if (jetty != null) {
+      jetty.stop();
+      jetty.join();
+    }
+    if (hdfs != null) {
+      hdfs.shutdown();
+    }
   }
 
   @Test
@@ -120,7 +134,6 @@ public class LocalCachingContextTest {
     }
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testClassLoader() throws Exception {
 
@@ -128,23 +141,11 @@ public class LocalCachingContextTest {
     lcccl.initialize();
     ClassLoader contextClassLoader = lcccl.getClassloader();
 
-    Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
-
-    Class<? extends test.Test> clazzB =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectB");
-    test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from B", b1.hello());
-
-    Class<? extends test.Test> clazzC =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectC");
-    test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c1.hello());
+    testClassLoads(contextClassLoader, classA);
+    testClassLoads(contextClassLoader, classB);
+    testClassLoads(contextClassLoader, classC);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
   public void testUpdate() throws Exception {
 
@@ -153,24 +154,13 @@ public class LocalCachingContextTest {
 
     final ClassLoader contextClassLoader = lcccl.getClassloader();
 
-    final Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    testClassLoads(contextClassLoader, classA);
+    testClassLoads(contextClassLoader, classB);
+    testClassLoads(contextClassLoader, classC);
 
-    final Class<? extends test.Test> clazzB =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectB");
-    test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from B", b1.hello());
-
-    final Class<? extends test.Test> clazzC =
-        (Class<? extends test.Test>) contextClassLoader.loadClass("test.TestObjectC");
-    test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c1.hello());
-
-    List<Resource> updatedResources = new ArrayList<>(def.getResources());
+    TreeSet<Resource> updatedResources = new TreeSet<>(def.getResources());
     assertEquals(3, updatedResources.size());
-    updatedResources.remove(2); // remove C
+    updatedResources.remove(updatedResources.last()); // remove C
 
     // Add D
     final URL jarDOrigLocation =
@@ -196,26 +186,11 @@ public class LocalCachingContextTest {
 
     final ClassLoader updatedContextClassLoader = lcccl.getClassloader();
 
-    final Class<? extends test.Test> clazzA2 =
-        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectA");
-    test.Test a2 = clazzA2.getDeclaredConstructor().newInstance();
-    assertNotEquals(clazzA, clazzA2);
-    assertEquals("Hello from A", a2.hello());
-
-    final Class<? extends test.Test> clazzB2 =
-        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectB");
-    test.Test b2 = clazzB2.getDeclaredConstructor().newInstance();
-    assertNotEquals(clazzB, clazzB2);
-    assertEquals("Hello from B", b2.hello());
-
-    assertThrows(ClassNotFoundException.class,
-        () -> updatedContextClassLoader.loadClass("test.TestObjectC"));
-
-    final Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) updatedContextClassLoader.loadClass("test.TestObjectD");
-    test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from D", d1.hello());
-
+    assertNotEquals(contextClassLoader, updatedContextClassLoader);
+    testClassLoads(updatedContextClassLoader, classA);
+    testClassLoads(updatedContextClassLoader, classB);
+    testClassFailsToLoad(updatedContextClassLoader, classC);
+    testClassLoads(updatedContextClassLoader, classD);
   }
 
 }

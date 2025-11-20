@@ -18,39 +18,44 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static org.apache.accumulo.classloader.lcc.TestUtils.createContextDefinitionFile;
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
+import static org.apache.accumulo.classloader.lcc.TestUtils.updateContextDefinitionFile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.TreeSet;
 
+import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 public class LocalCachingContextClassLoaderFactoryTest {
 
+  private static final LocalCachingContextClassLoaderFactory FACTORY =
+      new LocalCachingContextClassLoaderFactory();
   private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
@@ -62,6 +67,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
   private static URL localAllContext;
   private static URL hdfsAllContext;
   private static URL jettyAllContext;
+  private static TestClassInfo classA;
+  private static TestClassInfo classB;
+  private static TestClassInfo classC;
+  private static TestClassInfo classD;
 
   @TempDir
   private static java.nio.file.Path tempDir;
@@ -96,18 +105,18 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertTrue(fs.exists(dst));
     final URL jarBHdfsLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
-    // Put C into Jetty
+    // Have Jetty serve up files from Jar C directory
     java.nio.file.Path jarCParentDirectory = Paths.get(jarCOrigLocation.toURI()).getParent();
     assertNotNull(jarCParentDirectory);
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCJettyLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
     // ContextDefinition with all jars
-    ContextDefinition allJarsDef = createContextDef("all", jarAOrigLocation, jarBHdfsLocation,
-        jarCJettyLocation, jarDOrigLocation);
+    ContextDefinition allJarsDef = ContextDefinition.create("all", MONITOR_INTERVAL_SECS,
+        jarAOrigLocation, jarBHdfsLocation, jarCJettyLocation, jarDOrigLocation);
     String allJarsDefJson = allJarsDef.toJson();
-    System.out.println(allJarsDefJson);
 
+    // Create local context definition in jar C directory
     File localDefFile = new File(jarCParentDirectory.toFile(), "allContextDefinition.json");
     Files.writeString(localDefFile.toPath(), allJarsDefJson, StandardOpenOption.CREATE);
     assertTrue(Files.exists(localDefFile.toPath()));
@@ -120,10 +129,15 @@ public class LocalCachingContextClassLoaderFactoryTest {
     hdfsAllContext = new URL(fs.getUri().toString() + hdfsDefFile.toUri().toString());
     jettyAllContext = jetty.getURI().resolve("allContextDefinition.json").toURL();
 
+    classA = new TestClassInfo("test.TestObjectA", "Hello from A");
+    classB = new TestClassInfo("test.TestObjectB", "Hello from B");
+    classC = new TestClassInfo("test.TestObjectC", "Hello from C");
+    classD = new TestClassInfo("test.TestObjectD", "Hello from D");
   }
 
   @AfterAll
   public static void afterAll() throws Exception {
+    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
     if (jetty != null) {
       jetty.stop();
       jetty.join();
@@ -133,11 +147,42 @@ public class LocalCachingContextClassLoaderFactoryTest {
     }
   }
 
+  @AfterEach
+  public void afterEach() {
+    FACTORY.resetForTests();
+  }
+
+  @Test
+  public void testCreateFromLocal() throws Exception {
+    final ClassLoader cl = FACTORY.getClassLoader(localAllContext.toString());
+    testClassLoads(cl, classA);
+    testClassLoads(cl, classB);
+    testClassLoads(cl, classC);
+    testClassLoads(cl, classD);
+  }
+
+  @Test
+  public void testCreateFromHdfs() throws Exception {
+    final ClassLoader cl = FACTORY.getClassLoader(hdfsAllContext.toString());
+    testClassLoads(cl, classA);
+    testClassLoads(cl, classB);
+    testClassLoads(cl, classC);
+    testClassLoads(cl, classD);
+  }
+
+  @Test
+  public void testCreateFromHttp() throws Exception {
+    final ClassLoader cl = FACTORY.getClassLoader(jettyAllContext.toString());
+    testClassLoads(cl, classA);
+    testClassLoads(cl, classB);
+    testClassLoads(cl, classC);
+    testClassLoads(cl, classD);
+  }
+
   @Test
   public void testInvalidContextDefinitionURL() {
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
     ContextClassLoaderException ex =
-        assertThrows(ContextClassLoaderException.class, () -> factory.getClassLoader("/not/a/URL"));
+        assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
     assertEquals("Error getting classloader for context: Expected valid URL to context definition "
         + "file but received: /not/a/URL", ex.getMessage());
   }
@@ -145,15 +190,11 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testInitialContextDefinitionEmpty() throws Exception {
     // Create a new context definition file in HDFS, but with no content
-    assertTrue(fs.mkdirs(new Path("/contextDefs")));
-    final Path empty = new Path("/contextDefs/EmptyContextDefinitionFile.json");
-    assertTrue(fs.createNewFile(empty));
-    assertTrue(fs.exists(empty));
-    final URL emptyDefUrl = new URL(fs.getUri().toString() + empty.toUri().toString());
+    final Path def = createContextDefinitionFile(fs, "EmptyContextDefinitionFile.json", null);
+    final URL emptyDefUrl = new URL(fs.getUri().toString() + def.toUri().toString());
 
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
     ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
-        () -> factory.getClassLoader(emptyDefUrl.toString()));
+        () -> FACTORY.getClassLoader(emptyDefUrl.toString()));
     assertEquals(
         "Error getting classloader for context: ContextDefinition null for context definition "
             + "file: " + emptyDefUrl.toString(),
@@ -161,231 +202,349 @@ public class LocalCachingContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testInitialContextDefinitionInvalid() throws Exception {
+  public void testInitialInvalidJson() throws Exception {
     // Create a new context definition file in HDFS, but with invalid content
-    assertTrue(fs.mkdirs(new Path("/contextDefs")));
-    final Path invalid = new Path("/contextDefs/InvalidContextDefinitionFile.json");
-    try (FSDataOutputStream out = fs.create(invalid)) {
-      ContextDefinition def = createContextDef("invalid", jarAOrigLocation);
-      out.writeBytes(def.toJson().substring(0, 4));
-    }
-    assertTrue(fs.exists(invalid));
+    ContextDefinition def =
+        ContextDefinition.create("invalid", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    // write out invalid json
+    final Path invalid = createContextDefinitionFile(fs, "InvalidContextDefinitionFile.json",
+        def.toJson().substring(0, 4));
     final URL invalidDefUrl = new URL(fs.getUri().toString() + invalid.toUri().toString());
 
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
     ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
-        () -> factory.getClassLoader(invalidDefUrl.toString()));
+        () -> FACTORY.getClassLoader(invalidDefUrl.toString()));
     assertTrue(ex.getMessage().startsWith(
         "Error getting classloader for context: com.google.gson.stream.MalformedJsonException"));
   }
 
   @Test
   public void testInitial() throws Exception {
-    // Create a new context definition file in HDFS, but with invalid content
-    assertTrue(fs.mkdirs(new Path("/contextDefs")));
-    final Path initial = new Path("/contextDefs/InitialContextDefinitionFile.json");
-    try (FSDataOutputStream out = fs.create(initial)) {
-      ContextDefinition def = createContextDef("initial", jarAOrigLocation);
-      out.writeBytes(def.toJson());
-    }
-    assertTrue(fs.exists(initial));
+    ContextDefinition def =
+        ContextDefinition.create("initial", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path initial =
+        createContextDefinitionFile(fs, "InitialContextDefinitionFile.json", def.toJson());
     final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
-    ClassLoader cl = factory.getClassLoader(initialDefUrl.toString());
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    ClassLoader cl = FACTORY.getClassLoader(initialDefUrl.toString());
+
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
+  }
+
+  @Test
+  public void testInitialNonExistentResource() throws Exception {
+    // copy jarA to some other name
+    java.nio.file.Path jarAPath = Paths.get(jarAOrigLocation.toURI());
+    java.nio.file.Path jarACopy = jarAPath.getParent().resolve("jarACopy.jar");
+    assertTrue(!Files.exists(jarACopy));
+    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    assertTrue(Files.exists(jarACopy));
+
+    ContextDefinition def =
+        ContextDefinition.create("initial", MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+
+    Files.delete(jarACopy);
+    assertTrue(!Files.exists(jarACopy));
+
+    final Path initial = createContextDefinitionFile(fs,
+        "InitialContextDefinitionFileMissingResource.json", def.toJson());
+    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+
+    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(initialDefUrl.toString()));
+    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
+  }
+
+  @Test
+  public void testInitialBadResourceURL() throws Exception {
+    Resource r = new Resource();
+    // remove the file:// prefix from the URL
+    r.setLocation(jarAOrigLocation.toString().substring(6));
+    r.setChecksum("1234");
+    TreeSet<Resource> resources = new TreeSet<>();
+    resources.add(r);
+
+    ContextDefinition def = new ContextDefinition();
+    def.setContextName("initial");
+    def.setMonitorIntervalSeconds(MONITOR_INTERVAL_SECS);
+    def.setResources(resources);
+
+    final Path initial = createContextDefinitionFile(fs,
+        "InitialContextDefinitionBadResourceURL.json", def.toJson());
+    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+
+    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(initialDefUrl.toString()));
+    assertTrue(ex.getMessage().startsWith("Error getting classloader for context: no protocol"));
+    Throwable t = ex.getCause();
+    assertTrue(t instanceof MalformedURLException);
+    assertTrue(t.getMessage().startsWith("no protocol"));
+  }
+
+  @Test
+  public void testInitialBadResourceChecksum() throws Exception {
+    Resource r = new Resource();
+    r.setLocation(jarAOrigLocation.toString());
+    r.setChecksum("1234");
+    TreeSet<Resource> resources = new TreeSet<>();
+    resources.add(r);
+
+    ContextDefinition def = new ContextDefinition();
+    def.setContextName("initial");
+    def.setMonitorIntervalSeconds(MONITOR_INTERVAL_SECS);
+    def.setResources(resources);
+
+    final Path initial = createContextDefinitionFile(fs,
+        "InitialContextDefinitionBadResourceChecksum.json", def.toJson());
+    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+
+    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(initialDefUrl.toString()));
+    assertTrue(ex.getMessage().startsWith("Error getting classloader for context: Checksum"));
+    Throwable t = ex.getCause();
+    assertTrue(t instanceof IllegalStateException);
+    assertTrue(
+        t.getMessage().endsWith("TestA.jar does not match checksum in context definition 1234"));
   }
 
   @Test
   public void testUpdate() throws Exception {
-    // Create a new context definition file in HDFS
-    assertTrue(fs.mkdirs(new Path("/contextDefs")));
-    final Path defFilePath = new Path("/contextDefs/UpdateContextDefinitionFile.json");
-    final ContextDefinition def = createContextDef("update", jarAOrigLocation);
-    try (FSDataOutputStream out = fs.create(defFilePath)) {
-      out.writeBytes(def.toJson());
-    }
-    assertTrue(fs.exists(defFilePath));
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateContextDefinitionFile.json", def.toJson());
     final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final LocalCachingContextClassLoaderFactory factory =
-        new LocalCachingContextClassLoaderFactory();
-    final ClassLoader cl = factory.getClassLoader(updateDefUrl.toString());
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
 
     // Update the contents of the context definition json file
-    fs.delete(defFilePath, false);
-    assertFalse(fs.exists(defFilePath));
-
-    ContextDefinition updateDef = createContextDef("update", jarDOrigLocation);
-    try (FSDataOutputStream out = fs.create(defFilePath)) {
-      out.writeBytes(updateDef.toJson());
-    }
-    assertTrue(fs.exists(defFilePath));
+    ContextDefinition updateDef =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarDOrigLocation);
+    updateContextDefinitionFile(fs, defFilePath, updateDef.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
 
-    final ClassLoader cl2 = factory.getClassLoader(updateDefUrl.toString());
-    assertThrows(ClassNotFoundException.class, () -> cl2.loadClass("test.TestObjectA"));
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) cl2.loadClass("test.TestObjectD");
-    test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from D", d1.hello());
+    assertNotEquals(cl, cl2);
 
+    testClassFailsToLoad(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassLoads(cl2, classD);
   }
 
   @Test
-  public void testUpdateInvalid() throws Exception {
-    // Create a new context definition file in HDFS, but with invalid content
-    assertTrue(fs.mkdirs(new Path("/contextDefs")));
-    final Path defFilePath = new Path("/contextDefs/UpdateContextDefinitionFile.json");
-    final ContextDefinition def = createContextDef("update", jarAOrigLocation);
-    try (FSDataOutputStream out = fs.create(defFilePath)) {
-      out.writeBytes(def.toJson());
-    }
-    assertTrue(fs.exists(defFilePath));
+  public void testUpdateContextDefinitionEmpty() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateEmptyContextDefinitionFile.json", def.toJson());
     final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final LocalCachingContextClassLoaderFactory factory =
-        new LocalCachingContextClassLoaderFactory();
-    final ClassLoader cl = factory.getClassLoader(updateDefUrl.toString());
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    // Update the contents of the context definition json file
-    fs.delete(defFilePath, false);
-    assertFalse(fs.exists(defFilePath));
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
 
-    ContextDefinition updateDef = createContextDef("update", jarDOrigLocation);
-    try (FSDataOutputStream out = fs.create(defFilePath)) {
-      out.writeBytes(updateDef.toJson().substring(0, 4));
-    }
-    assertTrue(fs.exists(defFilePath));
+    // Update the contents of the context definition json file with an empty file
+    updateContextDefinitionFile(fs, defFilePath, null);
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
 
-    final ClassLoader cl2 = factory.getClassLoader(updateDefUrl.toString());
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazzA2 =
-        (Class<? extends test.Test>) cl2.loadClass("test.TestObjectA");
-    test.Test a2 = clazzA2.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a2.hello());
-    assertEquals(clazzA, clazzA2);
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
 
-    assertThrows(ClassNotFoundException.class, () -> cl2.loadClass("test.TestObjectD"));
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testCreateFromLocal() throws Exception {
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
-    final ClassLoader cl = factory.getClassLoader(localAllContext.toString());
+  public void testUpdateNonExistentResource() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateNonExistentResource.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    final Class<? extends test.Test> clazzB =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectB");
-    test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from B", b1.hello());
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
 
-    final Class<? extends test.Test> clazzC =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectC");
-    test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c1.hello());
+    // copy jarA to jarACopy
+    // create a ContextDefinition that references it
+    // delete jarACopy
+    java.nio.file.Path jarAPath = Paths.get(jarAOrigLocation.toURI());
+    java.nio.file.Path jarACopy = jarAPath.getParent().resolve("jarACopy.jar");
+    assertTrue(!Files.exists(jarACopy));
+    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    assertTrue(Files.exists(jarACopy));
+    ContextDefinition def2 =
+        ContextDefinition.create("initial", MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+    Files.delete(jarACopy);
+    assertTrue(!Files.exists(jarACopy));
 
-    final Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectD");
-    test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from D", d1.hello());
+    updateContextDefinitionFile(fs, defFilePath, def2.toJson());
 
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testCreateFromHdfs() throws Exception {
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
-    final ClassLoader cl = factory.getClassLoader(hdfsAllContext.toString());
+  public void testUpdateBadResourceChecksum() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateBadResourceChecksum.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    final Class<? extends test.Test> clazzB =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectB");
-    test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from B", b1.hello());
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
 
-    final Class<? extends test.Test> clazzC =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectC");
-    test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c1.hello());
+    Resource r = new Resource();
+    r.setLocation(jarAOrigLocation.toString());
+    r.setChecksum("1234");
+    TreeSet<Resource> resources = new TreeSet<>();
+    resources.add(r);
 
-    final Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectD");
-    test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from D", d1.hello());
+    ContextDefinition def2 = new ContextDefinition();
+    def2.setContextName("update");
+    def2.setMonitorIntervalSeconds(MONITOR_INTERVAL_SECS);
+    def2.setResources(resources);
 
+    updateContextDefinitionFile(fs, defFilePath, def2.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
   }
 
-  @SuppressWarnings("unchecked")
   @Test
-  public void testCreateFromHttp() throws Exception {
-    LocalCachingContextClassLoaderFactory factory = new LocalCachingContextClassLoaderFactory();
-    final ClassLoader cl = factory.getClassLoader(jettyAllContext.toString());
+  public void testUpdateBadResourceURL() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateBadResourceChecksum.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final Class<? extends test.Test> clazzA =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectA");
-    test.Test a1 = clazzA.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from A", a1.hello());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
-    final Class<? extends test.Test> clazzB =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectB");
-    test.Test b1 = clazzB.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from B", b1.hello());
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
 
-    final Class<? extends test.Test> clazzC =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectC");
-    test.Test c1 = clazzC.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from C", c1.hello());
+    Resource r = new Resource();
+    // remove the file:// prefix from the URL
+    r.setLocation(jarAOrigLocation.toString().substring(6));
+    r.setChecksum("1234");
+    TreeSet<Resource> resources = new TreeSet<>();
+    resources.add(r);
 
-    final Class<? extends test.Test> clazzD =
-        (Class<? extends test.Test>) cl.loadClass("test.TestObjectD");
-    test.Test d1 = clazzD.getDeclaredConstructor().newInstance();
-    assertEquals("Hello from D", d1.hello());
+    ContextDefinition def2 = new ContextDefinition();
+    def2.setContextName("initial");
+    def2.setMonitorIntervalSeconds(MONITOR_INTERVAL_SECS);
+    def2.setResources(resources);
 
+    updateContextDefinitionFile(fs, defFilePath, def2.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
   }
 
-  private static ContextDefinition createContextDef(String contextName, URL... sources)
-      throws ContextClassLoaderException, IOException {
-    List<Resource> resources = new ArrayList<>();
-    for (URL u : sources) {
-      FileResolver resolver = FileResolver.resolve(u);
-      try (InputStream is = resolver.getInputStream()) {
-        String checksum = Constants.getChecksummer().digestAsHex(is);
-        resources.add(new Resource(u.toString(), checksum));
-      }
-    }
-    return new ContextDefinition(contextName, MONITOR_INTERVAL_SECS, resources);
+  @Test
+  public void testUpdateInvalidJson() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateInvalidContextDefinitionFile.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
+
+    ContextDefinition updateDef =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarDOrigLocation);
+    updateContextDefinitionFile(fs, defFilePath, updateDef.toJson().substring(0, 4));
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
+
+    // Re-write the updated context definition such that it is now valid
+    updateContextDefinitionFile(fs, defFilePath, updateDef.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl3 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    assertEquals(cl, cl2);
+    assertNotEquals(cl, cl3);
+    testClassFailsToLoad(cl3, classA);
+    testClassFailsToLoad(cl3, classB);
+    testClassFailsToLoad(cl3, classC);
+    testClassLoads(cl3, classD);
   }
 
 }

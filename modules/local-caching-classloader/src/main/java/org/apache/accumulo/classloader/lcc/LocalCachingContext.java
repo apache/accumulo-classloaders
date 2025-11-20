@@ -151,8 +151,10 @@ public final class LocalCachingContext {
       }
       final String checksum = Constants.getChecksummer().digestAsHex(cacheFile);
       if (!resource.getChecksum().equals(checksum)) {
-        LOG.error("Checksum {} for resource {} does not match checksum in context definition {}",
+        LOG.error(
+            "Checksum {} for resource {} does not match checksum in context definition {}, removing cached copy.",
             checksum, source.getURL(), resource.getChecksum());
+        Files.delete(finalCacheLocation);
         throw new IllegalStateException("Checksum " + checksum + " for resource " + source.getURL()
             + " does not match checksum in context definition " + resource.getChecksum());
       }

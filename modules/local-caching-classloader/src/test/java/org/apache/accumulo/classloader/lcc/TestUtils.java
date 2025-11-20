@@ -18,15 +18,22 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
@@ -36,6 +43,72 @@ import org.eclipse.jetty.util.resource.PathResource;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public class TestUtils {
+
+  public static class TestClassInfo {
+    private final String className;
+    private final String helloOutput;
+
+    public TestClassInfo(String className, String helloOutput) {
+      super();
+      this.className = className;
+      this.helloOutput = helloOutput;
+    }
+
+    public String getClassName() {
+      return className;
+    }
+
+    public String getHelloOutput() {
+      return helloOutput;
+    }
+  }
+
+  public static Path createContextDefinitionFile(FileSystem fs, String name, String contents)
+      throws Exception {
+    Path baseHdfsPath = new Path("/contextDefs");
+    assertTrue(fs.mkdirs(baseHdfsPath));
+    Path newContextDefinitionFile = new Path(baseHdfsPath, name);
+
+    if (contents == null) {
+      assertTrue(fs.createNewFile(newContextDefinitionFile));
+    } else {
+      try (FSDataOutputStream out = fs.create(newContextDefinitionFile)) {
+        out.writeBytes(contents);
+      }
+    }
+    assertTrue(fs.exists(newContextDefinitionFile));
+    return newContextDefinitionFile;
+  }
+
+  public static void updateContextDefinitionFile(FileSystem fs, Path defFilePath, String contents)
+      throws Exception {
+    // Update the contents of the context definition json file
+    assertTrue(fs.exists(defFilePath));
+    fs.delete(defFilePath, false);
+    assertFalse(fs.exists(defFilePath));
+
+    if (contents == null) {
+      assertTrue(fs.createNewFile(defFilePath));
+    } else {
+      try (FSDataOutputStream out = fs.create(defFilePath)) {
+        out.writeBytes(contents);
+      }
+    }
+    assertTrue(fs.exists(defFilePath));
+
+  }
+
+  public static void testClassLoads(ClassLoader cl, TestClassInfo tci) throws Exception {
+    @SuppressWarnings("unchecked")
+    Class<? extends test.Test> clazz =
+        (Class<? extends test.Test>) cl.loadClass(tci.getClassName());
+    test.Test impl = clazz.getDeclaredConstructor().newInstance();
+    assertEquals(tci.getHelloOutput(), impl.hello());
+  }
+
+  public static void testClassFailsToLoad(ClassLoader cl, TestClassInfo tci) throws Exception {
+    assertThrows(ClassNotFoundException.class, () -> cl.loadClass(tci.getClassName()));
+  }
 
   private static String computeDatanodeDirectoryPermission() {
     // MiniDFSCluster will check the permissions on the data directories, but does not
@@ -82,7 +155,7 @@ public class TestUtils {
     return cluster;
   }
 
-  public static Server getJetty(Path resourceDirectory) throws Exception {
+  public static Server getJetty(java.nio.file.Path resourceDirectory) throws Exception {
     PathResource directory = new PathResource(resourceDirectory);
     ResourceHandler handler = new ResourceHandler();
     handler.setBaseResource(directory);
