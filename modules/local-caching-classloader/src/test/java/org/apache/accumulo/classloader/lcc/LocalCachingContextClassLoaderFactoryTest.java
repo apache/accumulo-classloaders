@@ -34,6 +34,9 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.TreeSet;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
@@ -63,6 +66,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
   private static URL jarBOrigLocation;
   private static URL jarCOrigLocation;
   private static URL jarDOrigLocation;
+  private static URL jarEOrigLocation;
   private static URL localAllContext;
   private static URL hdfsAllContext;
   private static URL jettyAllContext;
@@ -92,6 +96,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     jarDOrigLocation =
         LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
+    jarEOrigLocation =
+        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestE/TestE.jar");
+    assertNotNull(jarEOrigLocation);
 
     // Put B into HDFS
     hdfs = TestUtils.getMiniCluster();
@@ -345,6 +352,43 @@ public class LocalCachingContextClassLoaderFactoryTest {
   }
 
   @Test
+  public void testUpdateSameClassNameDifferentContent() throws Exception {
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateContextDefinitionFile.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
+
+    // Update the contents of the context definition json file
+    ContextDefinition updateDef =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarEOrigLocation);
+    updateContextDefinitionFile(fs, defFilePath, updateDef.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
+
+    assertNotEquals(cl, cl2);
+
+    @SuppressWarnings("unchecked")
+    Class<? extends test.Test> clazz =
+        (Class<? extends test.Test>) cl2.loadClass("test.TestObjectA");
+    test.Test impl = clazz.getDeclaredConstructor().newInstance();
+    assertEquals("Hello from E", impl.hello());
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
+  }
+
+  @Test
   public void testUpdateContextDefinitionEmpty() throws Exception {
     final ContextDefinition def =
         ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
@@ -549,6 +593,75 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassFailsToLoad(cl3, classB);
     testClassFailsToLoad(cl3, classC);
     testClassLoads(cl3, classD);
+  }
+
+  @Test
+  public void testChangingContext() throws Exception {
+    ContextDefinition def = ContextDefinition.create("update", MONITOR_INTERVAL_SECS,
+        jarAOrigLocation, jarBOrigLocation, jarCOrigLocation, jarDOrigLocation);
+    final Path update =
+        createContextDefinitionFile(fs, "UpdateChangingContextDefinition.json", def.toJson());
+    final URL updatedDefUrl = new URL(fs.getUri().toString() + update.toUri().toString());
+
+    final ClassLoader cl = FACTORY.getClassLoader(updatedDefUrl.toString());
+    testClassLoads(cl, classA);
+    testClassLoads(cl, classB);
+    testClassLoads(cl, classC);
+    testClassLoads(cl, classD);
+
+    final List<URL> masterList = new ArrayList<>();
+    masterList.add(jarAOrigLocation);
+    masterList.add(jarBOrigLocation);
+    masterList.add(jarCOrigLocation);
+    masterList.add(jarDOrigLocation);
+
+    List<URL> priorList = masterList;
+    ClassLoader priorCL = cl;
+
+    for (int i = 0; i < 20; i++) {
+      final List<URL> updatedList = new ArrayList<>(masterList);
+      Collections.shuffle(updatedList);
+      final URL removed = updatedList.remove(0);
+
+      // Update the contents of the context definition json file
+      ContextDefinition updateDef = ContextDefinition.create("update", MONITOR_INTERVAL_SECS,
+          updatedList.toArray(new URL[] {}));
+      updateContextDefinitionFile(fs, update, updateDef.toJson());
+
+      // wait 2x the monitor interval
+      Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+      final ClassLoader updatedClassLoader = FACTORY.getClassLoader(updatedDefUrl.toString());
+
+      if (updatedList.equals(priorList)) {
+        assertEquals(priorCL, updatedClassLoader);
+      } else {
+        assertNotEquals(cl, updatedClassLoader);
+        for (URL u : updatedList) {
+          if (u.equals(jarAOrigLocation)) {
+            testClassLoads(updatedClassLoader, classA);
+          } else if (u.equals(jarBOrigLocation)) {
+            testClassLoads(updatedClassLoader, classB);
+          } else if (u.equals(jarCOrigLocation)) {
+            testClassLoads(updatedClassLoader, classC);
+          } else if (u.equals(jarDOrigLocation)) {
+            testClassLoads(updatedClassLoader, classD);
+          }
+        }
+      }
+      if (removed.equals(jarAOrigLocation)) {
+        testClassFailsToLoad(updatedClassLoader, classA);
+      } else if (removed.equals(jarBOrigLocation)) {
+        testClassFailsToLoad(updatedClassLoader, classB);
+      } else if (removed.equals(jarCOrigLocation)) {
+        testClassFailsToLoad(updatedClassLoader, classC);
+      } else if (removed.equals(jarDOrigLocation)) {
+        testClassFailsToLoad(updatedClassLoader, classD);
+      }
+      priorCL = updatedClassLoader;
+      priorList = updatedList;
+    }
+
   }
 
 }

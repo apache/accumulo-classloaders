@@ -31,3 +31,10 @@ for x in A B C D; do
   rm -r target/generated-sources/$x
 done
 
+# Create a one-off jar that uses the A class name, but returns the E content for the hello method
+# this will be located in the ClassLoaderTestE directory
+mkdir -p target/generated-sources/E/test target/test-classes/ClassLoaderTestE
+sed "s/XXX/A/" <src/test/java/test/TestTemplate >target/generated-sources/E/test/TestObjectA.java
+sed -i "s/Hello from A/Hello from E/" target/generated-sources/E/test/TestObjectA.java
+"$JAVA_HOME/bin/javac" --release 11 -cp target/test-classes target/generated-sources/E/test/TestObjectA.java -d target/generated-sources/E
+"$JAVA_HOME/bin/jar" -cf target/test-classes/ClassLoaderTestE/TestE.jar -C target/generated-sources/E test/TestObjectA.class

@@ -127,7 +127,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         } else {
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
-        monitorContext(contextLocation, update.getMonitorIntervalSeconds());
       } catch (ContextClassLoaderException | InterruptedException | IOException
           | NoSuchAlgorithmException | URISyntaxException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
