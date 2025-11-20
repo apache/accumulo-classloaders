@@ -28,7 +28,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.TreeSet;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
@@ -86,7 +85,8 @@ public class LocalCachingContextTest {
     final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
-    java.nio.file.Path jarCParentDirectory = Paths.get(jarCOrigLocation.toURI()).getParent();
+    java.nio.file.Path jarCParentDirectory =
+        java.nio.file.Path.of(jarCOrigLocation.toURI()).getParent();
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
@@ -124,7 +124,7 @@ public class LocalCachingContextTest {
     lcccl.initialize();
 
     // Confirm the 3 jars are cached locally
-    final java.nio.file.Path base = Paths.get(tempDir.resolve("base").toUri());
+    final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
     assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
     for (Resource r : def.getResources()) {
@@ -174,7 +174,7 @@ public class LocalCachingContextTest {
     lcccl.update(updatedDef);
 
     // Confirm the 3 jars are cached locally
-    final java.nio.file.Path base = Paths.get(tempDir.resolve("base").toUri());
+    final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
     assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
     for (Resource r : updatedDef.getResources()) {

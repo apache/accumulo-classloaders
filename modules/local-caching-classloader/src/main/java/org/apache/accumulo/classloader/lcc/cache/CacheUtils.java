@@ -33,7 +33,6 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
@@ -43,8 +42,6 @@ import java.util.Set;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public class CacheUtils {
 
@@ -64,7 +61,6 @@ public class CacheUtils {
       this.lock = requireNonNull(lock, "lock must be supplied");
     }
 
-    @SuppressFBWarnings(value = "EI_EXPOSE_REP")
     FileChannel getChannel() {
       return channel;
     }
@@ -94,7 +90,7 @@ public class CacheUtils {
     if (cacheDir == null) {
       throw new ContextClassLoaderException("System property " + prop + " not set.");
     }
-    return mkdir(Paths.get(URI.create(cacheDir)));
+    return mkdir(Path.of(URI.create(cacheDir)));
   }
 
   public static Path createOrGetContextCacheDir(final String contextName)

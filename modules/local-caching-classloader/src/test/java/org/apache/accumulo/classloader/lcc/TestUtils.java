@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,7 +29,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -118,7 +118,7 @@ public class TestUtils {
     try {
       Process p = Runtime.getRuntime().exec("/bin/sh -c umask");
       try (BufferedReader bri =
-          new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+          new BufferedReader(new InputStreamReader(p.getInputStream(), UTF_8))) {
         String line = bri.readLine();
         p.waitFor();
 

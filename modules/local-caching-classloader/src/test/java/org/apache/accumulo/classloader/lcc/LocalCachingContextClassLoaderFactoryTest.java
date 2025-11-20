@@ -32,7 +32,6 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.TreeSet;
@@ -106,7 +105,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final URL jarBHdfsLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Have Jetty serve up files from Jar C directory
-    java.nio.file.Path jarCParentDirectory = Paths.get(jarCOrigLocation.toURI()).getParent();
+    java.nio.file.Path jarCParentDirectory =
+        java.nio.file.Path.of(jarCOrigLocation.toURI()).getParent();
     assertNotNull(jarCParentDirectory);
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCJettyLocation = jetty.getURI().resolve("TestC.jar").toURL();
@@ -117,7 +117,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     String allJarsDefJson = allJarsDef.toJson();
 
     // Create local context definition in jar C directory
-    File localDefFile = new File(jarCParentDirectory.toFile(), "allContextDefinition.json");
+    File localDefFile = jarCParentDirectory.resolve("allContextDefinition.json").toFile();
     Files.writeString(localDefFile.toPath(), allJarsDefJson, StandardOpenOption.CREATE);
     assertTrue(Files.exists(localDefFile.toPath()));
 
@@ -236,8 +236,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testInitialNonExistentResource() throws Exception {
     // copy jarA to some other name
-    java.nio.file.Path jarAPath = Paths.get(jarAOrigLocation.toURI());
-    java.nio.file.Path jarACopy = jarAPath.getParent().resolve("jarACopy.jar");
+    java.nio.file.Path jarAPath = java.nio.file.Path.of(jarAOrigLocation.toURI());
+    java.nio.file.Path jarAPathParent = jarAPath.getParent();
+    assertNotNull(jarAPathParent);
+    java.nio.file.Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
@@ -392,8 +394,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // copy jarA to jarACopy
     // create a ContextDefinition that references it
     // delete jarACopy
-    java.nio.file.Path jarAPath = Paths.get(jarAOrigLocation.toURI());
-    java.nio.file.Path jarACopy = jarAPath.getParent().resolve("jarACopy.jar");
+    java.nio.file.Path jarAPath = java.nio.file.Path.of(jarAOrigLocation.toURI());
+    java.nio.file.Path jarAPathParent = jarAPath.getParent();
+    assertNotNull(jarAPathParent);
+    java.nio.file.Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));

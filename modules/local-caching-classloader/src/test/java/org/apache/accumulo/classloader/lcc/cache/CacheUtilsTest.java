@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.accumulo.classloader.lcc.Constants;
@@ -70,7 +69,7 @@ public class CacheUtilsTest {
 
   @Test
   public void testCreateBaseDir() throws Exception {
-    final Path base = Paths.get(tempDir.resolve("base").toUri());
+    final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
       CacheUtils.createBaseCacheDir();
@@ -82,7 +81,7 @@ public class CacheUtilsTest {
 
   @Test
   public void testCreateBaseDirMultipleTimes() throws Exception {
-    final Path base = Paths.get(tempDir.resolve("base").toUri());
+    final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
       CacheUtils.createBaseCacheDir();
@@ -97,7 +96,7 @@ public class CacheUtilsTest {
 
   @Test
   public void createOrGetContextCacheDir() throws Exception {
-    final Path base = Paths.get(tempDir.resolve("base").toUri());
+    final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
       CacheUtils.createOrGetContextCacheDir("context1");
@@ -118,7 +117,7 @@ public class CacheUtilsTest {
 
   @Test
   public void testLock() throws Exception {
-    final Path base = Paths.get(tempDir.resolve("base").toUri());
+    final Path base = Path.of(tempDir.resolve("base").toUri());
     final Path cx1 = base.resolve("context1");
     try {
       assertFalse(Files.exists(base));

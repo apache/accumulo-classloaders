@@ -179,10 +179,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       if (t != null && t instanceof InterruptedException) {
         Thread.currentThread().interrupt();
       }
-      if (t != null && t instanceof ContextClassLoaderException) {
-        throw (ContextClassLoaderException) t;
+      if (t != null) {
+        if (t instanceof ContextClassLoaderException) {
+          throw (ContextClassLoaderException) t;
+        } else {
+          throw new ContextClassLoaderException(t.getMessage(), t);
+        }
       } else {
-        throw new ContextClassLoaderException(t.getMessage(), t);
+        throw new ContextClassLoaderException(re.getMessage(), re);
       }
     }
   }

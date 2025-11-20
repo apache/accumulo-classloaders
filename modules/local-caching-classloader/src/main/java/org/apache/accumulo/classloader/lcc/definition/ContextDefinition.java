@@ -36,7 +36,7 @@ import com.google.common.base.Preconditions;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-@SuppressFBWarnings(value = {"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+@SuppressFBWarnings(value = {"EI_EXPOSE_REP"})
 public class ContextDefinition {
 
   public static ContextDefinition create(String contextName, int monitorIntervalSecs,
@@ -53,7 +53,7 @@ public class ContextDefinition {
   }
 
   private String contextName;
-  private int monitorIntervalSeconds;
+  private volatile int monitorIntervalSeconds;
   private TreeSet<Resource> resources;
   private volatile transient byte[] checksum = null;
 
@@ -99,12 +99,15 @@ public class ContextDefinition {
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj)
+    if (this == obj) {
       return true;
-    if (obj == null)
+    }
+    if (obj == null) {
       return false;
-    if (getClass() != obj.getClass())
+    }
+    if (getClass() != obj.getClass()) {
       return false;
+    }
     ContextDefinition other = (ContextDefinition) obj;
     return Objects.equals(contextName, other.contextName)
         && monitorIntervalSeconds == other.monitorIntervalSeconds

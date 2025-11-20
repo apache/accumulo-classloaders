@@ -26,7 +26,6 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.hadoop.shaded.org.apache.commons.io.FileUtils;
@@ -43,8 +42,8 @@ public final class LocalFileResolver extends FileResolver {
     }
     try {
       final URI uri = url.toURI();
-      final Path path = Paths.get(uri);
-      if (Files.notExists(Paths.get(uri))) {
+      final Path path = Path.of(uri);
+      if (Files.notExists(Path.of(uri))) {
         throw new ContextClassLoaderException("File: " + url + " does not exist.");
       }
       file = path.toFile();

@@ -26,7 +26,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
@@ -61,7 +60,7 @@ public class FileResolversTest {
   public void testLocalFile() throws Exception {
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = Paths.get(jarPath.toURI());
+    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
     FileResolver resolver = FileResolver.resolve(jarPath);
     assertTrue(resolver instanceof LocalFileResolver);
@@ -75,7 +74,7 @@ public class FileResolversTest {
 
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = Paths.get(jarPath.toURI());
+    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
 
     Server jetty = TestUtils.getJetty(p.getParent());
@@ -96,7 +95,7 @@ public class FileResolversTest {
 
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = Paths.get(jarPath.toURI());
+    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
 
     MiniDFSCluster cluster = TestUtils.getMiniCluster();
