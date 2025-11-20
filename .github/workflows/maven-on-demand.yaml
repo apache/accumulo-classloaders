@@ -7,7 +7,7 @@
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
 #
-#   http://www.apache.org/licenses/LICENSE-2.0
+#   https://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
@@ -18,38 +18,39 @@
 #
 
 # This workflow will build a Java project with Maven
-# For more information see: https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+# See also:
+#   https://help.github.com/actions/language-and-framework-guides/building-and-testing-java-with-maven
+#   https://docs.github.com/en/actions/reference/events-that-trigger-workflows#manual-events
 
 name: Manual Build
 
 on:
   workflow_dispatch:
+    # these inputs break down the Maven command-line, somewhat arbitrarily, so
+    # the UI when starting a run is easier to use
     inputs:
       goals:
         description: Maven goals
         required: true
         default: verify
+
+permissions:
+  contents: read
+
 jobs:
   mvn:
     name: mvn (triggered by ${{ github.event.sender.login }})
-    timeout-minutes: 360
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 11
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        distribution: adopt
+        distribution: temurin
         java-version: 17
-    - name: Cache local maven repository
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.m2/repository/
-          !~/.m2/repository/org/apache/accumulo
-        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-        restore-keys: ${{ runner.os }}-m2
+        cache: 'maven'
     - name: Build with Maven
+      timeout-minutes: 345
       run: mvn -B -V -e -ntp "-Dstyle.color=always" ${{ github.event.inputs.goals }}
       env:
         MAVEN_OPTS: -Djansi.force=true

@@ -89,11 +89,11 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
   // the name node for info too frequently.
   private static final long DEFAULT_TIMEOUT = TimeUnit.MINUTES.toMillis(5);
 
-  private static boolean DEBUG = false;
+  private static volatile boolean DEBUG = false;
   private static String CLASSPATH = null;
   private static Boolean POST_DELEGATION = null;
   private static Long MONITOR_INTERVAL = null;
-  private static boolean VM_INITIALIZED = false;
+  private static volatile boolean VM_INITIALIZED = false;
 
   private volatile long maxWaitInterval = 60000;
   private volatile long maxRetries = -1;
@@ -118,8 +118,9 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
   }
 
   private static void printDebug(String msg) {
-    if (!DEBUG)
+    if (!DEBUG) {
       return;
+    }
     System.out.println(
         String.format("DEBUG: %d AccumuloVFSClassLoader: %s", System.currentTimeMillis(), msg));
   }
@@ -732,25 +733,32 @@ public class AccumuloVFSClassLoader extends ClassLoader implements Closeable, Fi
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj)
+    if (this == obj) {
       return true;
-    if (obj == null)
+    }
+    if (obj == null) {
       return false;
-    if (getClass() != obj.getClass())
+    }
+    if (getClass() != obj.getClass()) {
       return false;
+    }
     AccumuloVFSClassLoader other = (AccumuloVFSClassLoader) obj;
     if (name == null) {
-      if (other.name != null)
+      if (other.name != null) {
         return false;
-    } else if (!name.equals(other.name))
+      }
+    } else if (!name.equals(other.name)) {
       return false;
+    }
     var parent = getParent();
     var otherParent = other.getParent();
     if (parent == null) {
-      if (otherParent != null)
+      if (otherParent != null) {
         return false;
-    } else if (!parent.getName().equals(otherParent.getName()))
+      }
+    } else if (!parent.getName().equals(otherParent.getName())) {
       return false;
+    }
     return true;
   }
 

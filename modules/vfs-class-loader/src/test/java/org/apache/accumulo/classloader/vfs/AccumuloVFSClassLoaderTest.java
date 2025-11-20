@@ -18,12 +18,12 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
+import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 
 import java.io.File;
-import java.util.Objects;
+import java.nio.file.Files;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.FileObject;
 import org.apache.commons.vfs2.FileSystemException;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,7 +32,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-@SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class AccumuloVFSClassLoaderTest {
 
   @TempDir
@@ -40,14 +39,17 @@ public class AccumuloVFSClassLoaderTest {
   String folderPath;
 
   @BeforeEach
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "paths not set by user input")
   public void setup() throws Exception {
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
     VFSManager.initialize();
 
     folderPath = tempDir.toURI() + ".*";
 
-    FileUtils.copyURLToFile(Objects.requireNonNull(this.getClass().getResource("/HelloWorld.jar")),
-        new File(tempDir, "HelloWorld.jar"));
+    try (var in = requireNonNull(this.getClass().getResource("/HelloWorld.jar")).openStream()) {
+      Files.copy(in, tempDir.toPath().resolve("HelloWorld.jar"));
+    }
   }
 
   FileObject[] createFileSystems(FileObject[] fos) throws FileSystemException {

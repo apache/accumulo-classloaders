@@ -29,10 +29,6 @@
   </parent>
   <artifactId>vfs-reloading-classloader</artifactId>
   <name>classloader-extras-vfs-reloading</name>
-  <properties>
-    <eclipseFormatterStyle>../../src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
-    <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
-  </properties>
   <dependencies>
     <dependency>
       <!-- needed for build checks, but not for runtime -->

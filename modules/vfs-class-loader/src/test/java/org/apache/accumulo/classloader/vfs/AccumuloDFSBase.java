@@ -18,12 +18,13 @@
  */
 package org.apache.accumulo.classloader.vfs;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 
 import org.apache.commons.vfs2.CacheStrategy;
 import org.apache.commons.vfs2.FileSystemException;
@@ -38,9 +39,6 @@ import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
-@SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class AccumuloDFSBase {
 
   private static Configuration conf = null;
@@ -61,7 +59,7 @@ public class AccumuloDFSBase {
     try {
       Process p = Runtime.getRuntime().exec("/bin/sh -c umask");
       try (BufferedReader bri =
-          new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+          new BufferedReader(new InputStreamReader(p.getInputStream(), UTF_8))) {
         String line = bri.readLine();
         p.waitFor();
 
@@ -142,8 +140,8 @@ public class AccumuloDFSBase {
       vfs.addMimeTypeMap("application/java-archive", "jar");
       vfs.setFileContentInfoFactory(new FileContentInfoFilenameFactory());
       vfs.setFilesCache(new SoftRefFilesCache());
-      vfs.setReplicator(new DefaultFileReplicator(new File(System.getProperty("java.io.tmpdir"),
-          "accumulo-vfs-cache-" + System.getProperty("user.name", "nouser"))));
+      vfs.setReplicator(new DefaultFileReplicator(Path.of(System.getProperty("java.io.tmpdir"),
+          "accumulo-vfs-cache-" + System.getProperty("user.name", "nouser")).toFile()));
       vfs.setCacheStrategy(CacheStrategy.ON_RESOLVE);
       vfs.init();
     } catch (FileSystemException e) {

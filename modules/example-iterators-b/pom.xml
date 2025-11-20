@@ -28,9 +28,6 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <artifactId>example-iterators-b</artifactId>
-  <properties>
-    <eclipseFormatterStyle>../../src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
-  </properties>
   <dependencies>
     <dependency>
       <!-- provided by accumulo -->
