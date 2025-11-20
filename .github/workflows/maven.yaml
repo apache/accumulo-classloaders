@@ -18,8 +18,6 @@
 #
 
 # This workflow will build a Java project with Maven
-# See also:
-#   https://docs.github.com/en/actions/tutorials/build-and-test-code/java-with-maven
 
 name: QA
 
