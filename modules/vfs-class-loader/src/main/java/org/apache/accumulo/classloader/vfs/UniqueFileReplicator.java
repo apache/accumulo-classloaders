@@ -46,8 +46,9 @@ public class UniqueFileReplicator implements VfsComponent, FileReplicator {
 
   public UniqueFileReplicator(File tempDir) {
     this.tempDir = tempDir;
-    if (!tempDir.exists() && !tempDir.mkdirs())
+    if (!tempDir.exists() && !tempDir.mkdirs()) {
       System.out.println("Unexpected error creating directory: " + tempDir.getAbsolutePath());
+    }
   }
 
   @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
@@ -98,16 +99,18 @@ public class UniqueFileReplicator implements VfsComponent, FileReplicator {
   public void close() {
     synchronized (tmpFiles) {
       for (File tmpFile : tmpFiles) {
-        if (!tmpFile.delete())
+        if (!tmpFile.delete()) {
           System.out.println("File does not exist: " + tmpFile.getAbsolutePath());
+        }
       }
     }
 
     if (tempDir.exists()) {
       String[] list = tempDir.list();
       int numChildren = list == null ? 0 : list.length;
-      if (numChildren == 0 && !tempDir.delete())
+      if (numChildren == 0 && !tempDir.delete()) {
         System.out.println("Cannot delete empty directory: " + tempDir.getAbsolutePath());
+      }
     }
   }
 }

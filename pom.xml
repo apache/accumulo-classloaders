@@ -19,12 +19,12 @@
     under the License.
 
 -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>33</version>
+    <version>35</version>
     <relativePath />
   </parent>
   <groupId>org.apache.accumulo</groupId>
@@ -92,9 +92,8 @@
     <url>https://github.com/apache/accumulo-classloaders/actions</url>
   </ciManagement>
   <properties>
-    <eclipseFormatterStyle>src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
-    <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
-    <licenseText><![CDATA[Licensed to the Apache Software Foundation (ASF) under one
+    <accumulo.build.license.header><![CDATA[
+Licensed to the Apache Software Foundation (ASF) under one
 or more contributor license agreements.  See the NOTICE file
 distributed with this work for additional information
 regarding copyright ownership.  The ASF licenses this file
@@ -109,18 +108,25 @@ software distributed under the License is distributed on an
 "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 KIND, either express or implied.  See the License for the
 specific language governing permissions and limitations
-under the License.]]></licenseText>
+under the License.
+]]></accumulo.build.license.header>
+    <failsafe.failIfNoSpecifiedTests>false</failsafe.failIfNoSpecifiedTests>
     <maven.compiler.release>11</maven.compiler.release>
     <maven.compiler.source>11</maven.compiler.source>
     <maven.compiler.target>11</maven.compiler.target>
     <maven.site.deploy.skip>true</maven.site.deploy.skip>
     <maven.site.skip>true</maven.site.skip>
+    <!-- surefire/failsafe plugin option -->
+    <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
     <!-- versions-maven-plugin ignore patterns for snapshots, alpha, beta, milestones, and release candidates -->
     <maven.version.ignore>.+-SNAPSHOT,(?i).*(alpha|beta)[0-9.-]*,(?i).*[.-](m|rc)[0-9]+</maven.version.ignore>
     <minimalJavaBuildVersion>17</minimalJavaBuildVersion>
+    <minimalMavenBuildVersion>3.9</minimalMavenBuildVersion>
     <!-- timestamp for reproducible outputs, updated on release by the release plugin -->
     <project.build.outputTimestamp>2020-08-27T15:56:15Z</project.build.outputTimestamp>
+    <rat.consoleOutput>true</rat.consoleOutput>
     <sourceReleaseAssemblyDescriptor>source-release-tar</sourceReleaseAssemblyDescriptor>
+    <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -147,6 +153,13 @@ under the License.]]></licenseText>
       </dependency>
     </dependencies>
   </dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>com.github.spotbugs</groupId>
+      <artifactId>spotbugs-annotations</artifactId>
+      <optional>true</optional>
+    </dependency>
+  </dependencies>
   <build>
     <pluginManagement>
       <plugins>
@@ -154,21 +167,16 @@ under the License.]]></licenseText>
         <plugin>
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>versions-maven-plugin</artifactId>
-          <version>2.17.1</version>
-        </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>exec-maven-plugin</artifactId>
-          <version>3.4.1</version>
+          <version>2.19.0</version>
         </plugin>
         <plugin>
           <groupId>com.mycila</groupId>
           <artifactId>license-maven-plugin</artifactId>
-          <version>4.5</version>
+          <version>5.0.0</version>
           <configuration>
             <licenseSets>
               <licenseSet>
-                <inlineHeader>${licenseText}</inlineHeader>
+                <inlineHeader>${accumulo.build.license.header}</inlineHeader>
                 <excludes combine.children="append">
                   <exclude>**/DEPENDENCIES</exclude>
                   <exclude>**/LICENSE</exclude>
@@ -177,7 +185,7 @@ under the License.]]></licenseText>
                 </excludes>
               </licenseSet>
             </licenseSets>
-            <mapping>
+            <mapping combine.children="append">
               <!-- general mappings; module-specific mappings appear in their respective pom -->
               <java>SLASHSTAR_STYLE</java>
               <HelloWorldTemplate>SLASHSTAR_STYLE</HelloWorldTemplate>
@@ -186,13 +194,35 @@ under the License.]]></licenseText>
           </configuration>
         </plugin>
         <plugin>
-          <groupId>org.apache.rat</groupId>
-          <artifactId>apache-rat-plugin</artifactId>
+          <groupId>org.gaul</groupId>
+          <artifactId>modernizer-maven-plugin</artifactId>
+          <version>3.2.0</version>
           <configuration>
-            <excludes combine.children="append">
-              <exclude>.github/**</exclude>
-              <exclude>**/*.json</exclude>
-            </excludes>
+            <javaVersion>${maven.compiler.target}</javaVersion>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>com.github.spotbugs</groupId>
+          <artifactId>spotbugs-maven-plugin</artifactId>
+          <version>4.9.5.0</version>
+          <configuration>
+            <xmlOutput>true</xmlOutput>
+            <effort>Max</effort>
+            <failOnError>true</failOnError>
+            <includeTests>true</includeTests>
+            <maxRank>20</maxRank>
+            <plugins>
+              <plugin>
+                <groupId>com.overstock.findbugs</groupId>
+                <artifactId>library-detectors</artifactId>
+                <version>1.2.0</version>
+              </plugin>
+              <plugin>
+                <groupId>com.h3xstream.findsecbugs</groupId>
+                <artifactId>findsecbugs-plugin</artifactId>
+                <version>1.14.0</version>
+              </plugin>
+            </plugins>
           </configuration>
         </plugin>
         <plugin>
@@ -215,169 +245,10 @@ under the License.]]></licenseText>
         <plugin>
           <groupId>com.github.koraktor</groupId>
           <artifactId>mavanagaiata</artifactId>
-          <version>1.0.1</version>
+          <version>1.1.1</version>
           <configuration>
             <skipNoGit>true</skipNoGit>
           </configuration>
-        </plugin>
-        <plugin>
-          <groupId>com.github.spotbugs</groupId>
-          <artifactId>spotbugs-maven-plugin</artifactId>
-          <version>4.8.6.4</version>
-          <configuration>
-            <xmlOutput>true</xmlOutput>
-            <effort>Max</effort>
-            <failOnError>true</failOnError>
-            <includeTests>true</includeTests>
-            <maxRank>20</maxRank>
-            <plugins>
-              <plugin>
-                <groupId>com.overstock.findbugs</groupId>
-                <artifactId>library-detectors</artifactId>
-                <version>1.2.0</version>
-              </plugin>
-              <plugin>
-                <groupId>com.h3xstream.findsecbugs</groupId>
-                <artifactId>findsecbugs-plugin</artifactId>
-                <version>1.8.0</version>
-              </plugin>
-            </plugins>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>net.revelc.code</groupId>
-          <artifactId>impsort-maven-plugin</artifactId>
-          <version>1.12.0</version>
-          <configuration>
-            <removeUnused>true</removeUnused>
-            <groups>java.,javax.,org.,com.</groups>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>net.revelc.code.formatter</groupId>
-          <artifactId>formatter-maven-plugin</artifactId>
-          <version>2.24.1</version>
-          <configuration>
-            <configFile>${eclipseFormatterStyle}</configFile>
-            <lineEnding>LF</lineEnding>
-            <skipCssFormatting>true</skipCssFormatting>
-            <skipHtmlFormatting>true</skipHtmlFormatting>
-            <skipJsFormatting>true</skipJsFormatting>
-            <skipJsonFormatting>true</skipJsonFormatting>
-            <skipXmlFormatting>true</skipXmlFormatting>
-          </configuration>
-        </plugin>
-        <plugin>
-          <groupId>org.apache.maven.plugins</groupId>
-          <artifactId>maven-checkstyle-plugin</artifactId>
-          <configuration>
-            <checkstyleRules>
-              <module name="Checker">
-                <property name="charset" value="UTF-8" />
-                <property name="severity" value="warning" />
-                <!-- Checks for whitespace                               -->
-                <!-- See http://checkstyle.sf.net/config_whitespace.html -->
-                <module name="FileTabCharacter">
-                  <property name="eachLine" value="true" />
-                </module>
-                <module name="LineLength">
-                  <property name="max" value="100" />
-                  <property name="ignorePattern" value="^[ ]*[*].*@(link|see) |Map.* = new .*Map|org[.]apache[.]accumulo[.]|a href=|http://|https://|ftp://" />
-                </module>
-                <module name="TreeWalker">
-                  <module name="OneTopLevelClass" />
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="\s+$" />
-                    <property name="message" value="Line has trailing whitespace." />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="[@]see\s+[{][@]link" />
-                    <property name="message" value="Javadoc @see does not need @link: pick one or the other." />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="jline[.]internal[.]Preconditions" />
-                    <property name="message" value="Please use Guava Preconditions not JLine" />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="org[.]apache[.]commons[.]math[.]" />
-                    <property name="message" value="Use commons-math3 (org.apache.commons.math3.*)" />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="junit[.]framework[.]TestCase" />
-                    <property name="message" value="Use JUnit5+ @Test annotation instead of TestCase" />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="org[.]junit[.](?!jupiter)" />
-                    <property name="message" value="Use JUnit5 (JUnit Jupiter) instead of JUnit4 (or lower)" />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assertions;" />
-                    <property name="message" value="Use static imports for Assertions.* methods for consistency" />
-                  </module>
-                  <module name="RegexpSinglelineJava">
-                    <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assumptions;" />
-                    <property name="message" value="Use static imports for Assumptions.* methods for consistency" />
-                  </module>
-                  <module name="OuterTypeFilename" />
-                  <module name="AvoidStarImport" />
-                  <module name="UnusedImports">
-                    <property name="processJavadoc" value="true" />
-                  </module>
-                  <module name="NoLineWrap" />
-                  <module name="LeftCurly" />
-                  <module name="RightCurly">
-                    <property name="option" value="alone" />
-                    <property name="tokens" value="CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, STATIC_INIT, INSTANCE_INIT" />
-                  </module>
-                  <module name="SeparatorWrap">
-                    <property name="tokens" value="DOT" />
-                    <property name="option" value="nl" />
-                  </module>
-                  <module name="SeparatorWrap">
-                    <property name="tokens" value="COMMA" />
-                    <property name="option" value="EOL" />
-                  </module>
-                  <module name="PackageName">
-                    <property name="format" value="^[a-z]+(\.[a-z][a-zA-Z0-9]*)*$" />
-                  </module>
-                  <module name="MethodTypeParameterName">
-                    <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)" />
-                  </module>
-                  <module name="MethodParamPad" />
-                  <module name="OperatorWrap">
-                    <property name="option" value="NL" />
-                    <property name="tokens" value="BAND, BOR, BSR, BXOR, DIV, EQUAL, GE, GT, LAND, LE, LITERAL_INSTANCEOF, LOR, LT, MINUS, MOD, NOT_EQUAL, QUESTION, SL, SR, STAR " />
-                  </module>
-                  <module name="AnnotationLocation">
-                    <property name="tokens" value="CLASS_DEF, INTERFACE_DEF, ENUM_DEF, METHOD_DEF, CTOR_DEF" />
-                  </module>
-                  <module name="AnnotationLocation">
-                    <property name="tokens" value="VARIABLE_DEF" />
-                    <property name="allowSamelineMultipleAnnotations" value="true" />
-                  </module>
-                  <module name="NonEmptyAtclauseDescription" />
-                  <module name="JavadocTagContinuationIndentation" />
-                  <module name="JavadocMethod">
-                    <property name="allowMissingParamTags" value="true" />
-                    <property name="allowMissingReturnTag" value="true" />
-                    <property name="allowedAnnotations" value="Override,Test,BeforeClass,AfterClass,Before,After" />
-                  </module>
-                  <module name="SingleLineJavadoc" />
-                  <module name="MissingOverrideCheck" />
-                  <module name="AnnotationLocation" />
-                </module>
-              </module>
-            </checkstyleRules>
-            <violationSeverity>warning</violationSeverity>
-            <includeTestSourceDirectory>true</includeTestSourceDirectory>
-          </configuration>
-          <dependencies>
-            <dependency>
-              <groupId>com.puppycrawl.tools</groupId>
-              <artifactId>checkstyle</artifactId>
-              <version>10.18.1</version>
-            </dependency>
-          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -399,8 +270,9 @@ under the License.]]></licenseText>
           <configuration>
             <archive>
               <manifestEntries>
-                <Sealed>true</Sealed>
+                <Automatic-Module-Name>${accumulo.build.module.name}</Automatic-Module-Name>
                 <Implementation-Build>${mvngit.commit.id}</Implementation-Build>
+                <Sealed>true</Sealed>
               </manifestEntries>
             </archive>
           </configuration>
@@ -412,13 +284,14 @@ under the License.]]></licenseText>
             <quiet>true</quiet>
             <additionalJOption>-J-Xmx512m</additionalJOption>
             <doclint>all,-missing</doclint>
+            <legacyMode>true</legacyMode>
           </configuration>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-release-plugin</artifactId>
           <configuration>
-            <arguments>-P !autoformat</arguments>
+            <arguments>-P !autoformat,verifyformat</arguments>
             <goals>clean deploy</goals>
             <preparationGoals>clean verify</preparationGoals>
             <tagNameFormat>rel/@{project.artifactId}-@{project.version}</tagNameFormat>
@@ -429,27 +302,252 @@ under the License.]]></licenseText>
           </configuration>
         </plugin>
         <plugin>
-          <groupId>org.gaul</groupId>
-          <artifactId>modernizer-maven-plugin</artifactId>
-          <version>2.9.0</version>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>build-helper-maven-plugin</artifactId>
+          <version>3.6.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>3.5.1</version>
+        </plugin>
+        <plugin>
+          <groupId>net.revelc.code.formatter</groupId>
+          <artifactId>formatter-maven-plugin</artifactId>
+          <version>2.29.0</version>
           <configuration>
-            <javaVersion>${maven.compiler.target}</javaVersion>
+            <configFile>${rootlocation}/src/build/eclipse-codestyle.xml</configFile>
+            <lineEnding>LF</lineEnding>
+            <skipCssFormatting>true</skipCssFormatting>
+            <skipHtmlFormatting>true</skipHtmlFormatting>
+            <skipJsFormatting>true</skipJsFormatting>
+            <skipJsonFormatting>true</skipJsonFormatting>
+            <skipXmlFormatting>true</skipXmlFormatting>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.rat</groupId>
+          <artifactId>apache-rat-plugin</artifactId>
+          <configuration>
+            <excludes combine.children="append">
+              <exclude>.github/**</exclude>
+              <exclude>**/*.json</exclude>
+            </excludes>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>net.revelc.code</groupId>
+          <artifactId>impsort-maven-plugin</artifactId>
+          <version>1.12.0</version>
+          <configuration>
+            <removeUnused>true</removeUnused>
+            <groups>java.,javax.,jakarta.,org.,com.</groups>
           </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
     <plugins>
       <plugin>
-        <!-- verify before compile; should be sorted already -->
-        <groupId>com.github.ekryd.sortpom</groupId>
-        <artifactId>sortpom-maven-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <execution>
-            <id>verify-sorted-pom</id>
+            <id>analyze</id>
             <goals>
-              <goal>verify</goal>
+              <goal>analyze-only</goal>
             </goals>
-            <phase>process-resources</phase>
+            <configuration>
+              <failOnWarning>true</failOnWarning>
+              <ignoredUnusedDeclaredDependencies>
+                <!-- ignore false positive runtime dependencies -->
+                <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
+                <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
+                <unused>org.apache.logging.log4j:log4j-slf4j2-impl:*</unused>
+                <!-- spotbugs annotations may or may not be used in each module -->
+                <unused>com.github.spotbugs:spotbugs-annotations:jar:*</unused>
+              </ignoredUnusedDeclaredDependencies>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <!-- create property named 'rootlocation' to point to top of multi-module project -->
+            <id>create-rootlocation-property</id>
+            <goals>
+              <goal>rootlocation</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>create-automatic-module-name</id>
+            <goals>
+              <goal>regex-property</goal>
+            </goals>
+            <configuration>
+              <name>accumulo.build.module.name</name>
+              <regex>-</regex>
+              <replacement>.</replacement>
+              <value>org-apache-${project.artifactId}</value>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>enforce-accumulo-rules</id>
+            <goals>
+              <goal>enforce</goal>
+            </goals>
+            <phase>validate</phase>
+            <configuration>
+              <rules>
+                <reactorModuleConvergence />
+                <banDuplicatePomDependencyVersions />
+                <dependencyConvergence />
+                <banDynamicVersions />
+                <bannedDependencies>
+                  <excludes>
+                    <!-- we redirect logging to log4j2, so we should have those bridges instead -->
+                    <!-- commons-logging is allowed because it natively sends to log4j2 or slf4j -->
+                    <exclude>ch.qos.logback:*</exclude>
+                    <exclude>ch.qos.reload4j:*</exclude>
+                    <exclude>log4j:*</exclude>
+                    <!-- exclude log4j-slf4j-impl to prefer log4j-slf4j2-impl -->
+                    <exclude>org.apache.logging.log4j:log4j-slf4j-impl</exclude>
+                    <exclude>org.apache.logging.log4j:log4j-to-slf4j</exclude>
+                    <exclude>org.slf4j:*</exclude>
+                  </excludes>
+                  <includes>
+                    <!-- only allow API jar for slf4j, but no other slf4j implementations -->
+                    <include>org.slf4j:slf4j-api</include>
+                  </includes>
+                </bannedDependencies>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.gaul</groupId>
+        <artifactId>modernizer-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>modernizer</id>
+            <goals>
+              <goal>modernizer</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <configuration>
+          <checkstyleRules>
+            <module name="Checker">
+              <property name="charset" value="UTF-8" />
+              <property name="severity" value="warning" />
+              <!-- Checks for whitespace                               -->
+              <!-- See https://checkstyle.sourceforge.io/config_whitespace.html -->
+              <module name="FileTabCharacter" />
+              <module name="TreeWalker">
+                <module name="OneTopLevelClass" />
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="\s+$" />
+                  <property name="message" value="Line has trailing whitespace." />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="[@]Deprecated([^)]*forRemoval[^)]*)" />
+                  <property name="message" value="forRemoval should not be used." />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="[@]see\s+[{][@]link" />
+                  <property name="message" value="Javadoc @see does not need @link: pick one or the other." />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="jline[.]internal[.]Preconditions" />
+                  <property name="message" value="Please use Guava Preconditions not JLine" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="org[.]apache[.]commons[.]math[.]" />
+                  <property name="message" value="Use commons-math3 (org.apache.commons.math3.*)" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assertions;" />
+                  <property name="message" value="Use static imports for Assertions.* methods for consistency" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assumptions;" />
+                  <property name="message" value="Use static imports for Assumptions.* methods for consistency" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="import java[.]nio[.]charset[.]StandardCharsets;" />
+                  <property name="message" value="Use static imports for StandardCharsets.* constants for consistency" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <!-- double escape quotes because checkstyle passes these through another xml parser -->
+                  <property name="format" value="&amp;quot; [+] &amp;quot;" />
+                  <property name="message" value="Unnecessary concatenation of string literals" />
+                </module>
+                <module name="RegexpSinglelineJava">
+                  <property name="format" value="com[.]google[.]common[.]cache[.]" />
+                  <property name="message" value="Please use Caffeine Cache, not Guava" />
+                </module>
+                <module name="OuterTypeFilename" />
+                <module name="AvoidStarImport" />
+                <module name="NoLineWrap" />
+                <module name="LeftCurly" />
+                <module name="RightCurly">
+                  <property name="tokens" value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, LITERAL_DO, STATIC_INIT, INSTANCE_INIT" />
+                </module>
+                <module name="SeparatorWrap">
+                  <property name="tokens" value="DOT" />
+                  <property name="option" value="nl" />
+                </module>
+                <module name="SeparatorWrap">
+                  <property name="tokens" value="COMMA" />
+                  <property name="option" value="EOL" />
+                </module>
+                <module name="PackageName">
+                  <property name="format" value="^[a-z]+(\.[a-z][a-zA-Z0-9]*)*$" />
+                </module>
+                <module name="MethodTypeParameterName">
+                  <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)" />
+                </module>
+                <module name="NonEmptyAtclauseDescription" />
+                <module name="JavadocMethod">
+                  <property name="allowMissingParamTags" value="true" />
+                  <property name="allowMissingReturnTag" value="true" />
+                  <property name="allowedAnnotations" value="Override,Test,BeforeClass,AfterClass,Before,After,BeforeAll,AfterAll,BeforeEach,AfterEach" />
+                </module>
+                <module name="MissingOverrideCheck" />
+                <!--Require braces for all control statements -->
+                <module name="NeedBraces" />
+              </module>
+            </module>
+          </checkstyleRules>
+          <violationSeverity>warning</violationSeverity>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>11.0.1</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>check-style</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
           </execution>
         </executions>
       </plugin>
@@ -467,6 +565,19 @@ under the License.]]></licenseText>
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>run-integration-tests</id>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>
         <executions>
@@ -479,39 +590,6 @@ under the License.]]></licenseText>
         </executions>
       </plugin>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-checkstyle-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>check-style</id>
-            <goals>
-              <goal>check</goal>
-            </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-dependency-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>analyze</id>
-            <goals>
-              <goal>analyze-only</goal>
-            </goals>
-            <configuration>
-              <failOnWarning>true</failOnWarning>
-              <ignoredUnusedDeclaredDependencies>
-                <!-- ignore false positive runtime dependencies -->
-                <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
-                <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
-                <unused>org.apache.logging.log4j:log4j-slf4j2-impl:*</unused>
-              </ignoredUnusedDeclaredDependencies>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
         <groupId>org.apache.rat</groupId>
         <artifactId>apache-rat-plugin</artifactId>
         <executions>
@@ -520,18 +598,7 @@ under the License.]]></licenseText>
             <goals>
               <goal>check</goal>
             </goals>
-          </execution>
-        </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.gaul</groupId>
-        <artifactId>modernizer-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>modernizer</id>
-            <goals>
-              <goal>modernizer</goal>
-            </goals>
+            <phase>prepare-package</phase>
           </execution>
         </executions>
       </plugin>
