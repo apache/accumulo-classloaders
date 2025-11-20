@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.vfs;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
 import java.util.ArrayList;
 
 import org.apache.commons.io.FileUtils;
@@ -34,8 +35,6 @@ import org.apache.commons.vfs2.impl.DefaultFileSystemManager;
 import org.apache.commons.vfs2.impl.FileContentInfoFilenameFactory;
 import org.apache.commons.vfs2.provider.FileReplicator;
 import org.apache.commons.vfs2.provider.hdfs.HdfsFileProvider;
-
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public class VFSManager {
 
@@ -64,8 +63,9 @@ public class VFSManager {
   }
 
   private static void printDebug(String msg) {
-    if (!DEBUG)
+    if (!DEBUG) {
       return;
+    }
     System.out.println(String.format("DEBUG: %d VFSManager: %s", System.currentTimeMillis(), msg));
   }
 
@@ -193,13 +193,12 @@ public class VFSManager {
     return VFS;
   }
 
-  @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
-      justification = "tmpdir is controlled by admin, not unchecked user input")
   private static File computeTopCacheDir() {
     String cacheDirPath = AccumuloVFSClassLoader.getVFSCacheDir();
     String procName = ManagementFactory.getRuntimeMXBean().getName();
-    return new File(cacheDirPath,
-        "accumulo-vfs-manager-cache-" + procName + "-" + System.getProperty("user.name", "nouser"));
+    return Path.of(cacheDirPath,
+        "accumulo-vfs-manager-cache-" + procName + "-" + System.getProperty("user.name", "nouser"))
+        .toFile();
   }
 
   private static void close() {

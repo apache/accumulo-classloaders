@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,13 +39,13 @@ import com.google.gson.Gson;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
- * A ClassLoaderFactory implementation that uses a ReloadingVFSClassLoader per defined context.
- * Configuration of this class is done with a JSON file whose location is defined by the system
- * property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need to set
- * the Accumulo configuration property <b>general.context.class.loader.factory</b> to the fully
- * qualified name of this class, create a configuration file that defines the supported contexts and
- * their configuration, and set the system property <b>vfs.context.class.loader.config</b> to the
- * location of the configuration file.
+ * A ClassLoaderFactory implementation that uses an {@link AccumuloVFSClassLoader} per defined
+ * context. Configuration of this class is done with a JSON file whose location is defined by the
+ * system property <b>vfs.context.class.loader.config</b>. To use this ClassLoaderFactory you need
+ * to set the Accumulo configuration property <b>general.context.class.loader.factory</b> to the
+ * fully qualified name of this class, create a configuration file that defines the supported
+ * contexts and their configuration, and set the system property
+ * <b>vfs.context.class.loader.config</b> to the location of the configuration file.
  *
  * <p>
  * Example configuration file:
@@ -101,18 +102,23 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
 
     @Override
     public boolean equals(Object obj) {
-      if (this == obj)
+      if (this == obj) {
         return true;
-      if (obj == null)
+      }
+      if (obj == null) {
         return false;
-      if (getClass() != obj.getClass())
+      }
+      if (getClass() != obj.getClass()) {
         return false;
+      }
       Contexts other = (Contexts) obj;
       if (contexts == null) {
-        if (other.contexts != null)
+        if (other.contexts != null) {
           return false;
-      } else if (!contexts.equals(other.contexts))
+        }
+      } else if (!contexts.equals(other.contexts)) {
         return false;
+      }
       return true;
     }
   }
@@ -154,23 +160,30 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
 
     @Override
     public boolean equals(Object obj) {
-      if (this == obj)
+      if (this == obj) {
         return true;
-      if (obj == null)
+      }
+      if (obj == null) {
         return false;
-      if (getClass() != obj.getClass())
+      }
+      if (getClass() != obj.getClass()) {
         return false;
+      }
       Context other = (Context) obj;
       if (config == null) {
-        if (other.config != null)
+        if (other.config != null) {
           return false;
-      } else if (!config.equals(other.config))
+        }
+      } else if (!config.equals(other.config)) {
         return false;
+      }
       if (name == null) {
-        if (other.name != null)
+        if (other.name != null) {
           return false;
-      } else if (!name.equals(other.name))
+        }
+      } else if (!name.equals(other.name)) {
         return false;
+      }
       return true;
     }
   }
@@ -223,22 +236,29 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
 
     @Override
     public boolean equals(Object obj) {
-      if (this == obj)
+      if (this == obj) {
         return true;
-      if (obj == null)
+      }
+      if (obj == null) {
         return false;
-      if (getClass() != obj.getClass())
+      }
+      if (getClass() != obj.getClass()) {
         return false;
+      }
       ContextConfig other = (ContextConfig) obj;
       if (classPath == null) {
-        if (other.classPath != null)
+        if (other.classPath != null) {
           return false;
-      } else if (!classPath.equals(other.classPath))
+        }
+      } else if (!classPath.equals(other.classPath)) {
         return false;
-      if (monitorIntervalMs != other.monitorIntervalMs)
+      }
+      if (monitorIntervalMs != other.monitorIntervalMs) {
         return false;
-      if (postDelegate != other.postDelegate)
+      }
+      if (postDelegate != other.postDelegate) {
         return false;
+      }
       return true;
     }
   }
@@ -272,7 +292,7 @@ public class ReloadingVFSContextClassLoaderFactory implements ContextClassLoader
     }
     // Properties
     String conf = getConfigFileLocation();
-    File f = new File(new URI(conf));
+    File f = Path.of(new URI(conf)).toFile();
     if (!f.canRead()) {
       throw new RuntimeException("Unable to read configuration file: " + conf);
     }

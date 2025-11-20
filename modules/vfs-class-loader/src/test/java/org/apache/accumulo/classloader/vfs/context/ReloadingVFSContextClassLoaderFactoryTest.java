@@ -28,6 +28,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,7 +37,6 @@ import org.apache.accumulo.classloader.vfs.AccumuloVFSClassLoader;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Context;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.ContextConfig;
 import org.apache.accumulo.classloader.vfs.context.ReloadingVFSContextClassLoaderFactory.Contexts;
-import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
@@ -47,7 +48,6 @@ import com.google.gson.Gson;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
-@SuppressFBWarnings(value = "PATH_TRAVERSAL_IN", justification = "paths not set by user input")
 public class ReloadingVFSContextClassLoaderFactoryTest {
 
   private static final Logger LOG =
@@ -101,18 +101,18 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
   private static final Contexts c = new Contexts();
 
-  private static File foo = new File(System.getProperty("user.dir") + "/target/foo");
-  private static File bar = new File(System.getProperty("user.dir") + "/target/bar");
+  private static Path foo = Path.of(System.getProperty("user.dir"), "target", "foo");
+  private static Path bar = Path.of(System.getProperty("user.dir"), "target", "bar");
 
   @BeforeAll
   public static void setup() throws Exception {
 
-    assertTrue(foo.mkdir());
-    assertTrue(bar.mkdir());
+    assertTrue(foo.toFile().mkdir());
+    assertTrue(bar.toFile().mkdir());
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSLOADER_DEBUG, "true");
     ContextConfig cc1 = new ContextConfig();
-    cc1.setClassPath(foo.toURI() + ".*");
+    cc1.setClassPath(foo.resolve(".*").toUri().toString());
     cc1.setPostDelegate(true);
     cc1.setMonitorIntervalMs(1000);
     Context c1 = new Context();
@@ -120,7 +120,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     c1.setConfig(cc1);
 
     ContextConfig cc2 = new ContextConfig();
-    cc2.setClassPath(bar.toURI() + ".*");
+    cc2.setClassPath(bar.resolve(".*").toUri().toString());
     cc2.setPostDelegate(false);
     cc2.setMonitorIntervalMs(1000);
     Context c2 = new Context();
@@ -149,16 +149,18 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
   @Test
   public void testCreation(TestInfo testInfo) throws Exception {
 
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        new File(foo, "HelloWorld.jar"));
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        new File(bar, "HelloWorld2.jar"));
+    try (var in = this.getClass().getResource("/HelloWorld.jar").openStream()) {
+      Files.copy(in, foo.resolve("HelloWorld.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
+    try (var in = this.getClass().getResource("/HelloWorld2.jar").openStream()) {
+      Files.copy(in, bar.resolve("HelloWorld2.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
 
     String testMethodName = testInfo.getTestMethod().orElseThrow().getName();
-    File testSubDir = new File(tempDir, testMethodName);
+    File testSubDir = tempDir.toPath().resolve(testMethodName).toFile();
     assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
 
-    File f = new File(testSubDir, "configFile");
+    File f = testSubDir.toPath().resolve("configFile").toFile();
     assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();
@@ -188,16 +190,18 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
 
     System.setProperty(AccumuloVFSClassLoader.VFS_CLASSPATH_MONITOR_INTERVAL, "1");
 
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        new File(foo, "HelloWorld.jar"));
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        new File(bar, "HelloWorld2.jar"));
+    try (var in = this.getClass().getResource("/HelloWorld.jar").openStream()) {
+      Files.copy(in, foo.resolve("HelloWorld.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
+    try (var in = this.getClass().getResource("/HelloWorld.jar").openStream()) {
+      Files.copy(in, bar.resolve("HelloWorld2.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
 
     String testMethodName = testInfo.getTestMethod().orElseThrow().getName();
-    File testSubDir = new File(tempDir, testMethodName);
+    File testSubDir = tempDir.toPath().resolve(testMethodName).toFile();
     assertTrue(testSubDir.isDirectory() || testSubDir.mkdir());
 
-    File f = new File(testSubDir, "configFile");
+    File f = testSubDir.toPath().resolve("configFile").toFile();
     assertTrue(f.isFile() || f.createNewFile());
     f.deleteOnExit();
     Gson g = new Gson();
@@ -207,7 +211,7 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     }
 
     TestReloadingVFSContextClassLoaderFactory factory =
-        new TestReloadingVFSContextClassLoaderFactory(foo.toURI() + ".*") {
+        new TestReloadingVFSContextClassLoaderFactory(foo.resolve(".*").toUri().toString()) {
           @Override
           protected String getConfigFileLocation() {
             return f.toURI().toString();
@@ -223,13 +227,14 @@ public class ReloadingVFSContextClassLoaderFactoryTest {
     Class<?> clazz1_5 = cl1.loadClass("test.HelloWorld");
     assertEquals(clazz1, clazz1_5);
 
-    assertTrue(new File(foo, "HelloWorld.jar").delete());
+    assertTrue(foo.resolve("HelloWorld.jar").toFile().delete());
 
     Thread.sleep(1000);
 
     // Update the class
-    FileUtils.copyURLToFile(this.getClass().getResource("/HelloWorld.jar"),
-        new File(foo, "HelloWorld2.jar"));
+    try (var in = this.getClass().getResource("/HelloWorld.jar").openStream()) {
+      Files.copy(in, foo.resolve("HelloWorld2.jar"), StandardCopyOption.REPLACE_EXISTING);
+    }
 
     // Wait for the monitor to notice
     Thread.sleep(1000);
