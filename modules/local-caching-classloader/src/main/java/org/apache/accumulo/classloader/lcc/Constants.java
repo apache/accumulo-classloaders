@@ -33,7 +33,7 @@ public class Constants {
   public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().create();
 
   public static DigestUtils getChecksummer() {
-    return new DigestUtils("MD5");
+    return new DigestUtils("SHA256");
   }
 
 }

@@ -145,7 +145,8 @@ public final class LocalCachingContext {
           retry.logCompletion(LOG,
               "Resource " + source.getURL() + " cached locally as " + finalCacheLocation);
         } catch (IOException e) {
-          LOG.error("Error copying resource from {}. Retrying...", source.getURL(), e);
+          LOG.error("Error copying resource from {} to {}. Retrying...", source.getURL(),
+              finalCacheLocation, e);
           retry.logRetry(LOG, "Unable to cache resource " + source.getURL());
           retry.waitForNextAttempt(LOG, "Cache resource " + source.getURL());
         } finally {

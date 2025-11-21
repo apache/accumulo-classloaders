@@ -18,9 +18,10 @@
  */
 package org.apache.accumulo.classloader.lcc.resolvers;
 
+import java.io.BufferedInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -28,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.apache.hadoop.shaded.org.apache.commons.io.FileUtils;
 
 public final class LocalFileResolver extends FileResolver {
 
@@ -58,7 +58,7 @@ public final class LocalFileResolver extends FileResolver {
   }
 
   @Override
-  public FileInputStream getInputStream() throws IOException {
-    return FileUtils.openInputStream(file);
+  public InputStream getInputStream() throws IOException {
+    return new BufferedInputStream(Files.newInputStream(file.toPath()));
   }
 }

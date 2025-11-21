@@ -31,7 +31,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -109,7 +108,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         // context has been removed from the map, no need to check for update
         return;
       }
-      final AtomicInteger nextInterval = new AtomicInteger(interval);
+      int nextInterval = interval;
       final ContextDefinition currentDef = classLoader.getDefinition();
       try {
         final URL contextLocationUrl = new URL(contextLocation);
@@ -123,7 +122,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
                 update.getContextName());
           }
           classLoader.update(update);
-          nextInterval.set(update.getMonitorIntervalSeconds());
+          nextInterval = update.getMonitorIntervalSeconds();
         } else {
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
@@ -132,7 +131,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
       } finally {
-        monitorContext(contextLocation, nextInterval.get());
+        monitorContext(contextLocation, nextInterval);
       }
     }, interval, TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",

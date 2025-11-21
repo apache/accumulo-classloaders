@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -380,7 +381,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     @SuppressWarnings("unchecked")
     Class<? extends test.Test> clazz =
-        (Class<? extends test.Test>) cl2.loadClass("test.TestObjectA");
+        (Class<? extends test.Test>) cl2.loadClass(classA.getClassName());
     test.Test impl = clazz.getDeclaredConstructor().newInstance();
     assertEquals("Hello from E", impl.hello());
     testClassFailsToLoad(cl2, classB);
@@ -638,25 +639,29 @@ public class LocalCachingContextClassLoaderFactoryTest {
       } else {
         assertNotEquals(cl, updatedClassLoader);
         for (URL u : updatedList) {
-          if (u.equals(jarAOrigLocation)) {
+          if (u.toString().equals(jarAOrigLocation.toString())) {
             testClassLoads(updatedClassLoader, classA);
-          } else if (u.equals(jarBOrigLocation)) {
+          } else if (u.toString().equals(jarBOrigLocation.toString())) {
             testClassLoads(updatedClassLoader, classB);
-          } else if (u.equals(jarCOrigLocation)) {
+          } else if (u.toString().equals(jarCOrigLocation.toString())) {
             testClassLoads(updatedClassLoader, classC);
-          } else if (u.equals(jarDOrigLocation)) {
+          } else if (u.toString().equals(jarDOrigLocation.toString())) {
             testClassLoads(updatedClassLoader, classD);
+          } else {
+            fail("Unexpected url: " + u.toString());
           }
         }
       }
-      if (removed.equals(jarAOrigLocation)) {
+      if (removed.toString().equals(jarAOrigLocation.toString())) {
         testClassFailsToLoad(updatedClassLoader, classA);
-      } else if (removed.equals(jarBOrigLocation)) {
+      } else if (removed.toString().equals(jarBOrigLocation.toString())) {
         testClassFailsToLoad(updatedClassLoader, classB);
-      } else if (removed.equals(jarCOrigLocation)) {
+      } else if (removed.toString().equals(jarCOrigLocation.toString())) {
         testClassFailsToLoad(updatedClassLoader, classC);
-      } else if (removed.equals(jarDOrigLocation)) {
+      } else if (removed.toString().equals(jarDOrigLocation.toString())) {
         testClassFailsToLoad(updatedClassLoader, classD);
+      } else {
+        fail("Unexpected url: " + removed.toString());
       }
       priorCL = updatedClassLoader;
       priorList = updatedList;
