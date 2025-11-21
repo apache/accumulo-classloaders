@@ -56,7 +56,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * <p>
  * As this class processes the ContextDefinition it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
- * the system property {@link Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
+ * the system property {@value Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
  * sub-directory for each context name. Each context cache directory contains a lock file and a copy
  * of each fetched resource that is named using the following format: fileName_checksum.
  * <p>
