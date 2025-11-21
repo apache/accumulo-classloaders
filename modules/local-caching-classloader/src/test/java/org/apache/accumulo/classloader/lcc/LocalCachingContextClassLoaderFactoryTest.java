@@ -38,12 +38,15 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
+import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+import org.apache.accumulo.core.util.ConfigurationImpl;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.Path;
@@ -81,8 +84,11 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    String tmp = tempDir.resolve("base").toUri().toString();
-    System.setProperty(Constants.CACHE_DIR_PROPERTY, tmp);
+    String baseCacheDir = tempDir.resolve("base").toUri().toString();
+
+    ConfigurationCopy acuConf =
+        new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY, baseCacheDir));
+    FACTORY.init(() -> new ConfigurationImpl(acuConf));
 
     // Find the Test jar files
     jarAOrigLocation =
@@ -145,7 +151,6 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @AfterAll
   public static void afterAll() throws Exception {
-    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
     if (jetty != null) {
       jetty.stop();
       jetty.join();

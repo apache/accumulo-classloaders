@@ -29,42 +29,30 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class CacheUtilsTest {
-
-  private static final Logger LOG = LoggerFactory.getLogger(CacheUtilsTest.class);
 
   @TempDir
   private static Path tempDir;
 
-  @BeforeEach
-  public void beforeEach() {
-    String tmp = tempDir.resolve("base").toUri().toString();
-    LOG.info("Setting cache base directory to {}", tmp);
-    System.setProperty(Constants.CACHE_DIR_PROPERTY, tmp);
-  }
+  private static String baseCacheDir = null;
 
-  @AfterEach
-  public void afterEach() {
-    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
+  @BeforeAll
+  public static void beforeAll() throws Exception {
+    baseCacheDir = tempDir.resolve("base").toUri().toString();
   }
 
   @Test
   public void testPropertyNotSet() {
-    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
     ContextClassLoaderException ex =
-        assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseCacheDir());
-    assertEquals("Error getting classloader for context: System property "
-        + Constants.CACHE_DIR_PROPERTY + " not set.", ex.getMessage());
+        assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseCacheDir(null));
+    assertEquals("Error getting classloader for context: received null for cache directory",
+        ex.getMessage());
   }
 
   @Test
@@ -72,7 +60,7 @@ public class CacheUtilsTest {
     final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
-      CacheUtils.createBaseCacheDir();
+      CacheUtils.createBaseCacheDir(baseCacheDir);
       assertTrue(Files.exists(base));
     } finally {
       Files.delete(base);
@@ -84,10 +72,10 @@ public class CacheUtilsTest {
     final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
-      CacheUtils.createBaseCacheDir();
-      CacheUtils.createBaseCacheDir();
-      CacheUtils.createBaseCacheDir();
-      CacheUtils.createBaseCacheDir();
+      CacheUtils.createBaseCacheDir(baseCacheDir);
+      CacheUtils.createBaseCacheDir(baseCacheDir);
+      CacheUtils.createBaseCacheDir(baseCacheDir);
+      CacheUtils.createBaseCacheDir(baseCacheDir);
       assertTrue(Files.exists(base));
     } finally {
       Files.delete(base);
@@ -99,13 +87,13 @@ public class CacheUtilsTest {
     final Path base = Path.of(tempDir.resolve("base").toUri());
     try {
       assertFalse(Files.exists(base));
-      CacheUtils.createOrGetContextCacheDir("context1");
+      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
       assertTrue(Files.exists(base));
       assertTrue(Files.exists(base.resolve("context1")));
-      CacheUtils.createOrGetContextCacheDir("context2");
+      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context2");
       assertTrue(Files.exists(base));
       assertTrue(Files.exists(base.resolve("context2")));
-      CacheUtils.createOrGetContextCacheDir("context1");
+      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
       assertTrue(Files.exists(base));
       assertTrue(Files.exists(base.resolve("context1")));
     } finally {
@@ -121,7 +109,7 @@ public class CacheUtilsTest {
     final Path cx1 = base.resolve("context1");
     try {
       assertFalse(Files.exists(base));
-      CacheUtils.createOrGetContextCacheDir("context1");
+      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
       assertTrue(Files.exists(base));
       assertTrue(Files.exists(cx1));
 

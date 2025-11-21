@@ -54,14 +54,14 @@ public class LocalCachingContextTest {
   private static TestClassInfo classB;
   private static TestClassInfo classC;
   private static TestClassInfo classD;
+  private static String baseCacheDir;
 
   @TempDir
   private static java.nio.file.Path tempDir;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    String tmp = tempDir.resolve("base").toUri().toString();
-    System.setProperty(Constants.CACHE_DIR_PROPERTY, tmp);
+    baseCacheDir = tempDir.resolve("base").toUri().toString();
 
     // Find the Test jar files
     final URL jarAOrigLocation =
@@ -108,7 +108,6 @@ public class LocalCachingContextTest {
 
   @AfterAll
   public static void afterAll() throws Exception {
-    System.clearProperty(Constants.CACHE_DIR_PROPERTY);
     if (jetty != null) {
       jetty.stop();
       jetty.join();
@@ -120,7 +119,7 @@ public class LocalCachingContextTest {
 
   @Test
   public void testInitialize() throws Exception {
-    LocalCachingContext lcccl = new LocalCachingContext(def);
+    LocalCachingContext lcccl = new LocalCachingContext(baseCacheDir, def);
     lcccl.initialize();
 
     // Confirm the 3 jars are cached locally
@@ -137,7 +136,7 @@ public class LocalCachingContextTest {
   @Test
   public void testClassLoader() throws Exception {
 
-    LocalCachingContext lcccl = new LocalCachingContext(def);
+    LocalCachingContext lcccl = new LocalCachingContext(baseCacheDir, def);
     lcccl.initialize();
     ClassLoader contextClassLoader = lcccl.getClassloader();
 
@@ -149,7 +148,7 @@ public class LocalCachingContextTest {
   @Test
   public void testUpdate() throws Exception {
 
-    LocalCachingContext lcccl = new LocalCachingContext(def);
+    LocalCachingContext lcccl = new LocalCachingContext(baseCacheDir, def);
     lcccl.initialize();
 
     final ClassLoader contextClassLoader = lcccl.getClassloader();

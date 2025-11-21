@@ -64,7 +64,7 @@ be downloaded, verified against their checksums, and used to construct a new Cla
 
 ## Local Caching
 
-The system property `accumulo.classloader.cache.dir` is required to be set to a local directory on the host. The
+The property `general.custom.lcc.classloader.cache.dir` is required to be set to a local directory on the host. The
 LocalCachingContext creates a directory at this location for each named context. Each context cache directory
 contains a lock file and a copy of each fetched resource that is named in the context definition file using the format:
 `fileName_checksum`. The lock file is used with Java's `FileChannel.tryLock` to enable exclusive access (on supported
@@ -89,7 +89,8 @@ and unused old files within a context cache directory.
 
 To use this with Accumulo:
 
-  1. Set the following Accumulo site property: `general.context.class.loader.factory=org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory`
+  1. Set the following Accumulo site properties: `general.context.class.loader.factory=org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory`
+`general.custom.lcc.classloader.cache.dir=file://path/to/some/directory`
   
   2. Set the following table property: `table.class.loader.context=(file|hdfs|http|https)://path/to/context/definition.json`
 

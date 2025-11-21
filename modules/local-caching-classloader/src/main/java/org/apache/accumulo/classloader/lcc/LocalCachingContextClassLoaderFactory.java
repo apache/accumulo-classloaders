@@ -36,12 +36,14 @@ import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.base.Preconditions;
 
 /**
  * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a named
@@ -55,9 +57,10 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  * <p>
  * As this class processes the ContextDefinition it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
- * the system property {@value Constants#CACHE_DIR_PROPERTY} as the root directory and creates a
- * sub-directory for each context name. Each context cache directory contains a lock file and a copy
- * of each fetched resource that is named using the following format: fileName_checksum.
+ * the property {@value Constants#CACHE_DIR_PROPERTY} passed via
+ * {@link #init(ContextClassLoaderEnvironment)} as the root directory and creates a sub-directory
+ * for each context name. Each context cache directory contains a lock file and a copy of each
+ * fetched resource that is named using the following format: fileName_checksum.
  * <p>
  * The lock file prevents processes from manipulating the contexts of the context cache directory
  * concurrently, which enables the cache directories to be shared among multiple processes on the
@@ -75,6 +78,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   private final Cache<String,LocalCachingContext> contexts =
       Caffeine.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build();
+
+  private volatile String baseCacheDir;
 
   private ContextDefinition parseContextDefinition(final URL url)
       throws ContextClassLoaderException {
@@ -147,17 +152,27 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   }
 
   @Override
+  public void init(ContextClassLoaderEnvironment env) {
+    baseCacheDir = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY));
+    try {
+      CacheUtils.createBaseCacheDir(baseCacheDir);
+    } catch (IOException | ContextClassLoaderException e) {
+      throw new IllegalStateException("Error creating base cache directory at " + baseCacheDir, e);
+    }
+  }
+
+  @Override
   public ClassLoader getClassLoader(final String contextLocation)
       throws ContextClassLoaderException {
+    Preconditions.checkState(baseCacheDir != null, "init not called before calling getClassLoader");
     requireNonNull(contextLocation, "context name must be supplied");
     try {
       final URL contextLocationUrl = new URL(contextLocation);
       final AtomicBoolean newlyCreated = new AtomicBoolean(false);
       final LocalCachingContext ccl = contexts.get(contextLocation, cn -> {
         try {
-          CacheUtils.createBaseCacheDir();
           ContextDefinition def = parseContextDefinition(contextLocationUrl);
-          LocalCachingContext newCcl = new LocalCachingContext(def);
+          LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, def);
           newCcl.initialize();
           newlyCreated.set(true);
           return newCcl;

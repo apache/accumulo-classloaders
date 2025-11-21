@@ -38,7 +38,6 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.EnumSet;
 import java.util.Set;
 
-import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
 public class CacheUtils {
@@ -82,18 +81,17 @@ public class CacheUtils {
     }
   }
 
-  public static Path createBaseCacheDir() throws IOException, ContextClassLoaderException {
-    final String prop = Constants.CACHE_DIR_PROPERTY;
-    final String cacheDir = System.getProperty(prop);
-    if (cacheDir == null) {
-      throw new ContextClassLoaderException("System property " + prop + " not set.");
+  public static Path createBaseCacheDir(final String baseCacheDir)
+      throws IOException, ContextClassLoaderException {
+    if (baseCacheDir == null) {
+      throw new ContextClassLoaderException("received null for cache directory");
     }
-    return mkdir(Path.of(URI.create(cacheDir)));
+    return mkdir(Path.of(URI.create(baseCacheDir)));
   }
 
-  public static Path createOrGetContextCacheDir(final String contextName)
+  public static Path createOrGetContextCacheDir(final String baseCacheDir, final String contextName)
       throws IOException, ContextClassLoaderException {
-    Path baseContextDir = createBaseCacheDir();
+    Path baseContextDir = createBaseCacheDir(baseCacheDir);
     return mkdir(baseContextDir.resolve(contextName));
   }
 

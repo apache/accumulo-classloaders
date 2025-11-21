@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
+import org.apache.accumulo.core.conf.Property;
 import org.apache.commons.codec.digest.DigestUtils;
 
 import com.google.gson.Gson;
@@ -28,7 +29,8 @@ import com.google.gson.GsonBuilder;
 
 public class Constants {
 
-  public static final String CACHE_DIR_PROPERTY = "accumulo.classloader.cache.dir";
+  public static final String CACHE_DIR_PROPERTY =
+      Property.GENERAL_ARBITRARY_PROP_PREFIX + "lcc.classloader.cache.dir";
   public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
   public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().create();
 

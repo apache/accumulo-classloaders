@@ -114,11 +114,11 @@ public final class LocalCachingContext {
       .retryAfter(1, TimeUnit.SECONDS).incrementBy(1, TimeUnit.SECONDS).maxWait(5, TimeUnit.MINUTES)
       .backOffFactor(2).logInterval(1, TimeUnit.SECONDS).createFactory();
 
-  public LocalCachingContext(ContextDefinition contextDefinition)
+  public LocalCachingContext(final String baseCacheDir, final ContextDefinition contextDefinition)
       throws IOException, ContextClassLoaderException {
     this.definition.set(requireNonNull(contextDefinition, "definition must be supplied"));
     this.contextName = this.definition.get().getContextName();
-    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(contextName);
+    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(baseCacheDir, contextName);
   }
 
   public ContextDefinition getDefinition() {
