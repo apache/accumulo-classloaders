@@ -46,7 +46,7 @@ import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClas
 public class CacheUtils {
 
   private static final Set<PosixFilePermission> CACHE_DIR_PERMS =
-      EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE, GROUP_READ, OTHERS_READ);
+      EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE);
   private static final FileAttribute<Set<PosixFilePermission>> PERMISSIONS =
       PosixFilePermissions.asFileAttribute(CACHE_DIR_PERMS);
   private static final String lockFileName = "lock_file";
