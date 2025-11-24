@@ -64,7 +64,7 @@ be downloaded, verified against their checksums, and used to construct a new Cla
 
 ## Local Caching
 
-The property `general.custom.lcc.classloader.cache.dir` is required to be set to a local directory on the host. The
+The property `general.custom.classloader.lcc.cache.dir` is required to be set to a local directory on the host. The
 LocalCachingContext creates a directory at this location for each named context. Each context cache directory
 contains a lock file and a copy of each fetched resource that is named in the context definition file using the format:
 `fileName_checksum`. The lock file is used with Java's `FileChannel.tryLock` to enable exclusive access (on supported
@@ -78,6 +78,13 @@ to `LocalCachingContextClassLoaderFactory.getClassLoader(String)` will return th
 with valid contents. If the checksum of a downloaded resource does not match the checksum in the context definition
 file, then the downloaded version of the file is deleted from the context cache directory so that it can be retried
 at the next interval.
+
+The property `general.custom.classloader.lcc.update.grace.minutes` determines how long the update process
+continues to return the most recent valid classloader when an exception occurs in the background update thread.
+A zero value (default) will cause the most recent valid classloader to be returned. Otherwise, the update thread
+will fail for N minutes, then clear the reference to the classloader internally. This will cause a subsequent
+call to `LocalCachingContextClassLoaderFactory.getClassLoader(String)` to act like the initial call to
+create the classloader and return the exception to the calling code.
 
 ## Cleanup
 
