@@ -671,6 +671,66 @@ public class LocalCachingContextClassLoaderFactoryTest {
       priorCL = updatedClassLoader;
       priorList = updatedList;
     }
+  }
+
+  @Test
+  public void testGracePeriod() throws Exception {
+    final LocalCachingContextClassLoaderFactory localFactory =
+        new LocalCachingContextClassLoaderFactory();
+
+    String baseCacheDir = tempDir.resolve("base").toUri().toString();
+    ConfigurationCopy acuConf = new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY,
+        baseCacheDir, Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS, "1"));
+    localFactory.init(() -> new ConfigurationImpl(acuConf));
+
+    final ContextDefinition def =
+        ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final Path defFilePath =
+        createContextDefinitionFile(fs, "UpdateNonExistentResource.json", def.toJson());
+    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+
+    final ClassLoader cl = localFactory.getClassLoader(updateDefUrl.toString());
+
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
+
+    // copy jarA to jarACopy
+    // create a ContextDefinition that references it
+    // delete jarACopy
+    java.nio.file.Path jarAPath = java.nio.file.Path.of(jarAOrigLocation.toURI());
+    java.nio.file.Path jarAPathParent = jarAPath.getParent();
+    assertNotNull(jarAPathParent);
+    java.nio.file.Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
+    assertTrue(!Files.exists(jarACopy));
+    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    assertTrue(Files.exists(jarACopy));
+    ContextDefinition def2 =
+        ContextDefinition.create("initial", MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+    Files.delete(jarACopy);
+    assertTrue(!Files.exists(jarACopy));
+
+    updateContextDefinitionFile(fs, defFilePath, def2.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+
+    final ClassLoader cl2 = localFactory.getClassLoader(updateDefUrl.toString());
+
+    // validate that the classloader has not updated
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
+
+    // Wait 2 minutes for grace period to expire
+    Thread.sleep(120_000);
+
+    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+        () -> localFactory.getClassLoader(updateDefUrl.toString()));
+    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
 
   }
 

@@ -28,7 +28,10 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -38,6 +41,7 @@ import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.apache.accumulo.core.util.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,7 +83,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private final Cache<String,LocalCachingContext> contexts =
       Caffeine.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build();
 
+  private final Map<String,Timer> classloaderFailures = new HashMap<>();
   private volatile String baseCacheDir;
+  private volatile Duration updateFailureGracePeriodMins;
 
   private ContextDefinition parseContextDefinition(final URL url)
       throws ContextClassLoaderException {
@@ -108,9 +114,12 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
    */
   private void monitorContext(final String contextLocation, int interval) {
     Constants.EXECUTOR.schedule(() -> {
-      final LocalCachingContext classLoader = contexts.getIfPresent(contextLocation);
+      final LocalCachingContext classLoader =
+          contexts.policy().getIfPresentQuietly(contextLocation);
       if (classLoader == null) {
         // context has been removed from the map, no need to check for update
+        LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
+            contextLocation);
         return;
       }
       int nextInterval = interval;
@@ -128,6 +137,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           }
           classLoader.update(update);
           nextInterval = update.getMonitorIntervalSeconds();
+          classloaderFailures.remove(contextLocation);
         } else {
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
@@ -135,6 +145,29 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           | NoSuchAlgorithmException | URISyntaxException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
+        final Timer failureTimer = classloaderFailures.get(contextLocation);
+        if (updateFailureGracePeriodMins.isZero()) {
+          // failure monitoring is disabled
+          LOG.debug("Property {} not set, not tracking classloader failures for context {}",
+              Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS, contextLocation);
+        } else if (failureTimer == null) {
+          // first failure, start the timer
+          classloaderFailures.put(contextLocation, Timer.startNew());
+          LOG.debug(
+              "Tracking classloader failures for context {}, will NOT return working classloader if failures continue for {} minutes",
+              contextLocation, updateFailureGracePeriodMins.toMinutes());
+        } else if (failureTimer.hasElapsed(updateFailureGracePeriodMins)) {
+          // has been failing for the grace period
+          // unset the classloader reference so that the failure
+          // will return from getClassLoader in the calling thread
+          LOG.info("Grace period for failing classloader has elapsed for context {}",
+              contextLocation);
+          contexts.invalidate(contextLocation);
+          classloaderFailures.remove(contextLocation);
+        } else {
+          // failing, but grace period has not elapsed.
+          // No need to log anything.
+        }
       } finally {
         monitorContext(contextLocation, nextInterval);
       }
@@ -153,7 +186,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   @Override
   public void init(ContextClassLoaderEnvironment env) {
-    baseCacheDir = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY));
+    baseCacheDir = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY),
+        "Property " + Constants.CACHE_DIR_PROPERTY + " not set, cannot create cache directory.");
+    String graceProp = env.getConfiguration().get(Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS);
+    long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
+    updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
     try {
       CacheUtils.createBaseCacheDir(baseCacheDir);
     } catch (IOException | ContextClassLoaderException e) {

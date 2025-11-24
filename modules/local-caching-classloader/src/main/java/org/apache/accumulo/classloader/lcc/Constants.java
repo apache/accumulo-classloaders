@@ -30,7 +30,11 @@ import com.google.gson.GsonBuilder;
 public class Constants {
 
   public static final String CACHE_DIR_PROPERTY =
-      Property.GENERAL_ARBITRARY_PROP_PREFIX + "lcc.classloader.cache.dir";
+      Property.GENERAL_ARBITRARY_PROP_PREFIX + "classloader.lcc.cache.dir";
+
+  public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
+      Property.GENERAL_ARBITRARY_PROP_PREFIX + "classloader.lcc.update.grace.minutes";
+
   public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
   public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().create();
 
