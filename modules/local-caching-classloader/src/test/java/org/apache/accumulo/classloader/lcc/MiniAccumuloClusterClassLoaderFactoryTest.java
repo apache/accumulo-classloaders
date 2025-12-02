@@ -22,9 +22,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -39,7 +37,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -198,9 +196,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // check that the table is returning unique values
       // before applying the iterator
       final byte[] jarAValueBytes = "foo".getBytes(UTF_8);
-      List<byte[]> values = getValues(client, tableName);
-      assertEquals(1000, values.size());
-      assertFalse(values.contains(jarAValueBytes));
+      assertEquals(0, countExpectedRows(client, tableName, jarAValueBytes));
 
       // Attach a scan iterator to the table
       IteratorSetting is = new IteratorSetting(101, "example", ITER_CLASS_NAME);
@@ -210,11 +206,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // by the iterator
       int count = 0;
       while (count != 1000) {
-        try {
-          count = countExpectedRows(client, tableName, jarAValueBytes);
-        } catch (AssertionError e) {
-          // Table not ready, try again
-        }
+        count = countExpectedRows(client, tableName, jarAValueBytes);
       }
 
       // Update the context definition to point to jar B
@@ -275,21 +267,14 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     }
   }
 
-  private List<byte[]> getValues(AccumuloClient client, String table)
-      throws TableNotFoundException, AccumuloSecurityException, AccumuloException {
-    Scanner scanner = client.createScanner(table);
-    List<byte[]> values = new ArrayList<>(1000);
-    scanner.forEach((k, v) -> values.add(v.get()));
-    return values;
-  }
-
   private int countExpectedRows(AccumuloClient client, String table, byte[] expectedValue)
       throws TableNotFoundException, AccumuloSecurityException, AccumuloException {
     Scanner scanner = client.createScanner(table);
     int count = 0;
     for (Entry<Key,Value> e : scanner) {
-      assertArrayEquals(expectedValue, e.getValue().get());
-      count++;
+      if (Arrays.equals(e.getValue().get(), expectedValue)) {
+        count++;
+      }
     }
     return count;
   }
