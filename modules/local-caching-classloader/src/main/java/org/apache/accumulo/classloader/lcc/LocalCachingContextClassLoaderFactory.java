@@ -142,7 +142,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
       } catch (ContextClassLoaderException | InterruptedException | IOException
-          | NoSuchAlgorithmException | URISyntaxException e) {
+          | NoSuchAlgorithmException | URISyntaxException | RuntimeException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
         final Timer failureTimer = classloaderFailures.get(contextLocation);
@@ -165,8 +165,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           contexts.invalidate(contextLocation);
           classloaderFailures.remove(contextLocation);
         } else {
-          // failing, but grace period has not elapsed.
-          // No need to log anything.
+          LOG.trace("Failing to update classloader for context {} within the grace period",
+              contextLocation, e);
         }
       } finally {
         monitorContext(contextLocation, nextInterval);

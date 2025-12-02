@@ -62,7 +62,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   private static final LocalCachingContextClassLoaderFactory FACTORY =
       new LocalCachingContextClassLoaderFactory();
-  private static final int MONITOR_INTERVAL_SECS = 5;
+  protected static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
   private static Server jetty;

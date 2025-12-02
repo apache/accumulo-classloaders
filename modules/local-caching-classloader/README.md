@@ -97,7 +97,7 @@ and unused old files within a context cache directory.
 To use this with Accumulo:
 
   1. Set the following Accumulo site properties: `general.context.class.loader.factory=org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory`
-`general.custom.lcc.classloader.cache.dir=file://path/to/some/directory`
+`general.custom.classloader.lcc.cache.dir=file://path/to/some/directory`
   
   2. Set the following table property: `table.class.loader.context=(file|hdfs|http|https)://path/to/context/definition.json`
 
