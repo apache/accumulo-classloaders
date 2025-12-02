@@ -196,7 +196,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // check that the table is returning unique values
       // before applying the iterator
       final byte[] jarAValueBytes = "foo".getBytes(UTF_8);
-      assertEquals(0, countExpectedRows(client, tableName, jarAValueBytes));
+      assertEquals(0, countExpectedValues(client, tableName, jarAValueBytes));
 
       // Attach a scan iterator to the table
       IteratorSetting is = new IteratorSetting(101, "example", ITER_CLASS_NAME);
@@ -206,7 +206,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // by the iterator
       int count = 0;
       while (count != 1000) {
-        count = countExpectedRows(client, tableName, jarAValueBytes);
+        count = countExpectedValues(client, tableName, jarAValueBytes);
       }
 
       // Update the context definition to point to jar B
@@ -224,7 +224,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // confirm that all values get transformed to "bar"
       // by the iterator
       final byte[] jarBValueBytes = "bar".getBytes(UTF_8);
-      assertEquals(1000, countExpectedRows(client, tableName, jarBValueBytes));
+      assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
 
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
@@ -253,7 +253,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Rescan and confirm that all values get transformed to "bar"
       // by the iterator. The previous class is still being used after
       // the monitor interval because the jar referenced does not exist.
-      assertEquals(1000, countExpectedRows(client, tableName, jarBValueBytes));
+      assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
 
       // Wait 2 minutes, 2 times the UPDATE_FAILURE_GRACE_PERIOD_MINS
       Thread.sleep(120_000);
@@ -267,7 +267,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     }
   }
 
-  private int countExpectedRows(AccumuloClient client, String table, byte[] expectedValue)
+  private int countExpectedValues(AccumuloClient client, String table, byte[] expectedValue)
       throws TableNotFoundException, AccumuloSecurityException, AccumuloException {
     Scanner scanner = client.createScanner(table);
     int count = 0;
