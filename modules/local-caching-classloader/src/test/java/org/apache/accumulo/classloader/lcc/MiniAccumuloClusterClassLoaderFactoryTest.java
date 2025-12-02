@@ -24,6 +24,7 @@ import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,6 +39,7 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -49,8 +51,11 @@ import java.util.stream.Collectors;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.core.client.Accumulo;
 import org.apache.accumulo.core.client.AccumuloClient;
+import org.apache.accumulo.core.client.AccumuloException;
+import org.apache.accumulo.core.client.AccumuloSecurityException;
 import org.apache.accumulo.core.client.IteratorSetting;
 import org.apache.accumulo.core.client.Scanner;
+import org.apache.accumulo.core.client.TableNotFoundException;
 import org.apache.accumulo.core.clientImpl.AccumuloServerException;
 import org.apache.accumulo.core.clientImpl.ClientContext;
 import org.apache.accumulo.core.conf.Property;
@@ -190,20 +195,27 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       client.tableOperations().setProperty(tableName, Property.TABLE_CLASSLOADER_CONTEXT.getKey(),
           contextURL);
 
+      // check that the table is returning unique values
+      // before applying the iterator
+      final byte[] jarAValueBytes = "foo".getBytes(UTF_8);
+      List<byte[]> values = getValues(client, tableName);
+      assertEquals(1000, values.size());
+      assertFalse(values.contains(jarAValueBytes));
+
       // Attach a scan iterator to the table
       IteratorSetting is = new IteratorSetting(101, "example", ITER_CLASS_NAME);
       client.tableOperations().attachIterator(tableName, is, EnumSet.of(IteratorScope.scan));
 
       // confirm that all values get transformed to "foo"
       // by the iterator
-      final byte[] jarAValueBytes = "foo".getBytes(UTF_8);
-      Scanner scanner = client.createScanner(tableName);
       int count = 0;
-      for (Entry<Key,Value> e : scanner) {
-        assertArrayEquals(jarAValueBytes, e.getValue().get());
-        count++;
+      while (count != 1000) {
+        try {
+          count = countExpectedRows(client, tableName, jarAValueBytes);
+        } catch (AssertionError e) {
+          // Table not ready, try again
+        }
       }
-      assertEquals(1000, count);
 
       // Update the context definition to point to jar B
       final ContextDefinition testContextDefUpdate =
@@ -220,21 +232,15 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // confirm that all values get transformed to "bar"
       // by the iterator
       final byte[] jarBValueBytes = "bar".getBytes(UTF_8);
-      scanner = client.createScanner(tableName);
-      count = 0;
-      for (Entry<Key,Value> e : scanner) {
-        assertArrayEquals(jarBValueBytes, e.getValue().get());
-        count++;
-      }
-      assertEquals(1000, count);
+      assertEquals(1000, countExpectedRows(client, tableName, jarBValueBytes));
 
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
       // updates.
-      java.nio.file.Path jarAPath = java.nio.file.Path.of(jarAOrigLocation.toURI());
-      java.nio.file.Path jarAPathParent = jarAPath.getParent();
+      Path jarAPath = Path.of(jarAOrigLocation.toURI());
+      Path jarAPathParent = jarAPath.getParent();
       assertNotNull(jarAPathParent);
-      java.nio.file.Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
+      Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
       assertTrue(!Files.exists(jarACopy));
       Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
       assertTrue(Files.exists(jarACopy));
@@ -255,13 +261,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Rescan and confirm that all values get transformed to "bar"
       // by the iterator. The previous class is still being used after
       // the monitor interval because the jar referenced does not exist.
-      scanner = client.createScanner(tableName);
-      count = 0;
-      for (Entry<Key,Value> e : scanner) {
-        assertArrayEquals(jarBValueBytes, e.getValue().get());
-        count++;
-      }
-      assertEquals(1000, count);
+      assertEquals(1000, countExpectedRows(client, tableName, jarBValueBytes));
 
       // Wait 2 minutes, 2 times the UPDATE_FAILURE_GRACE_PERIOD_MINS
       Thread.sleep(120_000);
@@ -273,6 +273,25 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       Throwable cause = re.getCause();
       assertTrue(cause instanceof AccumuloServerException);
     }
+  }
+
+  private List<byte[]> getValues(AccumuloClient client, String table)
+      throws TableNotFoundException, AccumuloSecurityException, AccumuloException {
+    Scanner scanner = client.createScanner(table);
+    List<byte[]> values = new ArrayList<>(1000);
+    scanner.forEach((k, v) -> values.add(v.get()));
+    return values;
+  }
+
+  private int countExpectedRows(AccumuloClient client, String table, byte[] expectedValue)
+      throws TableNotFoundException, AccumuloSecurityException, AccumuloException {
+    Scanner scanner = client.createScanner(table);
+    int count = 0;
+    for (Entry<Key,Value> e : scanner) {
+      assertArrayEquals(expectedValue, e.getValue().get());
+      count++;
+    }
+    return count;
   }
 
   private static List<TabletMetadata> getLocations(Ample ample, String tableId) {
