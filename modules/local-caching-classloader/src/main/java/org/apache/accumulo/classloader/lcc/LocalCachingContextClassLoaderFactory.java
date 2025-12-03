@@ -24,6 +24,7 @@ import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.management.ManagementFactory;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -35,9 +36,17 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.NotCompliantMBeanException;
+
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
+import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoaders;
+import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
@@ -195,6 +204,16 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       CacheUtils.createBaseCacheDir(baseCacheDir);
     } catch (IOException | ContextClassLoaderException e) {
       throw new IllegalStateException("Error creating base cache directory at " + baseCacheDir, e);
+    }
+    try {
+      MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+      mbs.registerMBean(new ContextClassLoaders(), ContextClassLoadersMXBean.getObjectName());
+    } catch (MalformedObjectNameException | MBeanRegistrationException
+        | NotCompliantMBeanException e) {
+      throw new IllegalStateException("Error registering MBean", e);
+    } catch (InstanceAlreadyExistsException e) {
+      // instance was re-init'd. This is likely to happen during tests
+      // can ignore as no issue here
     }
   }
 

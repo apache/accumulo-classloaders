@@ -25,19 +25,40 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.TreeSet;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+import org.apache.accumulo.start.spi.KeywordExecutable;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
+import com.beust.jcommander.Parameter;
 import com.google.common.base.Preconditions;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @SuppressFBWarnings(value = {"EI_EXPOSE_REP"})
-public class ContextDefinition {
+public class ContextDefinition implements KeywordExecutable {
+
+  static class Opts extends Help {
+    @Parameter(names = {"-n", "--name"}, required = true, description = "context name", arity = 1,
+        order = 1)
+    String contextName;
+
+    @Parameter(names = {"-i", "--interval"}, required = true,
+        description = "monitor interval (in seconds)", arity = 1, order = 2)
+    int monitorInterval;
+
+    @Parameter(names = {"-f", "--files"}, required = true, description = "-f <url>[ -f <url>...]",
+        arity = -1, order = 3)
+    public List<String> files = new ArrayList<>();
+  }
 
   public static ContextDefinition create(String contextName, int monitorIntervalSecs,
       URL... sources) throws ContextClassLoaderException, IOException {
@@ -123,5 +144,36 @@ public class ContextDefinition {
 
   public String toJson() {
     return Constants.GSON.toJson(this);
+  }
+
+  @Override
+  public String keyword() {
+    return "create-context-definition";
+  }
+
+  @Override
+  public String usage() {
+    return KeywordExecutable.super.usage();
+  }
+
+  @Override
+  public String description() {
+    return "Creates and prints a Context Definition";
+  }
+
+  @Override
+  public void execute(String[] args) throws Exception {
+    Configuration hadoopConf = new Configuration();
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hadoopConf));
+
+    Opts opts = new Opts();
+    opts.parseArgs(ContextDefinition.class.getName(), args);
+    URL[] urls = new URL[opts.files.size()];
+    int count = 0;
+    for (String f : opts.files) {
+      urls[count++] = new URL(f);
+    }
+    ContextDefinition def = create(opts.contextName, opts.monitorInterval, urls);
+    System.out.println(def.toJson());
   }
 }

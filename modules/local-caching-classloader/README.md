@@ -49,9 +49,12 @@ as changes are noticed based on the monitoring interval. An example of the conte
 
 ## Creating a ContextDefinition file
 
-Users may take advantage of the `ContextDefinition.create` method to construct a ContextDefinition object. This
-will calculate the checksums of the classpath elements. `ContextDefinition.toJson` can be used to serialize the
-ContextDefinition to a file.
+After the local-caching-classloader jar is built and placed into the $ACCUMULO_HOME/lib directory, then
+the `$ACCUMULO_HOME/bin/accumulo create-context-definition` command can be used to create the
+ContextDefinition json. The command takes 3 arguments: the name of the context, the monitor interval,
+and a list of file URLs. The resulting json is printed to stdout and can be redirected to a file. Users
+may take advantage of the `ContextDefinition.create` and `ContextDefinition.toJson` methods to
+construct a ContextDefinition object if they wish to do this programmatically.
 
 ## Updating a ContextDefinition file
 
@@ -90,7 +93,12 @@ create the classloader and return the exception to the calling code.
 
 Because the cache directory is shared among multiple processes, and one process can't know what the other processes are doing,
 this class cannot clean up the shared cache directory. It is left to the user to remove unused context cache directories
-and unused old files within a context cache directory.
+and unused old files within a context cache directory. To aid in this task a JMX MXBean has been created to expose the
+files that are still referenced by the classloaders that are created. For an example of how to use this MXBean, please
+see the test method `MiniAccumuloClusterClassLoaderFactoryTest.getReferencedFiles`. This method attaches to the
+local Accumulo JVM processes to get the set of referenced files. It should be safe to delete files that are located
+in the base cache directory (set by property `general.custom.classloader.lcc.cache.dir`) that are NOT in the set
+of referenced files.
 
 ## Accumulo Configuration
 

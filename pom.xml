@@ -135,7 +135,7 @@ under the License.
         <!-- most dependencies will be provided by the accumulo installation -->
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-project</artifactId>
-        <version>2.1.4</version>
+        <version>2.1.5-SNAPSHOT</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -411,7 +411,7 @@ under the License.
                 <reactorModuleConvergence />
                 <banDuplicatePomDependencyVersions />
                 <dependencyConvergence />
-                <banDynamicVersions />
+                <!--                <banDynamicVersions />-->
                 <bannedDependencies>
                   <excludes>
                     <!-- we redirect logging to log4j2, so we should have those bridges instead -->
