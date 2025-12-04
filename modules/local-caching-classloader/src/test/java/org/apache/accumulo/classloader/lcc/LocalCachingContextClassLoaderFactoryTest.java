@@ -224,10 +224,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
         def.toJson().substring(0, 4));
     final URL invalidDefUrl = new URL(fs.getUri().toString() + invalid.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidDefUrl.toString()));
-    assertTrue(ex.getMessage().startsWith(
-        "Error getting classloader for context: com.google.gson.stream.MalformedJsonException"));
   }
 
   @Test

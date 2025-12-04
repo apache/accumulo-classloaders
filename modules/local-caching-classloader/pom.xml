@@ -52,6 +52,11 @@
       <optional>true</optional>
     </dependency>
     <dependency>
+      <groupId>com.beust</groupId>
+      <artifactId>jcommander</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
       <groupId>com.github.ben-manes.caffeine</groupId>
       <artifactId>caffeine</artifactId>
       <scope>provided</scope>
@@ -80,6 +85,12 @@
       <!-- provided by accumulo -->
       <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-core</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <!-- provided by accumulo -->
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>accumulo-start</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>

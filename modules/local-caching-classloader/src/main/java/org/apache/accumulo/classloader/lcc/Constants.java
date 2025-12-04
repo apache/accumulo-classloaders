@@ -36,7 +36,7 @@ public class Constants {
       Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
 
   public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
-  public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().create();
+  public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
   public static DigestUtils getChecksummer() {
     return new DigestUtils("SHA256");

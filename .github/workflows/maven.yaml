@@ -45,7 +45,7 @@ jobs:
     - name: Build with Maven (verify javadoc:jar)
       run: mvn -B -V -e -ntp "-Dstyle.color=always" verify javadoc:jar -DskipFormat -DverifyFormat
       env:
-        MAVEN_OPTS: -Djansi.force=true
+        MAVEN_OPTS: -Djansi.force=true -Dapache.snapshots=true
     - name: Upload unit test results
       if: ${{ failure() }}
       uses: actions/upload-artifact@v4

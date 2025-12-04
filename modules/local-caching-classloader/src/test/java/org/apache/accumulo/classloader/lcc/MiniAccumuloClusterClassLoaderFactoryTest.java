@@ -40,13 +40,21 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
+import javax.management.JMX;
+import javax.management.MBeanServerConnection;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
+
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
+import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.core.client.Accumulo;
 import org.apache.accumulo.core.client.AccumuloClient;
 import org.apache.accumulo.core.client.AccumuloException;
@@ -75,14 +83,23 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.sun.tools.attach.VirtualMachine;
+import com.sun.tools.attach.VirtualMachineDescriptor;
 
 public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniClusterBase {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(MiniAccumuloClusterClassLoaderFactoryTest.class);
 
   private static class TestMACConfiguration implements MiniClusterConfigurationCallback {
 
     @Override
     public void configureMiniCluster(MiniAccumuloConfigImpl cfg,
         org.apache.hadoop.conf.Configuration coreSite) {
+      cfg.removeJvmOption("-XX:+PerfDisableSharedMem");
       cfg.setNumTservers(3);
       cfg.setProperty(Property.TSERV_NATIVEMAP_ENABLED.getKey(), "false");
       cfg.setProperty(Property.GENERAL_CONTEXT_CLASSLOADER_FACTORY.getKey(),
@@ -128,14 +145,16 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   @Test
   public void testClassLoader() throws Exception {
-
-    Path baseDirPath = tempDir.resolve("base");
-    Path jsonDirPath = baseDirPath.resolve("contextFiles");
+    final String contextName = "test";
+    final Path baseDirPath = tempDir.resolve("base");
+    final String contextCacheDirPath = baseDirPath.resolve(contextName).toUri().toURL().toString();
+    final Path jsonDirPath = baseDirPath.resolve("contextFiles");
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
     final ContextDefinition testContextDef =
-        ContextDefinition.create("test", MONITOR_INTERVAL_SECS, jarAOrigLocation);
+        ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final String jarAHash = testContextDef.getResources().iterator().next().getChecksum();
     final String testContextDefJson = testContextDef.toJson();
     final File testContextDefFile = jsonDirPath.resolve("testContextDefinition.json").toFile();
     Files.writeString(testContextDefFile.toPath(), testContextDefJson, StandardOpenOption.CREATE);
@@ -197,6 +216,10 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // before applying the iterator
       final byte[] jarAValueBytes = "foo".getBytes(UTF_8);
       assertEquals(0, countExpectedValues(client, tableName, jarAValueBytes));
+      Set<String> refFiles = getReferencedFiles();
+      assertEquals(1, refFiles.size());
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-a.jar_" + jarAHash));
 
       // Attach a scan iterator to the table
       IteratorSetting is = new IteratorSetting(101, "example", ITER_CLASS_NAME);
@@ -208,10 +231,15 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       while (count != 1000) {
         count = countExpectedValues(client, tableName, jarAValueBytes);
       }
+      refFiles = getReferencedFiles();
+      assertEquals(1, refFiles.size());
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-a.jar_" + jarAHash));
 
       // Update the context definition to point to jar B
       final ContextDefinition testContextDefUpdate =
-          ContextDefinition.create("test", MONITOR_INTERVAL_SECS, jarBOrigLocation);
+          ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarBOrigLocation);
+      final String jarBHash = testContextDefUpdate.getResources().iterator().next().getChecksum();
       final String testContextDefUpdateJson = testContextDefUpdate.toJson();
       Files.writeString(testContextDefFile.toPath(), testContextDefUpdateJson,
           StandardOpenOption.TRUNCATE_EXISTING);
@@ -225,6 +253,12 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // by the iterator
       final byte[] jarBValueBytes = "bar".getBytes(UTF_8);
       assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
+      refFiles = getReferencedFiles();
+      assertEquals(2, refFiles.size());
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-a.jar_" + jarAHash));
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-b.jar_" + jarBHash));
 
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
@@ -238,7 +272,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(jarACopy));
 
       final ContextDefinition testContextDefUpdate2 =
-          ContextDefinition.create("test", MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+          ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 
@@ -254,6 +288,12 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // by the iterator. The previous class is still being used after
       // the monitor interval because the jar referenced does not exist.
       assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
+      refFiles = getReferencedFiles();
+      assertEquals(2, refFiles.size());
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-a.jar_" + jarAHash));
+      assertTrue(refFiles
+          .contains(contextCacheDirPath + File.separator + "example-iterators-b.jar_" + jarBHash));
 
       // Wait 2 minutes, 2 times the UPDATE_FAILURE_GRACE_PERIOD_MINS
       Thread.sleep(120_000);
@@ -265,6 +305,37 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       Throwable cause = re.getCause();
       assertTrue(cause instanceof AccumuloServerException);
     }
+  }
+
+  public Set<String> getReferencedFiles() {
+    final Set<String> referencedFiles = new HashSet<>();
+    List<VirtualMachineDescriptor> vmdl = VirtualMachine.list();
+    for (VirtualMachineDescriptor vmd : vmdl) {
+      if (vmd.displayName().contains("org.apache.accumulo.start.Main")) {
+        LOG.info("Attempting to connect to {}", vmd.displayName());
+        try {
+          VirtualMachine vm = VirtualMachine.attach(vmd);
+          String connectorAddress = vm.getAgentProperties()
+              .getProperty("com.sun.management.jmxremote.localConnectorAddress");
+          if (connectorAddress == null) {
+            connectorAddress = vm.startLocalManagementAgent();
+            connectorAddress = vm.getAgentProperties()
+                .getProperty("com.sun.management.jmxremote.localConnectorAddress");
+          }
+          JMXServiceURL url = new JMXServiceURL(connectorAddress);
+          try (JMXConnector connector = JMXConnectorFactory.connect(url)) {
+            MBeanServerConnection mbsc = connector.getMBeanServerConnection();
+            ContextClassLoadersMXBean proxy = JMX.newMXBeanProxy(mbsc,
+                ContextClassLoadersMXBean.getObjectName(), ContextClassLoadersMXBean.class);
+            referencedFiles.addAll(proxy.getReferencedFiles());
+          }
+        } catch (Exception e) {
+          LOG.error("Error getting referenced files from {}", vmd.displayName(), e);
+        }
+      }
+    }
+    LOG.info("Referenced files: {}", referencedFiles);
+    return referencedFiles;
   }
 
   private int countExpectedValues(AccumuloClient client, String table, byte[] expectedValue)

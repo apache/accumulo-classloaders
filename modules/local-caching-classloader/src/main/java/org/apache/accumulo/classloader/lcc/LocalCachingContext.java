@@ -261,6 +261,7 @@ public final class LocalCachingContext {
           AccessController.doPrivileged((PrivilegedAction<URLClassLoader>) () -> {
             return new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
           });
+      LocalCachingContextCleaner.registerClassLoader(cl);
       classloader.set(cl);
       LOG.trace("New classloader created from URLs: {}",
           Arrays.asList(classloader.get().getURLs()));
