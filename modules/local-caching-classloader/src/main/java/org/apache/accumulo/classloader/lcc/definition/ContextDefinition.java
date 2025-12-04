@@ -152,19 +152,13 @@ public class ContextDefinition implements KeywordExecutable {
   }
 
   @Override
-  public String usage() {
-    return KeywordExecutable.super.usage();
-  }
-
-  @Override
   public String description() {
     return "Creates and prints a Context Definition";
   }
 
   @Override
   public void execute(String[] args) throws Exception {
-    Configuration hadoopConf = new Configuration();
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hadoopConf));
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(new Configuration()));
 
     Opts opts = new Opts();
     opts.parseArgs(ContextDefinition.class.getName(), args);
