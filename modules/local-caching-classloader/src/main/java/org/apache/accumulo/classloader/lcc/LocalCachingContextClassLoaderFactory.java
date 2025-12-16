@@ -91,7 +91,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   private ContextDefinition parseContextDefinition(final String contextLocation)
       throws ContextClassLoaderException {
-    LOG.trace("Retrieving context definition file from {}", contextLocation);
     URL url;
     try {
       url = new URL(contextLocation);
@@ -99,6 +98,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       throw new ContextClassLoaderException(
           "Expected valid URL to context definition file but received: " + contextLocation, e);
     }
+    LOG.trace("Retrieving context definition file from {}", contextLocation);
     final FileResolver resolver = FileResolver.resolve(url);
     try {
       try (InputStream is = resolver.getInputStream()) {
