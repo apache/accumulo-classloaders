@@ -126,11 +126,12 @@ public class LocalCachingContextTest {
     // Confirm the 3 jars are cached locally
     final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
-    assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
+    assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + def.getChecksum())));
     for (Resource r : def.getResources()) {
       String filename = TestUtils.getFileName(r.getURL());
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(base.resolve(CONTEXT_NAME).resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(
+          base.resolve(CONTEXT_NAME + "_" + def.getChecksum()).resolve(filename + "_" + checksum)));
     }
   }
 
@@ -172,17 +173,19 @@ public class LocalCachingContextTest {
 
     ContextDefinition updatedDef =
         new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
-    lcccl.update(updatedDef);
+    lcccl = new LocalCachingContext(baseCacheDir, updatedDef);
+    lcccl.initialize();
 
     // Confirm the 3 jars are cached locally
     final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
-    assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
+    assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())));
     for (Resource r : updatedDef.getResources()) {
       String filename = TestUtils.getFileName(r.getURL());
       assertFalse(filename.contains("C"));
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(base.resolve(CONTEXT_NAME).resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())
+          .resolve(filename + "_" + checksum)));
     }
 
     final ClassLoader updatedContextClassLoader = lcccl.getClassloader();

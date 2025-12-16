@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.Objects.hash;
@@ -118,7 +119,8 @@ public final class LocalCachingContext {
       throws IOException, ContextClassLoaderException {
     this.definition.set(requireNonNull(contextDefinition, "definition must be supplied"));
     this.contextName = this.definition.get().getContextName();
-    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(baseCacheDir, contextName);
+    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(baseCacheDir,
+        contextName + "_" + this.definition.get().getChecksum());
   }
 
   public ContextDefinition getDefinition() {
@@ -187,6 +189,8 @@ public final class LocalCachingContext {
       throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     try {
       LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      Files.write(contextCacheDir.resolve("definition_" + definition.get().getChecksum()),
+          definition.get().toJson().getBytes(UTF_8));
       while (lockInfo == null) {
         // something else is updating this directory
         LOG.info("Directory {} locked, another process must be updating the class loader contents. "
@@ -203,36 +207,6 @@ public final class LocalCachingContext {
       }
     } catch (Exception e) {
       LOG.error("Error initializing context: " + contextName, e);
-      throw e;
-    }
-  }
-
-  public void update(final ContextDefinition update)
-      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
-    requireNonNull(update, "definition must be supplied");
-    if (definition.get().getResources().equals(update.getResources())) {
-      return;
-    }
-    try {
-      LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-      while (lockInfo == null) {
-        // something else is updating this directory
-        LOG.info("Directory {} locked, another process must be updating the class loader contents. "
-            + "Retrying in 1 second", contextCacheDir);
-        Thread.sleep(1000);
-        lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-      }
-      synchronized (elements) {
-        try {
-          elements.clear();
-          cacheResources(update);
-          this.definition.set(update);
-        } finally {
-          lockInfo.unlock();
-        }
-      }
-    } catch (Exception e) {
-      LOG.error("Error updating context: " + contextName, e);
       throw e;
     }
   }
