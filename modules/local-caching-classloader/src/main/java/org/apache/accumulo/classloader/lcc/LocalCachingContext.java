@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.Objects.hash;
@@ -31,8 +32,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -51,6 +50,8 @@ import org.apache.accumulo.core.util.Retry;
 import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public final class LocalCachingContext {
 
@@ -118,7 +119,8 @@ public final class LocalCachingContext {
       throws IOException, ContextClassLoaderException {
     this.definition.set(requireNonNull(contextDefinition, "definition must be supplied"));
     this.contextName = this.definition.get().getContextName();
-    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(baseCacheDir, contextName);
+    this.contextCacheDir = CacheUtils.createOrGetContextCacheDir(baseCacheDir,
+        contextName + "_" + this.definition.get().getChecksum());
   }
 
   public ContextDefinition getDefinition() {
@@ -187,6 +189,8 @@ public final class LocalCachingContext {
       throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     try {
       LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
+      Files.write(contextCacheDir.resolve("definition_" + definition.get().getChecksum()),
+          definition.get().toJson().getBytes(UTF_8));
       while (lockInfo == null) {
         // something else is updating this directory
         LOG.info("Directory {} locked, another process must be updating the class loader contents. "
@@ -207,39 +211,11 @@ public final class LocalCachingContext {
     }
   }
 
-  public void update(final ContextDefinition update)
-      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
-    requireNonNull(update, "definition must be supplied");
-    if (definition.get().getResources().equals(update.getResources())) {
-      return;
-    }
-    try {
-      LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-      while (lockInfo == null) {
-        // something else is updating this directory
-        LOG.info("Directory {} locked, another process must be updating the class loader contents. "
-            + "Retrying in 1 second", contextCacheDir);
-        Thread.sleep(1000);
-        lockInfo = CacheUtils.lockContextCacheDir(contextCacheDir);
-      }
-      synchronized (elements) {
-        try {
-          elements.clear();
-          cacheResources(update);
-          this.definition.set(update);
-        } finally {
-          lockInfo.unlock();
-        }
-      }
-    } catch (Exception e) {
-      LOG.error("Error updating context: " + contextName, e);
-      throw e;
-    }
-  }
+  @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
+      justification = "doPrivileged is deprecated without replacement and removed in newer Java")
+  public URLClassLoader getClassloader() {
 
-  public ClassLoader getClassloader() {
-
-    ClassLoader currentCL = classloader.get();
+    URLClassLoader currentCL = classloader.get();
     if (currentCL != null) {
       return currentCL;
     }
@@ -258,9 +234,7 @@ public final class LocalCachingContext {
         urls[x] = iter.next().getLocalCachedCopyLocation();
       }
       final URLClassLoader cl =
-          AccessController.doPrivileged((PrivilegedAction<URLClassLoader>) () -> {
-            return new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
-          });
+          new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
       classloader.set(cl);
       LOG.trace("New classloader created from URLs: {}",
           Arrays.asList(classloader.get().getURLs()));

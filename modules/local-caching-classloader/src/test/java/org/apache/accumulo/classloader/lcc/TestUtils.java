@@ -99,9 +99,7 @@ public class TestUtils {
   }
 
   public static void testClassLoads(ClassLoader cl, TestClassInfo tci) throws Exception {
-    @SuppressWarnings("unchecked")
-    Class<? extends test.Test> clazz =
-        (Class<? extends test.Test>) cl.loadClass(tci.getClassName());
+    var clazz = cl.loadClass(tci.getClassName()).asSubclass(test.Test.class);
     test.Test impl = clazz.getDeclaredConstructor().newInstance();
     assertEquals(tci.getHelloOutput(), impl.hello());
   }
@@ -166,7 +164,8 @@ public class TestUtils {
     return jetty;
   }
 
-  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD")
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
   public static String computeResourceChecksum(URL resourceLocation) throws IOException {
     try (InputStream is = resourceLocation.openStream()) {
       return Constants.getChecksummer().digestAsHex(is);

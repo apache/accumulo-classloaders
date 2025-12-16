@@ -16,32 +16,16 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.resolvers;
+package org.apache.accumulo.classloader.lcc;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URL;
+import static java.util.Objects.requireNonNull;
 
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+public class WrappedException extends RuntimeException {
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+  private static final long serialVersionUID = 1L;
 
-public final class HttpFileResolver extends FileResolver {
-
-  protected HttpFileResolver(URL url) throws ContextClassLoaderException {
-    super(url);
+  public WrappedException(final Exception e) {
+    super(requireNonNull(e));
   }
 
-  @Override
-  public String getFileName() {
-    String path = getURL().getPath();
-    return path.substring(path.lastIndexOf("/") + 1);
-  }
-
-  @Override
-  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
-      justification = "user-supplied URL is the intended functionality")
-  public InputStream getInputStream() throws IOException {
-    return getURL().openStream();
-  }
 }

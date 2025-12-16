@@ -28,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.nio.file.Files;
-import java.util.TreeSet;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -91,7 +92,7 @@ public class LocalCachingContextTest {
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
     // Create ContextDefinition with all three resources
-    final TreeSet<Resource> resources = new TreeSet<>();
+    final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(new Resource(jarAOrigLocation.toString(),
         TestUtils.computeResourceChecksum(jarAOrigLocation)));
     resources.add(new Resource(jarBNewLocation.toString(),
@@ -125,11 +126,12 @@ public class LocalCachingContextTest {
     // Confirm the 3 jars are cached locally
     final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
-    assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
+    assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + def.getChecksum())));
     for (Resource r : def.getResources()) {
       String filename = TestUtils.getFileName(r.getURL());
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(base.resolve(CONTEXT_NAME).resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(
+          base.resolve(CONTEXT_NAME + "_" + def.getChecksum()).resolve(filename + "_" + checksum)));
     }
   }
 
@@ -157,9 +159,10 @@ public class LocalCachingContextTest {
     testClassLoads(contextClassLoader, classB);
     testClassLoads(contextClassLoader, classC);
 
-    TreeSet<Resource> updatedResources = new TreeSet<>(def.getResources());
-    assertEquals(3, updatedResources.size());
-    updatedResources.remove(updatedResources.last()); // remove C
+    // keep all but C
+    var updatedResources = def.getResources().stream().limit(def.getResources().size() - 1)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+    assertEquals(def.getResources().size() - 1, updatedResources.size());
 
     // Add D
     final URL jarDOrigLocation =
@@ -170,17 +173,19 @@ public class LocalCachingContextTest {
 
     ContextDefinition updatedDef =
         new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
-    lcccl.update(updatedDef);
+    lcccl = new LocalCachingContext(baseCacheDir, updatedDef);
+    lcccl.initialize();
 
     // Confirm the 3 jars are cached locally
     final java.nio.file.Path base = java.nio.file.Path.of(tempDir.resolve("base").toUri());
     assertTrue(Files.exists(base));
-    assertTrue(Files.exists(base.resolve(CONTEXT_NAME)));
+    assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())));
     for (Resource r : updatedDef.getResources()) {
       String filename = TestUtils.getFileName(r.getURL());
       assertFalse(filename.contains("C"));
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(base.resolve(CONTEXT_NAME).resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(base.resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())
+          .resolve(filename + "_" + checksum)));
     }
 
     final ClassLoader updatedContextClassLoader = lcccl.getClassloader();

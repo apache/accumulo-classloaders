@@ -24,9 +24,10 @@ import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Objects;
-import java.util.TreeSet;
+import java.util.Set;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
@@ -34,14 +35,11 @@ import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClas
 
 import com.google.common.base.Preconditions;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
-@SuppressFBWarnings(value = {"EI_EXPOSE_REP"})
 public class ContextDefinition {
 
   public static ContextDefinition create(String contextName, int monitorIntervalSecs,
       URL... sources) throws ContextClassLoaderException, IOException {
-    TreeSet<Resource> resources = new TreeSet<>();
+    LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
       try (InputStream is = resolver.getInputStream()) {
@@ -54,13 +52,13 @@ public class ContextDefinition {
 
   private String contextName;
   private volatile int monitorIntervalSeconds;
-  private TreeSet<Resource> resources;
-  private volatile transient byte[] checksum = null;
+  private LinkedHashSet<Resource> resources;
+  private volatile transient String checksum = null;
 
   public ContextDefinition() {}
 
   public ContextDefinition(String contextName, int monitorIntervalSeconds,
-      TreeSet<Resource> resources) {
+      LinkedHashSet<Resource> resources) {
     this.contextName = requireNonNull(contextName, "context name must be supplied");
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
@@ -76,20 +74,8 @@ public class ContextDefinition {
     return monitorIntervalSeconds;
   }
 
-  public TreeSet<Resource> getResources() {
-    return resources;
-  }
-
-  public void setContextName(String contextName) {
-    this.contextName = contextName;
-  }
-
-  public void setMonitorIntervalSeconds(int monitorIntervalSeconds) {
-    this.monitorIntervalSeconds = monitorIntervalSeconds;
-  }
-
-  public void setResources(TreeSet<Resource> resources) {
-    this.resources = resources;
+  public Set<Resource> getResources() {
+    return Collections.unmodifiableSet(resources);
   }
 
   @Override
@@ -114,9 +100,9 @@ public class ContextDefinition {
         && Objects.equals(resources, other.resources);
   }
 
-  public synchronized byte[] getChecksum() throws NoSuchAlgorithmException {
+  public synchronized String getChecksum() {
     if (checksum == null) {
-      checksum = Constants.getChecksummer().digest(toJson());
+      checksum = Constants.getChecksummer().digestAsHex(toJson());
     }
     return checksum;
   }
