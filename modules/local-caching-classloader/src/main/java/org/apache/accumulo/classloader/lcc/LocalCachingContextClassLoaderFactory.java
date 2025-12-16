@@ -27,15 +27,18 @@ import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.security.NoSuchAlgorithmException;
+import java.net.URLClassLoader;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
+import org.apache.accumulo.classloader.lcc.cache.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
@@ -45,8 +48,6 @@ import org.apache.accumulo.core.util.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Preconditions;
 
 /**
@@ -80,16 +81,24 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final Cache<String,LocalCachingContext> contexts =
-      Caffeine.newBuilder().expireAfterAccess(24, TimeUnit.HOURS).build();
+  private final DeduplicationCache<String,LocalCachingContext,URLClassLoader> classloaders =
+      new DeduplicationCache<>((String key, LocalCachingContext lcc) -> lcc.getClassloader(),
+          Duration.ofHours(24));
 
   private final Map<String,Timer> classloaderFailures = new HashMap<>();
   private volatile String baseCacheDir;
   private volatile Duration updateFailureGracePeriodMins;
 
-  private ContextDefinition parseContextDefinition(final URL url)
+  private ContextDefinition parseContextDefinition(final String contextLocation)
       throws ContextClassLoaderException {
-    LOG.trace("Retrieving context definition file from {}", url);
+    LOG.trace("Retrieving context definition file from {}", contextLocation);
+    URL url;
+    try {
+      url = new URL(contextLocation);
+    } catch (MalformedURLException e) {
+      throw new ContextClassLoaderException(
+          "Expected valid URL to context definition file but received: " + contextLocation, e);
+    }
     final FileResolver resolver = FileResolver.resolve(url);
     try {
       try (InputStream is = resolver.getInputStream()) {
@@ -113,21 +122,30 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
    * (if it changed).
    */
   private void monitorContext(final String contextLocation, int interval) {
-    Constants.EXECUTOR.schedule(() -> {
-      final LocalCachingContext classLoader =
-          contexts.policy().getIfPresentQuietly(contextLocation);
-      if (classLoader == null) {
+    final Runnable updateTask = () -> {
+      ContextDefinition currentDef = contextDefs.compute(contextLocation, (k, v) -> {
+        if (v == null) {
+          return null;
+        }
+        if (!classloaders
+            .anyMatch(k2 -> k2.substring(0, k2.lastIndexOf('-')).equals(v.getContextName()))) {
+          // context has been removed from the map, no need to check for update
+          LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
+              contextLocation);
+          return null;
+        }
+        return v;
+      });
+      if (currentDef == null) {
         // context has been removed from the map, no need to check for update
-        LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
+        LOG.debug("ContextDefinition for context {} not present, no longer monitoring for changes",
             contextLocation);
         return;
       }
       int nextInterval = interval;
-      final ContextDefinition currentDef = classLoader.getDefinition();
       try {
-        final URL contextLocationUrl = new URL(contextLocation);
-        final ContextDefinition update = parseContextDefinition(contextLocationUrl);
-        if (!Arrays.equals(currentDef.getChecksum(), update.getChecksum())) {
+        final ContextDefinition update = parseContextDefinition(contextLocation);
+        if (!currentDef.getChecksum().equals(update.getChecksum())) {
           LOG.debug("Context definition for {} has changed", contextLocation);
           if (!currentDef.getContextName().equals(update.getContextName())) {
             LOG.warn(
@@ -135,14 +153,16 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
                 contextLocation, currentDef.getContextName(), currentDef.getContextName(),
                 update.getContextName());
           }
-          classLoader.update(update);
+          LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, update);
+          newCcl.initialize();
+          contextDefs.put(contextLocation, update);
           nextInterval = update.getMonitorIntervalSeconds();
           classloaderFailures.remove(contextLocation);
         } else {
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
-      } catch (ContextClassLoaderException | InterruptedException | IOException
-          | NoSuchAlgorithmException | URISyntaxException | RuntimeException e) {
+      } catch (ContextClassLoaderException | InterruptedException | IOException | URISyntaxException
+          | RuntimeException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
         final Timer failureTimer = classloaderFailures.get(contextLocation);
@@ -162,7 +182,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           // will return from getClassLoader in the calling thread
           LOG.info("Grace period for failing classloader has elapsed for context {}",
               contextLocation);
-          contexts.invalidate(contextLocation);
+          contextDefs.remove(contextLocation);
           classloaderFailures.remove(contextLocation);
         } else {
           LOG.trace("Failing to update classloader for context {} within the grace period",
@@ -171,7 +191,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } finally {
         monitorContext(contextLocation, nextInterval);
       }
-    }, interval, TimeUnit.SECONDS);
+    };
+    Constants.EXECUTOR.schedule(updateTask, interval, TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
         contextLocation, interval);
   }
@@ -180,8 +201,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   void resetForTests() {
     // Removing the contexts will cause the
     // background monitor task to end
-    contexts.invalidateAll();
-    contexts.cleanUp();
+    contextDefs.clear();
   }
 
   @Override
@@ -198,47 +218,58 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
   }
 
+  ConcurrentHashMap<String,ContextDefinition> contextDefs = new ConcurrentHashMap<>();
+
   @Override
   public ClassLoader getClassLoader(final String contextLocation)
       throws ContextClassLoaderException {
     Preconditions.checkState(baseCacheDir != null, "init not called before calling getClassLoader");
     requireNonNull(contextLocation, "context name must be supplied");
+    final AtomicBoolean newlyCreated = new AtomicBoolean(false);
+    final AtomicReference<URLClassLoader> cl = new AtomicReference<>();
+    ContextDefinition def;
     try {
-      final URL contextLocationUrl = new URL(contextLocation);
-      final AtomicBoolean newlyCreated = new AtomicBoolean(false);
-      final LocalCachingContext ccl = contexts.get(contextLocation, cn -> {
-        try {
-          ContextDefinition def = parseContextDefinition(contextLocationUrl);
-          LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, def);
-          newCcl.initialize();
+      def = contextDefs.compute(contextLocation, (k, v) -> {
+        ContextDefinition def2;
+        if (v == null) {
           newlyCreated.set(true);
-          return newCcl;
-        } catch (Exception e) {
-          throw new RuntimeException("Error creating context classloader", e);
-        }
-      });
-      if (newlyCreated.get()) {
-        monitorContext(contextLocation, ccl.getDefinition().getMonitorIntervalSeconds());
-      }
-      return ccl.getClassloader();
-    } catch (MalformedURLException e) {
-      throw new ContextClassLoaderException(
-          "Expected valid URL to context definition file but received: " + contextLocation, e);
-    } catch (RuntimeException re) {
-      Throwable t = re.getCause();
-      if (t != null && t instanceof InterruptedException) {
-        Thread.currentThread().interrupt();
-      }
-      if (t != null) {
-        if (t instanceof ContextClassLoaderException) {
-          throw (ContextClassLoaderException) t;
+          try {
+            def2 = parseContextDefinition(k);
+          } catch (ContextClassLoaderException e) {
+            throw new WrappedException(e);
+          }
         } else {
-          throw new ContextClassLoaderException(t.getMessage(), t);
+          def2 = v;
         }
-      } else {
-        throw new ContextClassLoaderException(re.getMessage(), re);
+        final URLClassLoader cl2 =
+            classloaders.computeIfAbsent(def2.getContextName() + "-" + def2.getChecksum(),
+                (Supplier<LocalCachingContext>) () -> {
+                  try {
+                    LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, def2);
+                    newCcl.initialize();
+                    return newCcl;
+                  } catch (Exception e) {
+                    throw new WrappedException(e);
+                  }
+                });
+        cl.set(cl2);
+        return def2;
+      });
+    } catch (WrappedException e) {
+      Throwable t = e.getCause();
+      if (t instanceof InterruptedException) {
+        Thread.currentThread().interrupt();
+      } else if (t instanceof ContextClassLoaderException) {
+        throw (ContextClassLoaderException) t;
       }
+      throw new ContextClassLoaderException(t.getMessage(), t);
+    } catch (RuntimeException e) {
+      throw new ContextClassLoaderException(e.getMessage(), e);
     }
+    if (newlyCreated.get()) {
+      monitorContext(contextLocation, def.getMonitorIntervalSeconds());
+    }
+    return cl.get();
   }
 
 }

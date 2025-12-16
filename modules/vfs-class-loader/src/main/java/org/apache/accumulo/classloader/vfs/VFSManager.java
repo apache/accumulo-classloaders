@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.vfs2.CacheStrategy;
@@ -50,6 +51,7 @@ public class VFSManager {
     }
   }
 
+  private static final AtomicBoolean initialized = new AtomicBoolean(false);
   private static DefaultFileSystemManager VFS = null;
   private static volatile boolean DEBUG = false;
 
@@ -145,7 +147,7 @@ public class VFSManager {
   }
 
   public static void initialize() throws FileSystemException {
-    if (null == VFS) {
+    if (initialized.compareAndSet(false, true)) {
       VFS = new DefaultFileSystemManager();
       VFS.addProvider("res", new org.apache.commons.vfs2.provider.res.ResourceFileProvider());
       VFS.addProvider("zip", new org.apache.commons.vfs2.provider.zip.ZipFileProvider());

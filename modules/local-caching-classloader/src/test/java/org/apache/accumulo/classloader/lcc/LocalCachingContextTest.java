@@ -28,7 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URL;
 import java.nio.file.Files;
-import java.util.TreeSet;
+import java.util.LinkedHashSet;
+import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -91,7 +92,7 @@ public class LocalCachingContextTest {
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
     // Create ContextDefinition with all three resources
-    final TreeSet<Resource> resources = new TreeSet<>();
+    final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(new Resource(jarAOrigLocation.toString(),
         TestUtils.computeResourceChecksum(jarAOrigLocation)));
     resources.add(new Resource(jarBNewLocation.toString(),
@@ -157,9 +158,10 @@ public class LocalCachingContextTest {
     testClassLoads(contextClassLoader, classB);
     testClassLoads(contextClassLoader, classC);
 
-    TreeSet<Resource> updatedResources = new TreeSet<>(def.getResources());
-    assertEquals(3, updatedResources.size());
-    updatedResources.remove(updatedResources.last()); // remove C
+    // keep all but C
+    var updatedResources = def.getResources().stream().limit(def.getResources().size() - 1)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+    assertEquals(def.getResources().size() - 1, updatedResources.size());
 
     // Add D
     final URL jarDOrigLocation =

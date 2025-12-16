@@ -31,8 +31,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -51,6 +49,8 @@ import org.apache.accumulo.core.util.Retry;
 import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public final class LocalCachingContext {
 
@@ -237,9 +237,11 @@ public final class LocalCachingContext {
     }
   }
 
-  public ClassLoader getClassloader() {
+  @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
+      justification = "doPrivileged is deprecated without replacement and removed in newer Java")
+  public URLClassLoader getClassloader() {
 
-    ClassLoader currentCL = classloader.get();
+    URLClassLoader currentCL = classloader.get();
     if (currentCL != null) {
       return currentCL;
     }
@@ -258,9 +260,7 @@ public final class LocalCachingContext {
         urls[x] = iter.next().getLocalCachedCopyLocation();
       }
       final URLClassLoader cl =
-          AccessController.doPrivileged((PrivilegedAction<URLClassLoader>) () -> {
-            return new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
-          });
+          new URLClassLoader(contextName, urls, this.getClass().getClassLoader());
       classloader.set(cl);
       LOG.trace("New classloader created from URLs: {}",
           Arrays.asList(classloader.get().getURLs()));

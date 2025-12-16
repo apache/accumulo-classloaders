@@ -42,14 +42,6 @@ public class Resource implements Comparable<Resource> {
     return checksum;
   }
 
-  public void setLocation(String location) {
-    this.location = location;
-  }
-
-  public void setChecksum(String checksum) {
-    this.checksum = checksum;
-  }
-
   public URL getURL() throws MalformedURLException {
     return new URL(location);
   }
