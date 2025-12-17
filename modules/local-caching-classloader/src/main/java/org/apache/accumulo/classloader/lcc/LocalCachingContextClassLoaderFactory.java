@@ -28,6 +28,7 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,10 +39,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
-import org.apache.accumulo.classloader.lcc.cache.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
+import org.apache.accumulo.classloader.lcc.util.URLClassLoaderHelper;
+import org.apache.accumulo.classloader.lcc.util.WrappedException;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.accumulo.core.util.Timer;
@@ -81,12 +84,13 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final DeduplicationCache<String,LocalCachingContext,URLClassLoader> classloaders =
-      new DeduplicationCache<>((String key, LocalCachingContext lcc) -> lcc.getClassloader(),
+  private final DeduplicationCache<String,URLClassLoaderHelper,
+      URLClassLoader> classloaders = new DeduplicationCache<>(
+          (String key, URLClassLoaderHelper helper) -> helper.createClassLoader(),
           Duration.ofHours(24));
 
   private final Map<String,Timer> classloaderFailures = new HashMap<>();
-  private volatile String baseCacheDir;
+  private volatile Path baseCacheDir;
   private volatile Duration updateFailureGracePeriodMins;
 
   private ContextDefinition parseContextDefinition(final String contextLocation)
@@ -153,8 +157,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
                 contextLocation, currentDef.getContextName(), currentDef.getContextName(),
                 update.getContextName());
           }
-          LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, update);
-          newCcl.initialize();
+          CacheUtils.stageContext(baseCacheDir, update);
           contextDefs.put(contextLocation, update);
           nextInterval = update.getMonitorIntervalSeconds();
           classloaderFailures.remove(contextLocation);
@@ -206,15 +209,23 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   @Override
   public void init(ContextClassLoaderEnvironment env) {
-    baseCacheDir = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY),
+    String value = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY),
         "Property " + Constants.CACHE_DIR_PROPERTY + " not set, cannot create cache directory.");
     String graceProp = env.getConfiguration().get(Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS);
     long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
     updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
     try {
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-    } catch (IOException | ContextClassLoaderException e) {
-      throw new IllegalStateException("Error creating base cache directory at " + baseCacheDir, e);
+      if (value.startsWith("file:")) {
+        baseCacheDir = Path.of(new URL(value).toURI());
+      } else if (value.startsWith("/")) {
+        baseCacheDir = Path.of(value);
+      } else {
+        throw new ContextClassLoaderException(
+            "Base directory is neither a file URL nor an absolute file path");
+      }
+      CacheUtils.createBaseDirs(baseCacheDir);
+    } catch (IOException | URISyntaxException | ContextClassLoaderException e) {
+      throw new IllegalStateException("Error creating base cache directory at " + value, e);
     }
   }
 
@@ -243,11 +254,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         }
         final URLClassLoader cl2 =
             classloaders.computeIfAbsent(def2.getContextName() + "-" + def2.getChecksum(),
-                (Supplier<LocalCachingContext>) () -> {
+                (Supplier<URLClassLoaderHelper>) () -> {
                   try {
-                    LocalCachingContext newCcl = new LocalCachingContext(baseCacheDir, def2);
-                    newCcl.initialize();
-                    return newCcl;
+                    return CacheUtils.stageContext(baseCacheDir, def2);
                   } catch (Exception e) {
                     throw new WrappedException(e);
                   }

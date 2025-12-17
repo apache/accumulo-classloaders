@@ -44,7 +44,7 @@ public class ContextDefinition {
       FileResolver resolver = FileResolver.resolve(u);
       try (InputStream is = resolver.getInputStream()) {
         String checksum = Constants.getChecksummer().digestAsHex(is);
-        resources.add(new Resource(u.toString(), checksum));
+        resources.add(new Resource(u, checksum));
       }
     }
     return new ContextDefinition(contextName, monitorIntervalSecs, resources);

@@ -18,19 +18,37 @@
  */
 package org.apache.accumulo.classloader.lcc.cache;
 
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
+import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
+import java.net.URL;
 import java.nio.file.Files;
-import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
+import org.apache.accumulo.classloader.lcc.TestUtils;
+import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
+import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
+import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.eclipse.jetty.server.Server;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -38,82 +56,122 @@ import org.junit.jupiter.api.io.TempDir;
 public class CacheUtilsTest {
 
   @TempDir
-  private static Path tempDir;
+  private static java.nio.file.Path tempDir;
 
-  private static String baseCacheDir = null;
+  private static final String CONTEXT_NAME = "TEST_CONTEXT";
+  private static final int MONITOR_INTERVAL_SECS = 5;
+  private static MiniDFSCluster hdfs;
+  private static Server jetty;
+  private static ContextDefinition def;
+  private static TestClassInfo classA;
+  private static TestClassInfo classB;
+  private static TestClassInfo classC;
+  private static TestClassInfo classD;
+  private static java.nio.file.Path baseCacheDir = null;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    baseCacheDir = tempDir.resolve("base").toUri().toString();
+    baseCacheDir = tempDir.resolve("base");
+
+    // Find the Test jar files
+    final URL jarAOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+    assertNotNull(jarAOrigLocation);
+    final URL jarBOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+    assertNotNull(jarBOrigLocation);
+    final URL jarCOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+    assertNotNull(jarCOrigLocation);
+
+    // Put B into HDFS
+    hdfs = TestUtils.getMiniCluster();
+    final FileSystem fs = hdfs.getFileSystem();
+    assertTrue(fs.mkdirs(new Path("/contextB")));
+    final Path dst = new Path("/contextB/TestB.jar");
+    fs.copyFromLocalFile(new Path(jarBOrigLocation.toURI()), dst);
+    assertTrue(fs.exists(dst));
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
+    final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
+
+    // Put C into Jetty
+    java.nio.file.Path jarCParentDirectory =
+        java.nio.file.Path.of(jarCOrigLocation.toURI()).getParent();
+    jetty = TestUtils.getJetty(jarCParentDirectory);
+    final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
+
+    // Create ContextDefinition with all three resources
+    final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
+    resources
+        .add(new Resource(jarAOrigLocation, TestUtils.computeResourceChecksum(jarAOrigLocation)));
+    resources
+        .add(new Resource(jarBNewLocation, TestUtils.computeResourceChecksum(jarBOrigLocation)));
+    resources
+        .add(new Resource(jarCNewLocation, TestUtils.computeResourceChecksum(jarCOrigLocation)));
+
+    def = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, resources);
+    classA = new TestClassInfo("test.TestObjectA", "Hello from A");
+    classB = new TestClassInfo("test.TestObjectB", "Hello from B");
+    classC = new TestClassInfo("test.TestObjectC", "Hello from C");
+    classD = new TestClassInfo("test.TestObjectD", "Hello from D");
+  }
+
+  @AfterAll
+  public static void afterAll() throws Exception {
+    if (jetty != null) {
+      jetty.stop();
+      jetty.join();
+    }
+    if (hdfs != null) {
+      hdfs.shutdown();
+    }
+  }
+
+  @AfterEach
+  public void cleanBaseDir() throws Exception {
+    if (Files.exists(baseCacheDir)) {
+      try (var walker = Files.walk(baseCacheDir)) {
+        walker.map(java.nio.file.Path::toFile).sorted(Comparator.reverseOrder())
+            .forEach(File::delete);
+      }
+    }
   }
 
   @Test
   public void testPropertyNotSet() {
-    ContextClassLoaderException ex =
-        assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseCacheDir(null));
+    var ex = assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseDirs(null));
     assertEquals("Error getting classloader for context: received null for cache directory",
         ex.getMessage());
   }
 
   @Test
-  public void testCreateBaseDir() throws Exception {
-    final Path base = Path.of(tempDir.resolve("base").toUri());
-    try {
-      assertFalse(Files.exists(base));
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-      assertTrue(Files.exists(base));
-    } finally {
-      Files.delete(base);
-    }
+  public void testCreateBaseDirs() throws Exception {
+    assertFalse(Files.exists(baseCacheDir));
+    CacheUtils.createBaseDirs(baseCacheDir);
+    assertTrue(Files.exists(baseCacheDir));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts")));
+    assertTrue(Files.exists(baseCacheDir.resolve("resources")));
+    assertEquals(baseCacheDir.resolve("contexts"), CacheUtils.contextsDir(baseCacheDir));
+    assertEquals(baseCacheDir.resolve("resources"), CacheUtils.resourcesDir(baseCacheDir));
   }
 
   @Test
-  public void testCreateBaseDirMultipleTimes() throws Exception {
-    final Path base = Path.of(tempDir.resolve("base").toUri());
-    try {
-      assertFalse(Files.exists(base));
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-      CacheUtils.createBaseCacheDir(baseCacheDir);
-      assertTrue(Files.exists(base));
-    } finally {
-      Files.delete(base);
-    }
-  }
-
-  @Test
-  public void createOrGetContextCacheDir() throws Exception {
-    final Path base = Path.of(tempDir.resolve("base").toUri());
-    try {
-      assertFalse(Files.exists(base));
-      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
-      assertTrue(Files.exists(base));
-      assertTrue(Files.exists(base.resolve("context1")));
-      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context2");
-      assertTrue(Files.exists(base));
-      assertTrue(Files.exists(base.resolve("context2")));
-      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
-      assertTrue(Files.exists(base));
-      assertTrue(Files.exists(base.resolve("context1")));
-    } finally {
-      Files.delete(base.resolve("context1"));
-      Files.delete(base.resolve("context2"));
-      Files.delete(base);
-    }
+  public void testCreateBaseDirsMultipleTimes() throws Exception {
+    assertFalse(Files.exists(baseCacheDir));
+    CacheUtils.createBaseDirs(baseCacheDir);
+    CacheUtils.createBaseDirs(baseCacheDir);
+    CacheUtils.createBaseDirs(baseCacheDir);
+    CacheUtils.createBaseDirs(baseCacheDir);
+    assertTrue(Files.exists(baseCacheDir));
   }
 
   @Test
   public void testLock() throws Exception {
-    final Path base = Path.of(tempDir.resolve("base").toUri());
-    final Path cx1 = base.resolve("context1");
+    final java.nio.file.Path contextsDir = baseCacheDir.resolve("contexts");
     try {
-      assertFalse(Files.exists(base));
-      CacheUtils.createOrGetContextCacheDir(baseCacheDir, "context1");
-      assertTrue(Files.exists(base));
-      assertTrue(Files.exists(cx1));
+      assertFalse(Files.exists(baseCacheDir));
+      CacheUtils.createBaseDirs(baseCacheDir);
+      assertTrue(Files.exists(baseCacheDir));
+      assertTrue(Files.exists(contextsDir));
 
-      final LockInfo lockInfo = CacheUtils.lockContextCacheDir(cx1);
+      final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextsDir);
       try {
         assertNotNull(lockInfo);
         assertTrue(lockInfo.getLock().acquiredBy().equals(lockInfo.getChannel()));
@@ -124,7 +182,7 @@ public class CacheUtilsTest {
         final AtomicReference<Throwable> error = new AtomicReference<>();
         final Thread t = new Thread(() -> {
           try {
-            assertNull(CacheUtils.lockContextCacheDir(cx1));
+            assertNull(CacheUtils.lockContextCacheDir(contextsDir));
           } catch (ContextClassLoaderException e) {
             error.set(e);
           }
@@ -137,11 +195,78 @@ public class CacheUtilsTest {
         lockInfo.unlock();
       }
     } finally {
-      Files.delete(cx1.resolve("lock_file"));
-      Files.delete(cx1);
-      Files.delete(base);
+      Files.delete(contextsDir.resolve("lock_file"));
     }
 
+  }
+
+  @Test
+  public void testInitialize() throws Exception {
+    CacheUtils.stageContext(baseCacheDir, def);
+
+    // Confirm the 3 jars are cached locally
+    assertTrue(Files.exists(baseCacheDir));
+    assertTrue(Files
+        .exists(baseCacheDir.resolve("contexts").resolve(CONTEXT_NAME + "_" + def.getChecksum())));
+    for (Resource r : def.getResources()) {
+      String filename = TestUtils.getFileName(r.getLocation());
+      String checksum = r.getChecksum();
+      assertTrue(
+          Files.exists(baseCacheDir.resolve("resources").resolve(filename + "_" + checksum)));
+    }
+  }
+
+  @Test
+  public void testClassLoader() throws Exception {
+    var helper = CacheUtils.stageContext(baseCacheDir, def);
+    ClassLoader contextClassLoader = helper.createClassLoader();
+
+    testClassLoads(contextClassLoader, classA);
+    testClassLoads(contextClassLoader, classB);
+    testClassLoads(contextClassLoader, classC);
+  }
+
+  @Test
+  public void testUpdate() throws Exception {
+    var helper = CacheUtils.stageContext(baseCacheDir, def);
+    final ClassLoader contextClassLoader = helper.createClassLoader();
+
+    testClassLoads(contextClassLoader, classA);
+    testClassLoads(contextClassLoader, classB);
+    testClassLoads(contextClassLoader, classC);
+
+    // keep all but C
+    var updatedResources = def.getResources().stream().limit(def.getResources().size() - 1)
+        .collect(Collectors.toCollection(LinkedHashSet::new));
+    assertEquals(def.getResources().size() - 1, updatedResources.size());
+
+    // Add D
+    final URL jarDOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+    assertNotNull(jarDOrigLocation);
+    updatedResources
+        .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
+
+    var updatedDef = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
+    helper = CacheUtils.stageContext(baseCacheDir, updatedDef);
+
+    // Confirm the 3 jars are cached locally
+    assertTrue(Files.exists(
+        baseCacheDir.resolve("contexts").resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())));
+    for (Resource r : updatedDef.getResources()) {
+      String filename = TestUtils.getFileName(r.getLocation());
+      assertFalse(filename.contains("C"));
+      String checksum = r.getChecksum();
+      assertTrue(
+          Files.exists(baseCacheDir.resolve("resources").resolve(filename + "_" + checksum)));
+    }
+
+    final ClassLoader updatedContextClassLoader = helper.createClassLoader();
+
+    assertNotEquals(contextClassLoader, updatedContextClassLoader);
+    testClassLoads(updatedContextClassLoader, classA);
+    testClassLoads(updatedContextClassLoader, classB);
+    testClassFailsToLoad(updatedContextClassLoader, classC);
+    testClassLoads(updatedContextClassLoader, classD);
   }
 
 }

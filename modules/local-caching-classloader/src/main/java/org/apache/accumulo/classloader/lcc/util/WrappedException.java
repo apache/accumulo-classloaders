@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc;
+package org.apache.accumulo.classloader.lcc.util;
 
 import static java.util.Objects.requireNonNull;
 

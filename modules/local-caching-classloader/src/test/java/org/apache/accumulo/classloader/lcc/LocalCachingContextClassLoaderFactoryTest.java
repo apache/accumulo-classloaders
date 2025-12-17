@@ -58,6 +58,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import com.google.gson.JsonSyntaxException;
+
 public class LocalCachingContextClassLoaderFactoryTest {
 
   private static final LocalCachingContextClassLoaderFactory FACTORY =
@@ -84,10 +86,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    String baseCacheDir = tempDir.resolve("base").toUri().toString();
+    java.nio.file.Path baseCacheDir = tempDir.resolve("base");
 
-    ConfigurationCopy acuConf =
-        new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY, baseCacheDir));
+    ConfigurationCopy acuConf = new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY,
+        baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
     FACTORY.init(() -> new ConfigurationImpl(acuConf));
 
     // Find the Test jar files
@@ -194,7 +196,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @Test
   public void testInvalidContextDefinitionURL() {
-    ContextClassLoaderException ex =
+    var ex =
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
     assertEquals("Error getting classloader for context: Expected valid URL to context definition "
         + "file but received: /not/a/URL", ex.getMessage());
@@ -206,7 +208,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final Path def = createContextDefinitionFile(fs, "EmptyContextDefinitionFile.json", null);
     final URL emptyDefUrl = new URL(fs.getUri().toString() + def.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyDefUrl.toString()));
     assertEquals(
         "Error getting classloader for context: ContextDefinition null for context definition "
@@ -224,7 +226,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         def.toJson().substring(0, 4));
     final URL invalidDefUrl = new URL(fs.getUri().toString() + invalid.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidDefUrl.toString()));
     assertTrue(
         ex.getMessage().startsWith(
@@ -269,36 +271,39 @@ public class LocalCachingContextClassLoaderFactoryTest {
         "InitialContextDefinitionFileMissingResource.json", def.toJson());
     final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
     assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
   }
 
   @Test
   public void testInitialBadResourceURL() throws Exception {
-    // remove the file:// prefix from the URL
-    Resource r = new Resource(jarAOrigLocation.toString().substring(6), "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources.add(r);
+    resources.add(new Resource(jarAOrigLocation, "1234"));
 
-    ContextDefinition def = new ContextDefinition("initial", MONITOR_INTERVAL_SECS, resources);
+    // remove the file:// prefix from the URL
+    String goodJson = new ContextDefinition("initial", MONITOR_INTERVAL_SECS, resources).toJson();
+    String badJson =
+        goodJson.replace(jarAOrigLocation.toString(), jarAOrigLocation.toString().substring(6));
+    assertNotEquals(goodJson, badJson);
 
-    final Path initial = createContextDefinitionFile(fs,
-        "InitialContextDefinitionBadResourceURL.json", def.toJson());
+    final Path initial =
+        createContextDefinitionFile(fs, "InitialContextDefinitionBadResourceURL.json", badJson);
     final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
-    assertTrue(ex.getMessage().startsWith("Error getting classloader for context: no protocol"),
+    assertTrue(ex.getMessage().startsWith("Error getting classloader for context:"),
         ex::getMessage);
-    Throwable t = ex.getCause();
-    assertTrue(t instanceof MalformedURLException);
-    assertTrue(t.getMessage().startsWith("no protocol"));
+    assertTrue(ex.getCause() instanceof JsonSyntaxException);
+    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
+    assertTrue(ex.getCause().getCause().getMessage().startsWith("no protocol"),
+        ex.getCause().getCause()::getMessage);
   }
 
   @Test
   public void testInitialBadResourceChecksum() throws Exception {
-    Resource r = new Resource(jarAOrigLocation.toString(), "1234");
+    Resource r = new Resource(jarAOrigLocation, "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
@@ -308,7 +313,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         "InitialContextDefinitionBadResourceChecksum.json", def.toJson());
     final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
     assertTrue(ex.getMessage().startsWith("Error getting classloader for context: Checksum"));
     Throwable t = ex.getCause();
@@ -477,7 +482,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classC);
     testClassFailsToLoad(cl, classD);
 
-    Resource r = new Resource(jarAOrigLocation.toString(), "1234");
+    Resource r = new Resource(jarAOrigLocation, "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
@@ -514,13 +519,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classD);
 
     // remove the file:// prefix from the URL
-    Resource r = new Resource(jarAOrigLocation.toString().substring(6), "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources.add(r);
+    resources.add(new Resource(jarAOrigLocation, "1234"));
+    String goodJson = new ContextDefinition("initial", MONITOR_INTERVAL_SECS, resources).toJson();
+    String badJson =
+        goodJson.replace(jarAOrigLocation.toString(), jarAOrigLocation.toString().substring(6));
+    assertNotEquals(goodJson, badJson);
 
-    ContextDefinition def2 = new ContextDefinition("initial", MONITOR_INTERVAL_SECS, resources);
-
-    updateContextDefinitionFile(fs, defFilePath, def2.toJson());
+    updateContextDefinitionFile(fs, defFilePath, badJson);
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -709,7 +715,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // Wait 2 minutes for grace period to expire
     Thread.sleep(120_000);
 
-    ContextClassLoaderException ex = assertThrows(ContextClassLoaderException.class,
+    var ex = assertThrows(ContextClassLoaderException.class,
         () -> localFactory.getClassLoader(updateDefUrl.toString()));
     assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
 
