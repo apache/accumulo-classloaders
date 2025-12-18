@@ -38,12 +38,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
-import org.apache.accumulo.classloader.lcc.cache.CacheUtils;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
-import org.apache.accumulo.classloader.lcc.util.URLClassLoaderHelper;
+import org.apache.accumulo.classloader.lcc.util.LocalStore;
+import org.apache.accumulo.classloader.lcc.util.URLClassLoaderParams;
 import org.apache.accumulo.classloader.lcc.util.WrappedException;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
@@ -84,13 +84,18 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final DeduplicationCache<String,URLClassLoaderHelper,
+  // stores the latest seen ContextDefinition for a context name
+  private final ConcurrentHashMap<String,ContextDefinition> contextDefs = new ConcurrentHashMap<>();
+
+  // to keep this coherent with the contextDefs, updates to this should be done in the compute
+  // method of contextDefs
+  private final DeduplicationCache<String,URLClassLoaderParams,
       URLClassLoader> classloaders = new DeduplicationCache<>(
-          (String key, URLClassLoaderHelper helper) -> helper.createClassLoader(),
+          (String key, URLClassLoaderParams helper) -> helper.createClassLoader(),
           Duration.ofHours(24));
 
   private final Map<String,Timer> classloaderFailures = new HashMap<>();
-  private volatile Path baseCacheDir;
+  private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
   private volatile Duration updateFailureGracePeriodMins;
 
   private ContextDefinition parseContextDefinition(final String contextLocation)
@@ -157,7 +162,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
                 contextLocation, currentDef.getContextName(), currentDef.getContextName(),
                 update.getContextName());
           }
-          CacheUtils.stageContext(baseCacheDir, update);
+          localStore.get().storeContextResources(update);
           contextDefs.put(contextLocation, update);
           nextInterval = update.getMonitorIntervalSeconds();
           classloaderFailures.remove(contextLocation);
@@ -214,6 +219,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     String graceProp = env.getConfiguration().get(Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS);
     long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
     updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
+    final Path baseCacheDir;
     try {
       if (value.startsWith("file:")) {
         baseCacheDir = Path.of(new URL(value).toURI());
@@ -223,18 +229,17 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         throw new ContextClassLoaderException(
             "Base directory is neither a file URL nor an absolute file path");
       }
-      CacheUtils.createBaseDirs(baseCacheDir);
+      localStore.set(new LocalStore(baseCacheDir));
     } catch (IOException | URISyntaxException | ContextClassLoaderException e) {
-      throw new IllegalStateException("Error creating base cache directory at " + value, e);
+      throw new IllegalStateException("Error creating base cache directories at " + value, e);
     }
   }
-
-  ConcurrentHashMap<String,ContextDefinition> contextDefs = new ConcurrentHashMap<>();
 
   @Override
   public ClassLoader getClassLoader(final String contextLocation)
       throws ContextClassLoaderException {
-    Preconditions.checkState(baseCacheDir != null, "init not called before calling getClassLoader");
+    Preconditions.checkState(localStore.get() != null,
+        "init not called before calling getClassLoader");
     requireNonNull(contextLocation, "context name must be supplied");
     final AtomicBoolean newlyCreated = new AtomicBoolean(false);
     final AtomicReference<URLClassLoader> cl = new AtomicReference<>();
@@ -254,9 +259,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         }
         final URLClassLoader cl2 =
             classloaders.computeIfAbsent(def2.getContextName() + "-" + def2.getChecksum(),
-                (Supplier<URLClassLoaderHelper>) () -> {
+                (Supplier<URLClassLoaderParams>) () -> {
                   try {
-                    return CacheUtils.stageContext(baseCacheDir, def2);
+                    return localStore.get().storeContextResources(def2);
                   } catch (Exception e) {
                     throw new WrappedException(e);
                   }

@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.cache;
+package org.apache.accumulo.classloader.lcc.util;
 
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,15 +32,12 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
-import org.apache.accumulo.classloader.lcc.cache.CacheUtils.LockInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.fs.Path;
@@ -53,7 +49,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class CacheUtilsTest {
+public class LocalFileStorageTest {
 
   @TempDir
   private static java.nio.file.Path tempDir;
@@ -74,11 +70,14 @@ public class CacheUtilsTest {
     baseCacheDir = tempDir.resolve("base");
 
     // Find the Test jar files
-    final URL jarAOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+    final URL jarAOrigLocation =
+        LocalFileStorageTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
-    final URL jarBOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+    final URL jarBOrigLocation =
+        LocalFileStorageTest.class.getResource("/ClassLoaderTestB/TestB.jar");
     assertNotNull(jarBOrigLocation);
-    final URL jarCOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+    final URL jarCOrigLocation =
+        LocalFileStorageTest.class.getResource("/ClassLoaderTestC/TestC.jar");
     assertNotNull(jarCOrigLocation);
 
     // Put B into HDFS
@@ -136,78 +135,39 @@ public class CacheUtilsTest {
 
   @Test
   public void testPropertyNotSet() {
-    var ex = assertThrows(ContextClassLoaderException.class, () -> CacheUtils.createBaseDirs(null));
-    assertEquals("Error getting classloader for context: received null for cache directory",
-        ex.getMessage());
+    assertThrows(NullPointerException.class, () -> new LocalStore(null));
   }
 
   @Test
   public void testCreateBaseDirs() throws Exception {
     assertFalse(Files.exists(baseCacheDir));
-    CacheUtils.createBaseDirs(baseCacheDir);
+    var localStore = new LocalStore(baseCacheDir);
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve("contexts")));
     assertTrue(Files.exists(baseCacheDir.resolve("resources")));
-    assertEquals(baseCacheDir.resolve("contexts"), CacheUtils.contextsDir(baseCacheDir));
-    assertEquals(baseCacheDir.resolve("resources"), CacheUtils.resourcesDir(baseCacheDir));
+    assertEquals(baseCacheDir.resolve("contexts"), localStore.contextsDir());
+    assertEquals(baseCacheDir.resolve("resources"), localStore.resourcesDir());
   }
 
   @Test
   public void testCreateBaseDirsMultipleTimes() throws Exception {
     assertFalse(Files.exists(baseCacheDir));
-    CacheUtils.createBaseDirs(baseCacheDir);
-    CacheUtils.createBaseDirs(baseCacheDir);
-    CacheUtils.createBaseDirs(baseCacheDir);
-    CacheUtils.createBaseDirs(baseCacheDir);
+    assertNotNull(new LocalStore(baseCacheDir));
+    assertNotNull(new LocalStore(baseCacheDir));
+    assertNotNull(new LocalStore(baseCacheDir));
+    assertNotNull(new LocalStore(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir));
-  }
-
-  @Test
-  public void testLock() throws Exception {
-    final java.nio.file.Path contextsDir = baseCacheDir.resolve("contexts");
-    try {
-      assertFalse(Files.exists(baseCacheDir));
-      CacheUtils.createBaseDirs(baseCacheDir);
-      assertTrue(Files.exists(baseCacheDir));
-      assertTrue(Files.exists(contextsDir));
-
-      final LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextsDir);
-      try {
-        assertNotNull(lockInfo);
-        assertTrue(lockInfo.getLock().acquiredBy().equals(lockInfo.getChannel()));
-        assertFalse(lockInfo.getLock().isShared());
-        assertTrue(lockInfo.getLock().isValid());
-
-        // Test that another thread can't get the lock
-        final AtomicReference<Throwable> error = new AtomicReference<>();
-        final Thread t = new Thread(() -> {
-          try {
-            assertNull(CacheUtils.lockContextCacheDir(contextsDir));
-          } catch (ContextClassLoaderException e) {
-            error.set(e);
-          }
-        });
-        t.start();
-        t.join();
-        assertNull(error.get());
-
-      } finally {
-        lockInfo.unlock();
-      }
-    } finally {
-      Files.delete(contextsDir.resolve("lock_file"));
-    }
-
   }
 
   @Test
   public void testInitialize() throws Exception {
-    CacheUtils.stageContext(baseCacheDir, def);
+    var localStore = new LocalStore(baseCacheDir);
+    localStore.storeContextResources(def);
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(Files
-        .exists(baseCacheDir.resolve("contexts").resolve(CONTEXT_NAME + "_" + def.getChecksum())));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts")
+        .resolve(CONTEXT_NAME + "_" + def.getChecksum() + ".json")));
     for (Resource r : def.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       String checksum = r.getChecksum();
@@ -218,7 +178,7 @@ public class CacheUtilsTest {
 
   @Test
   public void testClassLoader() throws Exception {
-    var helper = CacheUtils.stageContext(baseCacheDir, def);
+    var helper = new LocalStore(baseCacheDir).storeContextResources(def);
     ClassLoader contextClassLoader = helper.createClassLoader();
 
     testClassLoads(contextClassLoader, classA);
@@ -228,7 +188,8 @@ public class CacheUtilsTest {
 
   @Test
   public void testUpdate() throws Exception {
-    var helper = CacheUtils.stageContext(baseCacheDir, def);
+    var localStore = new LocalStore(baseCacheDir);
+    var helper = localStore.storeContextResources(def);
     final ClassLoader contextClassLoader = helper.createClassLoader();
 
     testClassLoads(contextClassLoader, classA);
@@ -241,17 +202,18 @@ public class CacheUtilsTest {
     assertEquals(def.getResources().size() - 1, updatedResources.size());
 
     // Add D
-    final URL jarDOrigLocation = CacheUtilsTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+    final URL jarDOrigLocation =
+        LocalFileStorageTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
     updatedResources
         .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
 
     var updatedDef = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
-    helper = CacheUtils.stageContext(baseCacheDir, updatedDef);
+    helper = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
-    assertTrue(Files.exists(
-        baseCacheDir.resolve("contexts").resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum())));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts")
+        .resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum() + ".json")));
     for (Resource r : updatedDef.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       assertFalse(filename.contains("C"));

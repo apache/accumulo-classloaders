@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.cache;
+package org.apache.accumulo.classloader.lcc.util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
@@ -33,17 +33,14 @@ import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -51,140 +48,88 @@ import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
-import org.apache.accumulo.classloader.lcc.util.URLClassLoaderHelper;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.core.util.Retry;
 import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class CacheUtils {
-  private static final Logger LOG = LoggerFactory.getLogger(CacheUtils.class);
+public class LocalStore {
+  private static final Logger LOG = LoggerFactory.getLogger(LocalStore.class);
 
-  private static final Set<PosixFilePermission> CACHE_DIR_PERMS =
+  static final Set<PosixFilePermission> CACHE_DIR_PERMS =
       EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE);
-  private static final FileAttribute<Set<PosixFilePermission>> PERMISSIONS =
+  static final FileAttribute<Set<PosixFilePermission>> PERMISSIONS =
       PosixFilePermissions.asFileAttribute(CACHE_DIR_PERMS);
-  private static final String lockFileName = "lock_file";
 
-  public static class LockInfo {
+  private final Path baseDir;
+  private final Path contextsDir;
+  private final Path resourcesDir;
 
-    private final FileChannel channel;
-    private final FileLock lock;
-
-    public LockInfo(FileChannel channel, FileLock lock) {
-      this.channel = requireNonNull(channel, "channel must be supplied");
-      this.lock = requireNonNull(lock, "lock must be supplied");
-    }
-
-    FileChannel getChannel() {
-      return channel;
-    }
-
-    FileLock getLock() {
-      return lock;
-    }
-
-    public void unlock() throws IOException {
-      lock.release();
-      channel.close();
-    }
-
-  }
-
-  public static void createBaseDirs(final Path baseDir)
-      throws IOException, ContextClassLoaderException {
-    if (baseDir == null) {
-      throw new ContextClassLoaderException("received null for cache directory");
-    }
-    var contextDir = baseDir.resolve("contexts");
-    Files.createDirectories(contextDir, PERMISSIONS);
-    var resourcesDir = baseDir.resolve("resources");
+  public LocalStore(final Path baseDir) throws IOException {
+    this.baseDir = Objects.requireNonNull(baseDir);
+    this.contextsDir = baseDir.resolve("contexts");
+    this.resourcesDir = baseDir.resolve("resources");
+    Files.createDirectories(contextsDir, PERMISSIONS);
     Files.createDirectories(resourcesDir, PERMISSIONS);
   }
 
-  public static Path contextsDir(final Path baseCacheDir)
-      throws IOException, ContextClassLoaderException {
-    createBaseDirs(baseCacheDir);
-    return baseCacheDir.resolve("contexts");
+  public Path baseDir() {
+    return baseDir;
   }
 
-  public static Path resourcesDir(final Path baseCacheDir)
-      throws IOException, ContextClassLoaderException {
-    createBaseDirs(baseCacheDir);
-    return baseCacheDir.resolve("resources");
+  public Path contextsDir() {
+    return contextsDir;
   }
 
-  /**
-   * Acquire an exclusive lock on the "lock_file" file in the context cache directory. Returns null
-   * if lock can not be acquired. Caller MUST call LockInfo.unlock when done manipulating the cache
-   * directory
-   */
-  public static LockInfo lockContextCacheDir(final Path contextCacheDir)
-      throws ContextClassLoaderException {
-    final Path lockFilePath = contextCacheDir.resolve(lockFileName);
-    try {
-      final FileChannel channel = FileChannel.open(lockFilePath,
-          EnumSet.of(StandardOpenOption.CREATE, StandardOpenOption.WRITE), PERMISSIONS);
-      try {
-        final FileLock lock = channel.tryLock();
-        if (lock == null) {
-          // something else has the lock
-          channel.close();
-          return null;
-        } else {
-          return new LockInfo(channel, lock);
-        }
-      } catch (OverlappingFileLockException e) {
-        // something else has the lock
-        channel.close();
-        return null;
-      }
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error creating lock file in context cache directory "
-          + contextCacheDir.toFile().getAbsolutePath(), e);
-    }
+  public Path resourcesDir() {
+    return resourcesDir;
   }
 
-  public static URLClassLoaderHelper stageContext(final Path baseCacheDir,
-      final ContextDefinition contextDefinition)
+  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
       throws IOException, ContextClassLoaderException, InterruptedException, URISyntaxException {
     final RetryFactory retryFactory =
         Retry.builder().infiniteRetries().retryAfter(1, TimeUnit.SECONDS)
             .incrementBy(1, TimeUnit.SECONDS).maxWait(5, TimeUnit.MINUTES).backOffFactor(2)
             .logInterval(1, TimeUnit.SECONDS).createFactory();
     requireNonNull(contextDefinition, "definition must be supplied");
-    CacheUtils.createBaseDirs(baseCacheDir);
-    Path contextsDir = CacheUtils.contextsDir(baseCacheDir);
     final Set<File> localFiles = new LinkedHashSet<>();
+    Path lockFile;
+    LockInfo lockInfo = null;
     try {
-      LockInfo lockInfo = CacheUtils.lockContextCacheDir(contextsDir);
-      Files.write(
-          contextsDir
-              .resolve(contextDefinition.getContextName() + "_" + contextDefinition.getChecksum()),
-          contextDefinition.toJson().getBytes(UTF_8));
-      while (lockInfo == null) {
-        // something else is updating this directory
-        LOG.info("Directory {} locked, another process must be updating the class loader contents. "
-            + "Retrying in 1 second", contextsDir);
-        Thread.sleep(1000);
-        lockInfo = CacheUtils.lockContextCacheDir(contextsDir);
-      }
-      Path resourcesDir = CacheUtils.resourcesDir(baseCacheDir);
-      try {
-        for (Resource updatedResource : contextDefinition.getResources()) {
-          File file = cacheResource(retryFactory, resourcesDir, updatedResource);
-          localFiles.add(file.getAbsoluteFile());
-          LOG.trace("Added element {} to classpath", file);
+      lockFile = contextsDir.resolve("lock_file");
+      do {
+        try {
+          lockInfo = LockInfo.lockFile(lockFile);
+        } catch (IOException e) {
+          throw new ContextClassLoaderException(
+              "Error creating lock file in context cache directory " + lockFile.toAbsolutePath(),
+              e);
         }
-      } finally {
-        lockInfo.unlock();
+        if (lockInfo == null) {
+          // something else is updating this directory
+          LOG.info(
+              "Directory {} locked, another process must be updating the class loader contents. "
+                  + "Retrying in 1 second",
+              contextsDir);
+          Thread.sleep(1000);
+        }
+      } while (lockInfo == null);
+      cacheContext(contextDefinition);
+      for (Resource updatedResource : contextDefinition.getResources()) {
+        File file = cacheResource(retryFactory, updatedResource);
+        localFiles.add(file.getAbsoluteFile());
+        LOG.trace("Added element {} to classpath", file);
       }
     } catch (Exception e) {
       LOG.error("Error initializing context: " + contextDefinition.getContextName(), e);
       throw e;
+    } finally {
+      if (lockInfo != null) {
+        lockInfo.close();
+      }
     }
-    return new URLClassLoaderHelper(
+    return new URLClassLoaderParams(
         contextDefinition.getContextName() + "_" + contextDefinition.getChecksum(),
         localFiles.stream().map(File::toURI).map(t -> {
           try {
@@ -196,14 +141,20 @@ public class CacheUtils {
         }).toArray(URL[]::new));
   }
 
-  private static File cacheResource(final RetryFactory retryFactory, final Path contextCacheDir,
-      final Resource resource)
+  private void cacheContext(final ContextDefinition contextDefinition) throws IOException {
+    Files.write(
+        contextsDir.resolve(
+            contextDefinition.getContextName() + "_" + contextDefinition.getChecksum() + ".json"),
+        contextDefinition.toJson().getBytes(UTF_8));
+  }
+
+  private File cacheResource(final RetryFactory retryFactory, final Resource resource)
       throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
     final FileResolver source = FileResolver.resolve(resource.getLocation());
     final Path tmpCacheLocation =
-        contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum() + "_tmp");
+        resourcesDir.resolve(source.getFileName() + "_" + resource.getChecksum() + "_tmp");
     final Path finalCacheLocation =
-        contextCacheDir.resolve(source.getFileName() + "_" + resource.getChecksum());
+        resourcesDir.resolve(source.getFileName() + "_" + resource.getChecksum());
     final File cacheFile = finalCacheLocation.toFile();
     if (!Files.exists(finalCacheLocation)) {
       Retry retry = retryFactory.createRetry();

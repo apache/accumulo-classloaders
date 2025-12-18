@@ -32,14 +32,14 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  * convenience method to do the construction. This exists to hold the URLClassLoader name and URLs
  * in a single object, so it can be provided by a single Supplier.
  */
-public class URLClassLoaderHelper {
+public class URLClassLoaderParams {
 
-  private static final Logger LOG = LoggerFactory.getLogger(URLClassLoaderHelper.class);
+  private static final Logger LOG = LoggerFactory.getLogger(URLClassLoaderParams.class);
 
   private final String name;
   private final URL[] urls;
 
-  public URLClassLoaderHelper(final String name, final URL[] urls) {
+  public URLClassLoaderParams(final String name, final URL[] urls) {
     this.name = name;
     this.urls = Arrays.copyOf(urls, urls.length);
   }
@@ -49,7 +49,7 @@ public class URLClassLoaderHelper {
   public URLClassLoader createClassLoader() {
     final var cl = new URLClassLoader(name, urls, getClass().getClassLoader());
     if (LOG.isTraceEnabled()) {
-      LOG.trace("New classloader created from URLs: {}", Arrays.asList(urls));
+      LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
     }
     return cl;
   }
