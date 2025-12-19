@@ -18,11 +18,14 @@
  */
 package org.apache.accumulo.classloader.lcc.definition;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URL;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -34,8 +37,13 @@ import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public class ContextDefinition {
+
+  private static final Gson GSON =
+      new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
   public static ContextDefinition create(String contextName, int monitorIntervalSecs,
       URL... sources) throws ContextClassLoaderException, IOException {
@@ -48,6 +56,14 @@ public class ContextDefinition {
       }
     }
     return new ContextDefinition(contextName, monitorIntervalSecs, resources);
+  }
+
+  public static ContextDefinition fromJson(InputStream inputStream) throws IOException {
+    var def = GSON.fromJson(new InputStreamReader(inputStream, UTF_8), ContextDefinition.class);
+    if (def == null) {
+      throw new EOFException("InputStream does not contain a valid ContextDefinition");
+    }
+    return def;
   }
 
   private String contextName;
@@ -108,6 +124,6 @@ public class ContextDefinition {
   }
 
   public String toJson() {
-    return Constants.GSON.toJson(this);
+    return GSON.toJson(this);
   }
 }

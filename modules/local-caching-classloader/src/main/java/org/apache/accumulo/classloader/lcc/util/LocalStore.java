@@ -150,6 +150,9 @@ public final class LocalStore {
         localName(contextDefinition.getContextName().replace(File.separatorChar, '_'),
             contextDefinition.getChecksum());
     Path destinationPath = contextsDir.resolve(destinationName);
+    if (Files.exists(destinationPath)) {
+      return;
+    }
     Path tempPath = contextsDir.resolve(tempName(destinationName));
     Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8));
     Files.move(tempPath, destinationPath, ATOMIC_MOVE);
@@ -196,7 +199,7 @@ public final class LocalStore {
         LOG.error(
             "Checksum {} for resource {} does not match checksum in context definition {}, removing cached copy.",
             checksum, url, resource.getChecksum());
-        Files.delete(destinationPath);
+        Files.delete(tempPath);
         throw new IllegalStateException("Checksum " + checksum + " for resource " + url
             + " does not match checksum in context definition " + resource.getChecksum());
       }

@@ -18,12 +18,10 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -114,13 +112,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     try {
       final FileResolver resolver = FileResolver.resolve(url);
       try (InputStream is = resolver.getInputStream()) {
-        ContextDefinition def =
-            Constants.GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
-        if (def == null) {
-          throw new ContextClassLoaderException(
-              "ContextDefinition null for context definition file: " + url);
-        }
-        return def;
+        return ContextDefinition.fromJson(is);
       }
     } catch (IOException e) {
       throw new ContextClassLoaderException("Error reading context definition file: " + url, e);

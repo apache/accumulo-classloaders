@@ -21,9 +21,6 @@ package org.apache.accumulo.classloader.lcc;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.commons.codec.digest.DigestUtils;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
 public class Constants {
 
   public static final String CACHE_DIR_PROPERTY =
@@ -31,8 +28,6 @@ public class Constants {
 
   public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
       Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
-
-  public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
   public static DigestUtils getChecksummer() {
     return new DigestUtils("SHA256");
