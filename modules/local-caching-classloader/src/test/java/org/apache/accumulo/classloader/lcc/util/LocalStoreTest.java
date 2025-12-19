@@ -49,7 +49,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-public class LocalFileStorageTest {
+public class LocalStoreTest {
 
   @TempDir
   private static java.nio.file.Path tempDir;
@@ -70,14 +70,11 @@ public class LocalFileStorageTest {
     baseCacheDir = tempDir.resolve("base");
 
     // Find the Test jar files
-    final URL jarAOrigLocation =
-        LocalFileStorageTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+    final URL jarAOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
-    final URL jarBOrigLocation =
-        LocalFileStorageTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+    final URL jarBOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestB/TestB.jar");
     assertNotNull(jarBOrigLocation);
-    final URL jarCOrigLocation =
-        LocalFileStorageTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+    final URL jarCOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestC/TestC.jar");
     assertNotNull(jarCOrigLocation);
 
     // Put B into HDFS
@@ -160,7 +157,36 @@ public class LocalFileStorageTest {
   }
 
   @Test
-  public void testInitialize() throws Exception {
+  public void testLocalFileName() {
+    // regular json
+    assertEquals("f1-chk1.json", LocalStore.localName("f1.json", "chk1"));
+    // dotfile json
+    assertEquals(".f1-chk1.json", LocalStore.localName(".f1.json", "chk1"));
+    // regular jar (has multiple dots)
+    assertEquals("f2-1.0-chk2.jar", LocalStore.localName("f2-1.0.jar", "chk2"));
+    // dotfile jar (has multiple dots)
+    assertEquals(".f2-1.0-chk2.jar", LocalStore.localName(".f2-1.0.jar", "chk2"));
+    // regular file with no suffix
+    assertEquals("f3-chk3", LocalStore.localName("f3", "chk3"));
+
+    // weird files with trailing dots and no file suffix
+    assertEquals("f4.-chk4", LocalStore.localName("f4.", "chk4"));
+    assertEquals("f4..-chk4", LocalStore.localName("f4..", "chk4"));
+    assertEquals("f4...-chk4", LocalStore.localName("f4...", "chk4"));
+    // weird dotfiles that don't really have a suffix
+    assertEquals(".f5-chk5", LocalStore.localName(".f5", "chk5"));
+    assertEquals("..f5-chk5", LocalStore.localName("..f5", "chk5"));
+    // weird files with weird dots, but do have a valid suffix
+    assertEquals("f6.-chk6.jar", LocalStore.localName("f6..jar", "chk6"));
+    assertEquals("f6..-chk6.jar", LocalStore.localName("f6...jar", "chk6"));
+    assertEquals(".f6-chk6.jar", LocalStore.localName(".f6.jar", "chk6"));
+    assertEquals("..f6-chk6.jar", LocalStore.localName("..f6.jar", "chk6"));
+    assertEquals(".f6.-chk6.jar", LocalStore.localName(".f6..jar", "chk6"));
+    assertEquals("..f6.-chk6.jar", LocalStore.localName("..f6..jar", "chk6"));
+  }
+
+  @Test
+  public void testStoreContextResources() throws Exception {
     var localStore = new LocalStore(baseCacheDir);
     localStore.storeContextResources(def);
 
@@ -202,8 +228,7 @@ public class LocalFileStorageTest {
     assertEquals(def.getResources().size() - 1, updatedResources.size());
 
     // Add D
-    final URL jarDOrigLocation =
-        LocalFileStorageTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+    final URL jarDOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
     updatedResources
         .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));

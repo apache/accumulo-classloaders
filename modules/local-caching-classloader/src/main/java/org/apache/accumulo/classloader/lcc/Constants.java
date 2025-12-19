@@ -18,9 +18,6 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-
 import org.apache.accumulo.core.conf.Property;
 import org.apache.commons.codec.digest.DigestUtils;
 
@@ -35,7 +32,6 @@ public class Constants {
   public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
       Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
 
-  public static final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
   public static final Gson GSON = new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
   public static DigestUtils getChecksummer() {

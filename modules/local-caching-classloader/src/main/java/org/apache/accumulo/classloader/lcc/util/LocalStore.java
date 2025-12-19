@@ -21,9 +21,6 @@ package org.apache.accumulo.classloader.lcc.util;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
-import static java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE;
-import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
-import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
 import static java.util.Objects.requireNonNull;
 
 import java.io.File;
@@ -33,16 +30,14 @@ import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileAttribute;
-import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
-import java.util.EnumSet;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashSet;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -54,144 +49,171 @@ import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class LocalStore {
+public final class LocalStore {
   private static final Logger LOG = LoggerFactory.getLogger(LocalStore.class);
+  private static final String PID = Long.toString(ProcessHandle.current().pid());
 
-  static final Set<PosixFilePermission> CACHE_DIR_PERMS =
-      EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE);
-  static final FileAttribute<Set<PosixFilePermission>> PERMISSIONS =
-      PosixFilePermissions.asFileAttribute(CACHE_DIR_PERMS);
-
-  private final Path baseDir;
   private final Path contextsDir;
   private final Path resourcesDir;
 
   public LocalStore(final Path baseDir) throws IOException {
-    this.baseDir = Objects.requireNonNull(baseDir);
-    this.contextsDir = baseDir.resolve("contexts");
+    this.contextsDir = requireNonNull(baseDir).toAbsolutePath().resolve("contexts");
     this.resourcesDir = baseDir.resolve("resources");
-    Files.createDirectories(contextsDir, PERMISSIONS);
-    Files.createDirectories(resourcesDir, PERMISSIONS);
+    Files.createDirectories(contextsDir);
+    Files.createDirectories(resourcesDir);
   }
 
-  public Path baseDir() {
-    return baseDir;
-  }
-
-  public Path contextsDir() {
+  Path contextsDir() {
     return contextsDir;
   }
 
-  public Path resourcesDir() {
+  Path resourcesDir() {
     return resourcesDir;
+  }
+
+  // pattern to match regular files that have at least one non-dot character preceding a dot and a
+  // non-zero suffix; these files can be easily converted so the local store retains the original
+  // file name extension, while non-matching files will not attempt to retain the original file name
+  // extension, and will instead just append the checksum to the original file name
+  private static Pattern fileNamesWithExtensionPattern = Pattern.compile("^(.*[^.].*)[.]([^.]+)$");
+
+  static String localName(String remoteFileName, String checksum) {
+    requireNonNull(remoteFileName);
+    requireNonNull(checksum);
+    var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
+    if (matcher.matches()) {
+      return String.format("%s-%s.%s", matcher.group(1), checksum, matcher.group(2));
+    }
+    return String.format("%s-%s", remoteFileName, checksum);
+  }
+
+  static String tempName(String baseName) {
+    return "." + requireNonNull(baseName) + ".tmp_" + PID;
   }
 
   public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
       throws IOException, ContextClassLoaderException, InterruptedException, URISyntaxException {
+    requireNonNull(contextDefinition, "definition must be supplied");
     final RetryFactory retryFactory =
         Retry.builder().infiniteRetries().retryAfter(1, TimeUnit.SECONDS)
             .incrementBy(1, TimeUnit.SECONDS).maxWait(5, TimeUnit.MINUTES).backOffFactor(2)
             .logInterval(1, TimeUnit.SECONDS).createFactory();
-    requireNonNull(contextDefinition, "definition must be supplied");
-    final Set<File> localFiles = new LinkedHashSet<>();
-    Path lockFile;
-    LockInfo lockInfo = null;
+    final String contextName = contextDefinition.getContextName();
+    final Set<Path> localFiles = new LinkedHashSet<>();
     try {
-      lockFile = contextsDir.resolve("lock_file");
-      do {
-        try {
-          lockInfo = LockInfo.lockFile(lockFile);
-        } catch (IOException e) {
-          throw new ContextClassLoaderException(
-              "Error creating lock file in context cache directory " + lockFile.toAbsolutePath(),
-              e);
+      storeContextDefinition(contextDefinition);
+      Retry retry = retryFactory.createRetry();
+      boolean successful = false;
+      while (!successful) {
+        localFiles.clear();
+        for (Resource resource : contextDefinition.getResources()) {
+          Path path = storeResource(resource);
+          if (path == null) {
+            LOG.debug("Skipped resource {} while another process or thread is downloading it",
+                resource.getLocation());
+            continue;
+          }
+          localFiles.add(path);
+          LOG.trace("Added resource {} to classpath", path);
         }
-        if (lockInfo == null) {
-          // something else is updating this directory
-          LOG.info(
-              "Directory {} locked, another process must be updating the class loader contents. "
-                  + "Retrying in 1 second",
-              contextsDir);
-          Thread.sleep(1000);
+        successful = localFiles.size() == contextDefinition.getResources().size();
+        if (!successful) {
+          retry.logRetry(LOG, "Unable to store all resources for context " + contextName);
+          retry.waitForNextAttempt(LOG, "Store resources for context " + contextName);
+          retry.useRetry();
         }
-      } while (lockInfo == null);
-      cacheContext(contextDefinition);
-      for (Resource updatedResource : contextDefinition.getResources()) {
-        File file = cacheResource(retryFactory, updatedResource);
-        localFiles.add(file.getAbsoluteFile());
-        LOG.trace("Added element {} to classpath", file);
+        retry.logCompletion(LOG,
+            "Resources for context " + contextName + " cached locally as " + localFiles);
       }
-    } catch (Exception e) {
+
+    } catch (IOException | InterruptedException | RuntimeException e) {
       LOG.error("Error initializing context: " + contextDefinition.getContextName(), e);
       throw e;
-    } finally {
-      if (lockInfo != null) {
-        lockInfo.close();
-      }
     }
     return new URLClassLoaderParams(
         contextDefinition.getContextName() + "_" + contextDefinition.getChecksum(),
-        localFiles.stream().map(File::toURI).map(t -> {
+        localFiles.stream().map(p -> {
           try {
-            return t.toURL();
+            return p.toUri().toURL();
           } catch (MalformedURLException e) {
-            // this shouldn't happen since these are local files
+            // this shouldn't happen since these are local file paths
             throw new UncheckedIOException(e);
           }
         }).toArray(URL[]::new));
   }
 
-  private void cacheContext(final ContextDefinition contextDefinition) throws IOException {
-    Files.write(
-        contextsDir.resolve(
-            contextDefinition.getContextName() + "_" + contextDefinition.getChecksum() + ".json"),
-        contextDefinition.toJson().getBytes(UTF_8));
+  private void storeContextDefinition(final ContextDefinition contextDefinition)
+      throws IOException {
+    // context names could contain anything, so let's remove any path separators that would mess
+    // with the file names
+    String destinationName =
+        localName(contextDefinition.getContextName().replace(File.separatorChar, '_'),
+            contextDefinition.getChecksum());
+    Path destinationPath = contextsDir.resolve(destinationName);
+    Path tempPath = contextsDir.resolve(tempName(destinationName));
+    Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8));
+    Files.move(tempPath, destinationPath, ATOMIC_MOVE);
   }
 
-  private File cacheResource(final RetryFactory retryFactory, final Resource resource)
-      throws InterruptedException, IOException, ContextClassLoaderException, URISyntaxException {
-    final FileResolver source = FileResolver.resolve(resource.getLocation());
-    final Path tmpCacheLocation =
-        resourcesDir.resolve(source.getFileName() + "_" + resource.getChecksum() + "_tmp");
-    final Path finalCacheLocation =
-        resourcesDir.resolve(source.getFileName() + "_" + resource.getChecksum());
-    final File cacheFile = finalCacheLocation.toFile();
-    if (!Files.exists(finalCacheLocation)) {
-      Retry retry = retryFactory.createRetry();
-      boolean successful = false;
-      while (!successful) {
-        LOG.trace("Caching resource {} at {}", source.getURL(), cacheFile.getAbsolutePath());
-        try (InputStream is = source.getInputStream()) {
-          Files.copy(is, tmpCacheLocation, REPLACE_EXISTING);
-          Files.move(tmpCacheLocation, finalCacheLocation, ATOMIC_MOVE);
-          successful = true;
-          retry.logCompletion(LOG,
-              "Resource " + source.getURL() + " cached locally as " + finalCacheLocation);
-        } catch (IOException e) {
-          LOG.error("Error copying resource from {} to {}. Retrying...", source.getURL(),
-              finalCacheLocation, e);
-          retry.logRetry(LOG, "Unable to cache resource " + source.getURL());
-          retry.waitForNextAttempt(LOG, "Cache resource " + source.getURL());
-        } finally {
-          retry.useRetry();
-        }
-      }
-      final String checksum = Constants.getChecksummer().digestAsHex(cacheFile);
+  private Path storeResource(final Resource resource) {
+    final URL url = resource.getLocation();
+    final FileResolver source;
+    try {
+      source = FileResolver.resolve(url);
+    } catch (IOException e) {
+      // there was an error getting the resolver for the resource location url
+      return null;
+    }
+    final String baseName = localName(source.getFileName(), resource.getChecksum());
+    final Path destinationPath = resourcesDir.resolve(baseName);
+    final Path tempPath = resourcesDir.resolve(tempName(baseName));
+    final Path inProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
+
+    if (Files.exists(destinationPath)) {
+      LOG.trace("Resource {} is already cached at {}", url, destinationPath);
+      return destinationPath;
+    }
+
+    try {
+      Files.write(inProgressPath, PID.getBytes(UTF_8), StandardOpenOption.CREATE_NEW);
+    } catch (FileAlreadyExistsException e) {
+      // TODO try this, and check the timestamp to see if it has made recent progress
+      // if no recent progress, delete the file and return null
+      // for now, return null and assume it will be finished by the other process later
+      return null;
+    } catch (IOException e) {
+      // some other exception occurred that we don't know how to handle; will attempt retry
+      return null;
+    }
+
+    LOG.trace("Storing remote resource {} locally at {}", url, destinationPath);
+    try (InputStream is = source.getInputStream()) {
+      // TODO update the in progress file as we make progress during the copy; maybe a background
+      // thread, or maybe X number of bytes written
+      Files.copy(is, tempPath, REPLACE_EXISTING);
+      final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
       if (!resource.getChecksum().equals(checksum)) {
         LOG.error(
             "Checksum {} for resource {} does not match checksum in context definition {}, removing cached copy.",
-            checksum, source.getURL(), resource.getChecksum());
-        Files.delete(finalCacheLocation);
-        throw new IllegalStateException("Checksum " + checksum + " for resource " + source.getURL()
+            checksum, url, resource.getChecksum());
+        Files.delete(destinationPath);
+        throw new IllegalStateException("Checksum " + checksum + " for resource " + url
             + " does not match checksum in context definition " + resource.getChecksum());
       }
-      return cacheFile;
-    } else {
-      // File exists, return new ClassPathElement based on existing file
-      LOG.trace("Resource {} is already cached at {}", source.getURL(),
-          cacheFile.getAbsolutePath());
-      return cacheFile;
+      Files.move(tempPath, destinationPath, ATOMIC_MOVE);
+    } catch (IOException e) {
+      LOG.error("Error copying resource from {} to {}. Retrying...", url, destinationPath, e);
+    } finally {
+      try {
+        Files.deleteIfExists(inProgressPath);
+      } catch (IOException e) {
+        // if we can't clean up this file and the file is already downloaded, then this doesn't
+        // matter; however, if the file isn't already downloaded, then this file's existence will
+        // only temporarily block others from attempting to download; so, this is fine to ignore
+        // TODO maybe log the failure to clean up
+      }
     }
+    return destinationPath;
   }
 
 }
