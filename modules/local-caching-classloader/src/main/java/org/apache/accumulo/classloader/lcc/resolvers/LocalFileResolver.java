@@ -28,27 +28,25 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-
 public final class LocalFileResolver extends FileResolver {
 
   private final File file;
 
-  public LocalFileResolver(URL url) throws ContextClassLoaderException {
+  public LocalFileResolver(URL url) throws IOException {
     super(url);
     if (url.getHost() != null && !url.getHost().isBlank()) {
-      throw new ContextClassLoaderException(
+      throw new IOException(
           "Unsupported file url, only local files are supported. host = " + url.getHost());
     }
     try {
       final URI uri = url.toURI();
       final Path path = Path.of(uri);
       if (Files.notExists(Path.of(uri))) {
-        throw new ContextClassLoaderException("File: " + url + " does not exist.");
+        throw new IOException("File: " + url + " does not exist.");
       }
       file = path.toFile();
     } catch (URISyntaxException e) {
-      throw new ContextClassLoaderException("Error creating URI from url: " + url, e);
+      throw new IOException("Error creating URI from url: " + url, e);
     }
   }
 

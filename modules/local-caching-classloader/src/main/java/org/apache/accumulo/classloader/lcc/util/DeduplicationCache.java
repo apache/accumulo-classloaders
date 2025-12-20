@@ -16,10 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.cache;
+package org.apache.accumulo.classloader.lcc.util;
 
 import java.time.Duration;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -50,16 +49,8 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
     return cl;
   }
 
-  public Set<KEY> keySet() {
-    return Set.copyOf(canonical.asMap().keySet());
-  }
-
   public boolean anyMatch(Predicate<KEY> keyPredicate) {
     return canonical.asMap().keySet().stream().anyMatch(keyPredicate);
-  }
-
-  public boolean containsKey(KEY key) {
-    return canonical.getIfPresent(key) != null;
   }
 
 }

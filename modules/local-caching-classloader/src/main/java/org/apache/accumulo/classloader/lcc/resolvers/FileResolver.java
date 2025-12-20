@@ -26,11 +26,9 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Objects;
 
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-
 public abstract class FileResolver {
 
-  public static FileResolver resolve(URL url) throws ContextClassLoaderException {
+  public static FileResolver resolve(URL url) throws IOException {
     requireNonNull(url, "URL must be supplied");
     switch (url.getProtocol()) {
       case "http":
@@ -41,17 +39,17 @@ public abstract class FileResolver {
       case "hdfs":
         return new HdfsFileResolver(url);
       default:
-        throw new ContextClassLoaderException("Unhandled protocol: " + url.getProtocol());
+        throw new IOException("Unhandled protocol: " + url.getProtocol());
     }
   }
 
   private final URL url;
 
-  protected FileResolver(URL url) throws ContextClassLoaderException {
+  protected FileResolver(URL url) {
     this.url = url;
   }
 
-  public URL getURL() {
+  protected URL getURL() {
     return this.url;
   }
 

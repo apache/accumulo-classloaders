@@ -24,7 +24,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -35,19 +34,17 @@ public final class HdfsFileResolver extends FileResolver {
   private final FileSystem fs;
   private final Path path;
 
-  protected HdfsFileResolver(URL url) throws ContextClassLoaderException {
+  protected HdfsFileResolver(URL url) throws IOException {
     super(url);
     try {
       final URI uri = url.toURI();
       this.fs = FileSystem.get(uri, hadoopConf);
       this.path = fs.makeQualified(new Path(uri));
       if (!fs.exists(this.path)) {
-        throw new ContextClassLoaderException("File: " + url + " does not exist.");
+        throw new IOException("File: " + url + " does not exist.");
       }
     } catch (URISyntaxException e) {
-      throw new ContextClassLoaderException("Error creating URI from url: " + url, e);
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error resolving file from url: " + url, e);
+      throw new IOException("Error creating URI from url: " + url, e);
     }
   }
 
