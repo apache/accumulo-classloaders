@@ -21,8 +21,7 @@ package org.apache.accumulo.classloader.lcc;
 import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.MalformedURLException;
+import java.io.UncheckedIOException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -39,11 +38,9 @@ import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.classloader.lcc.util.URLClassLoaderParams;
-import org.apache.accumulo.classloader.lcc.util.WrappedException;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.accumulo.core.util.Timer;
@@ -80,7 +77,7 @@ import com.google.common.base.Preconditions;
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  private static final Logger LOG =
+  public static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
   public final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
@@ -95,29 +92,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           (String key, URLClassLoaderParams helper) -> helper.createClassLoader(),
           Duration.ofHours(24));
 
-  private final Map<String,Timer> classloaderFailures = new HashMap<>();
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
-  private volatile Duration updateFailureGracePeriodMins;
 
-  private ContextDefinition parseContextDefinition(final String contextLocation)
-      throws ContextClassLoaderException {
-    URL url;
-    try {
-      url = new URL(contextLocation);
-    } catch (MalformedURLException e) {
-      throw new ContextClassLoaderException(
-          "Expected valid URL to context definition file but received: " + contextLocation, e);
-    }
-    LOG.trace("Retrieving context definition file from {}", contextLocation);
-    try {
-      final FileResolver resolver = FileResolver.resolve(url);
-      try (InputStream is = resolver.getInputStream()) {
-        return ContextDefinition.fromJson(is);
-      }
-    } catch (IOException e) {
-      throw new ContextClassLoaderException("Error reading context definition file: " + url, e);
-    }
-  }
+  private final Map<String,Timer> classloaderFailures = new HashMap<>();
+  private volatile Duration updateFailureGracePeriodMins;
 
   /**
    * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
@@ -146,18 +124,24 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
     updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
     final Path baseCacheDir;
-    try {
-      if (value.startsWith("file:")) {
+    if (value.startsWith("file:")) {
+      try {
         baseCacheDir = Path.of(new URL(value).toURI());
-      } else if (value.startsWith("/")) {
-        baseCacheDir = Path.of(value);
-      } else {
-        throw new ContextClassLoaderException(
-            "Base directory is neither a file URL nor an absolute file path");
+      } catch (IOException | URISyntaxException e) {
+        throw new IllegalArgumentException(
+            "Malformed file: URL specified for base directory: " + value, e);
       }
+    } else if (value.startsWith("/")) {
+      baseCacheDir = Path.of(value);
+    } else {
+      throw new IllegalArgumentException(
+          "Base directory is neither a file URL nor an absolute file path: " + value);
+    }
+    try {
       localStore.set(new LocalStore(baseCacheDir));
-    } catch (IOException | URISyntaxException | ContextClassLoaderException e) {
-      throw new IllegalStateException("Error creating base cache directories at " + value, e);
+    } catch (IOException e) {
+      throw new UncheckedIOException("Unable to create the local storage area at " + baseCacheDir,
+          e);
     }
   }
 
@@ -175,14 +159,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       contextDefs.compute(contextLocation,
           (contextLocationKey, previousDefinition) -> computeDefinitionAndClassLoader(classloader,
               contextLocationKey, previousDefinition));
-    } catch (WrappedException e) {
-      Throwable t = e.getCause();
-      if (t instanceof InterruptedException) {
-        Thread.currentThread().interrupt();
-      } else if (t instanceof ContextClassLoaderException) {
-        throw (ContextClassLoaderException) t;
-      }
-      throw new ContextClassLoaderException(t.getMessage(), t);
     } catch (RuntimeException e) {
       throw new ContextClassLoaderException(e.getMessage(), e);
     }
@@ -195,23 +171,24 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     ContextDefinition computedDefinition;
     if (previousDefinition == null) {
       try {
-        computedDefinition = parseContextDefinition(contextLocation);
+        URL url = new URL(contextLocation);
+        computedDefinition = ContextDefinition.fromRemoteURL(url);
         monitorContext(contextLocation, computedDefinition.getMonitorIntervalSeconds());
-      } catch (ContextClassLoaderException e) {
-        throw new WrappedException(e);
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
       }
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader = classloaders.computeIfAbsent(
-        computedDefinition.getContextName() + "-" + computedDefinition.getChecksum(),
-        (Supplier<URLClassLoaderParams>) () -> {
-          try {
-            return localStore.get().storeContextResources(computedDefinition);
-          } catch (Exception e) {
-            throw new WrappedException(e);
-          }
-        });
+    final URLClassLoader classloader =
+        classloaders.computeIfAbsent(contextLocation + "-" + computedDefinition.getChecksum(),
+            (Supplier<URLClassLoaderParams>) () -> {
+              try {
+                return localStore.get().storeContextResources(computedDefinition);
+              } catch (IOException e) {
+                throw new UncheckedIOException(e);
+              }
+            });
     resultHolder.set(classloader);
     return computedDefinition;
   }
@@ -222,8 +199,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           if (previousDefinition == null) {
             return null;
           }
-          if (!classloaders.anyMatch(k2 -> k2.substring(0, k2.lastIndexOf('-'))
-              .equals(previousDefinition.getContextName()))) {
+          if (!classloaders
+              .anyMatch(k2 -> k2.substring(0, k2.lastIndexOf('-')).equals(contextLocation))) {
             // context has been removed from the map, no need to check for update
             LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
                 contextLocation);
@@ -239,15 +216,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
     long nextInterval = interval;
     try {
-      final ContextDefinition update = parseContextDefinition(contextLocation);
+      URL url = new URL(contextLocation);
+      final ContextDefinition update = ContextDefinition.fromRemoteURL(url);
       if (!currentDef.getChecksum().equals(update.getChecksum())) {
         LOG.debug("Context definition for {} has changed", contextLocation);
-        if (!currentDef.getContextName().equals(update.getContextName())) {
-          LOG.warn(
-              "Context name changed for context {}, but context cache directory will remain {} (old={}, new={})",
-              contextLocation, currentDef.getContextName(), currentDef.getContextName(),
-              update.getContextName());
-        }
         localStore.get().storeContextResources(update);
         contextDefs.put(contextLocation, update);
         nextInterval = update.getMonitorIntervalSeconds();
@@ -255,8 +227,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } else {
         LOG.trace("Context definition for {} has not changed", contextLocation);
       }
-    } catch (ContextClassLoaderException | InterruptedException | IOException | URISyntaxException
-        | RuntimeException e) {
+    } catch (IOException | RuntimeException e) {
       LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
           contextLocation, e);
       final Timer failureTimer = classloaderFailures.get(contextLocation);

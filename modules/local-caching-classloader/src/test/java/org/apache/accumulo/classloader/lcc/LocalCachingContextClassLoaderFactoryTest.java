@@ -29,7 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.EOFException;
 import java.io.File;
+import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
@@ -198,8 +200,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
   public void testInvalidContextDefinitionURL() {
     var ex =
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
-    assertEquals("Error getting classloader for context: Expected valid URL to context definition "
-        + "file but received: /not/a/URL", ex.getMessage());
+    assertTrue(ex.getCause() instanceof UncheckedIOException);
+    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
+    assertEquals("no protocol: /not/a/URL", ex.getCause().getCause().getMessage());
   }
 
   @Test
@@ -210,10 +213,11 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyDefUrl.toString()));
+    assertTrue(ex.getCause() instanceof UncheckedIOException);
+    assertTrue(ex.getCause().getCause() instanceof EOFException);
     assertEquals(
-        "Error getting classloader for context: ContextDefinition null for context definition "
-            + "file: " + emptyDefUrl.toString(),
-        ex.getMessage());
+        "InputStream does not contain a valid ContextDefinition at " + emptyDefUrl.toString(),
+        ex.getCause().getCause().getMessage());
   }
 
   @Test
@@ -228,10 +232,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidDefUrl.toString()));
-    assertTrue(
-        ex.getMessage().startsWith(
-            "Error getting classloader for context: com.google.gson.stream.MalformedJsonException"),
-        ex::getMessage);
+    assertTrue(ex.getCause() instanceof JsonSyntaxException);
+    assertTrue(ex.getCause().getCause() instanceof EOFException);
   }
 
   @Test

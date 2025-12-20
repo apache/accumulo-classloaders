@@ -193,12 +193,12 @@ public class LocalStoreTest {
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve("contexts")
-        .resolve(CONTEXT_NAME + "_" + def.getChecksum() + ".json")));
+        .resolve(CONTEXT_NAME + "-" + def.getChecksum() + ".json")));
     for (Resource r : def.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       String checksum = r.getChecksum();
-      assertTrue(
-          Files.exists(baseCacheDir.resolve("resources").resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(
+          baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
     }
   }
 
@@ -238,13 +238,13 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir.resolve("contexts")
-        .resolve(CONTEXT_NAME + "_" + updatedDef.getChecksum() + ".json")));
+        .resolve(CONTEXT_NAME + "-" + updatedDef.getChecksum() + ".json")));
     for (Resource r : updatedDef.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       assertFalse(filename.contains("C"));
       String checksum = r.getChecksum();
-      assertTrue(
-          Files.exists(baseCacheDir.resolve("resources").resolve(filename + "_" + checksum)));
+      assertTrue(Files.exists(
+          baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
     }
 
     final ClassLoader updatedContextClassLoader = helper.createClassLoader();

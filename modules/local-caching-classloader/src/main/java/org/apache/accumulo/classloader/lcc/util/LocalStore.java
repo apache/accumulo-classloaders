@@ -23,12 +23,10 @@ import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.Objects.requireNonNull;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
@@ -36,16 +34,12 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-import org.apache.accumulo.core.util.Retry;
-import org.apache.accumulo.core.util.Retry.RetryFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,17 +86,13 @@ public final class LocalStore {
   }
 
   public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
-      throws IOException, ContextClassLoaderException, InterruptedException, URISyntaxException {
+      throws IOException {
     requireNonNull(contextDefinition, "definition must be supplied");
-    final RetryFactory retryFactory =
-        Retry.builder().infiniteRetries().retryAfter(1, TimeUnit.SECONDS)
-            .incrementBy(1, TimeUnit.SECONDS).maxWait(5, TimeUnit.MINUTES).backOffFactor(2)
-            .logInterval(1, TimeUnit.SECONDS).createFactory();
-    final String contextName = contextDefinition.getContextName();
+    final String contextName = contextDefinition.getLocalFileName();
+    // use a LinkedHashSet to preserve the order of the context resources
     final Set<Path> localFiles = new LinkedHashSet<>();
     try {
       storeContextDefinition(contextDefinition);
-      Retry retry = retryFactory.createRetry();
       boolean successful = false;
       while (!successful) {
         localFiles.clear();
@@ -117,21 +107,13 @@ public final class LocalStore {
           LOG.trace("Added resource {} to classpath", path);
         }
         successful = localFiles.size() == contextDefinition.getResources().size();
-        if (!successful) {
-          retry.logRetry(LOG, "Unable to store all resources for context " + contextName);
-          retry.waitForNextAttempt(LOG, "Store resources for context " + contextName);
-          retry.useRetry();
-        }
-        retry.logCompletion(LOG,
-            "Resources for context " + contextName + " cached locally as " + localFiles);
       }
 
-    } catch (IOException | InterruptedException | RuntimeException e) {
-      LOG.error("Error initializing context: " + contextDefinition.getContextName(), e);
+    } catch (IOException | RuntimeException e) {
+      LOG.error("Error initializing context: " + contextName, e);
       throw e;
     }
-    return new URLClassLoaderParams(
-        contextDefinition.getContextName() + "_" + contextDefinition.getChecksum(),
+    return new URLClassLoaderParams(contextName + "_" + contextDefinition.getChecksum(),
         localFiles.stream().map(p -> {
           try {
             return p.toUri().toURL();
@@ -147,8 +129,7 @@ public final class LocalStore {
     // context names could contain anything, so let's remove any path separators that would mess
     // with the file names
     String destinationName =
-        localName(contextDefinition.getContextName().replace(File.separatorChar, '_'),
-            contextDefinition.getChecksum());
+        localName(contextDefinition.getLocalFileName(), contextDefinition.getChecksum());
     Path destinationPath = contextsDir.resolve(destinationName);
     if (Files.exists(destinationPath)) {
       return;

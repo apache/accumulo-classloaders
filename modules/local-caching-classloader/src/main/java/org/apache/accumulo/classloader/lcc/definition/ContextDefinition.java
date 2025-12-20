@@ -33,8 +33,8 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.apache.accumulo.classloader.lcc.Constants;
+import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
@@ -45,8 +45,9 @@ public class ContextDefinition {
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
-  public static ContextDefinition create(String contextName, int monitorIntervalSecs,
-      URL... sources) throws ContextClassLoaderException, IOException {
+  // for testing
+  public static ContextDefinition create(String sourceFileName, int monitorIntervalSecs,
+      URL... sources) throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
@@ -55,35 +56,58 @@ public class ContextDefinition {
         resources.add(new Resource(u, checksum));
       }
     }
-    return new ContextDefinition(contextName, monitorIntervalSecs, resources);
+    return new ContextDefinition(sourceFileName, monitorIntervalSecs, resources);
   }
 
-  public static ContextDefinition fromJson(InputStream inputStream) throws IOException {
-    var def = GSON.fromJson(new InputStreamReader(inputStream, UTF_8), ContextDefinition.class);
-    if (def == null) {
-      throw new EOFException("InputStream does not contain a valid ContextDefinition");
+  public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
+    LocalCachingContextClassLoaderFactory.LOG.trace("Retrieving context definition file from {}",
+        url);
+    final FileResolver resolver = FileResolver.resolve(url);
+    try (InputStream is = resolver.getInputStream()) {
+      var def = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
+      if (def == null) {
+        throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
+      }
+      def.sourceFileName = resolver.getFileName();
+      def.localFileName = sourceToLocalFileName(def.sourceFileName);
+      return def;
     }
-    return def;
   }
 
-  private String contextName;
-  private volatile int monitorIntervalSeconds;
-  private LinkedHashSet<Resource> resources;
+  // transient fields that don't go in the json
+  private transient String sourceFileName;
+  private transient String localFileName;
   private volatile transient String checksum = null;
+
+  // serialized fields for json
+  // use a LinkedHashSet to preserve the order specified in the context file
+  private int monitorIntervalSeconds;
+  private LinkedHashSet<Resource> resources;
+
+  private static String sourceToLocalFileName(String sourceFileName) {
+    return sourceFileName.toLowerCase().endsWith(".json") ? sourceFileName
+        : sourceFileName + ".json";
+  }
 
   public ContextDefinition() {}
 
-  public ContextDefinition(String contextName, int monitorIntervalSeconds,
+  public ContextDefinition(String sourceFileName, int monitorIntervalSeconds,
       LinkedHashSet<Resource> resources) {
-    this.contextName = requireNonNull(contextName, "context name must be supplied");
+    this.sourceFileName = requireNonNull(sourceFileName, "source file name must be supplied");
+    this.localFileName = sourceToLocalFileName(sourceFileName);
+
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
     this.resources = requireNonNull(resources, "resources must be supplied");
   }
 
-  public String getContextName() {
-    return contextName;
+  public String getSourceFileName() {
+    return sourceFileName;
+  }
+
+  public String getLocalFileName() {
+    return localFileName;
   }
 
   public int getMonitorIntervalSeconds() {
@@ -96,7 +120,7 @@ public class ContextDefinition {
 
   @Override
   public int hashCode() {
-    return hash(contextName, monitorIntervalSeconds, resources);
+    return hash(sourceFileName, monitorIntervalSeconds, resources);
   }
 
   @Override
@@ -111,7 +135,7 @@ public class ContextDefinition {
       return false;
     }
     ContextDefinition other = (ContextDefinition) obj;
-    return Objects.equals(contextName, other.contextName)
+    return Objects.equals(sourceFileName, other.sourceFileName)
         && monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
   }
