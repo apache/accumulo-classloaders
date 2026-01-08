@@ -20,7 +20,7 @@ package org.apache.accumulo.classloader.lcc.util;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.nio.file.StandardOpenOption.CREATE_NEW;
 import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
@@ -30,10 +30,16 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.Constants;
@@ -82,7 +88,7 @@ public final class LocalStore {
   }
 
   static String tempName(String baseName) {
-    return "." + requireNonNull(baseName) + ".tmp_" + PID;
+    return "." + requireNonNull(baseName) + ".tmp_" + PID + "_" + UUID.randomUUID();
   }
 
   public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
@@ -135,19 +141,13 @@ public final class LocalStore {
       return;
     }
     Path tempPath = contextsDir.resolve(tempName(destinationName));
-    Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8));
+    Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8), CREATE_NEW);
     Files.move(tempPath, destinationPath, ATOMIC_MOVE);
   }
 
-  private Path storeResource(final Resource resource) {
+  private Path storeResource(final Resource resource) throws IOException {
     final URL url = resource.getLocation();
-    final FileResolver source;
-    try {
-      source = FileResolver.resolve(url);
-    } catch (IOException e) {
-      // there was an error getting the resolver for the resource location url
-      return null;
-    }
+    final FileResolver source = FileResolver.resolve(url);
     final String baseName = localName(source.getFileName(), resource.getChecksum());
     final Path destinationPath = resourcesDir.resolve(baseName);
     final Path tempPath = resourcesDir.resolve(tempName(baseName));
@@ -159,45 +159,91 @@ public final class LocalStore {
     }
 
     try {
-      Files.write(inProgressPath, PID.getBytes(UTF_8), StandardOpenOption.CREATE_NEW);
+      if (System.currentTimeMillis() - Files.getLastModifiedTime(inProgressPath).toMillis() < 30_000
+          || Files.deleteIfExists(inProgressPath)) {
+        return null;
+      }
+    } catch (NoSuchFileException e) {
+      // this is okay, nobody else is downloading the file, so we can try
+    }
+
+    try {
+      Files.write(inProgressPath, PID.getBytes(UTF_8), CREATE_NEW);
     } catch (FileAlreadyExistsException e) {
-      // TODO try this, and check the timestamp to see if it has made recent progress
-      // if no recent progress, delete the file and return null
-      // for now, return null and assume it will be finished by the other process later
-      return null;
-    } catch (IOException e) {
-      // some other exception occurred that we don't know how to handle; will attempt retry
+      // somebody else beat us to it, let them try to download it; we'll check back later
       return null;
     }
 
-    LOG.trace("Storing remote resource {} locally at {}", url, destinationPath);
-    try (InputStream is = source.getInputStream()) {
-      // TODO update the in progress file as we make progress during the copy; maybe a background
-      // thread, or maybe X number of bytes written
-      Files.copy(is, tempPath, REPLACE_EXISTING);
-      final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
-      if (!resource.getChecksum().equals(checksum)) {
-        LOG.error(
-            "Checksum {} for resource {} does not match checksum in context definition {}, removing cached copy.",
-            checksum, url, resource.getChecksum());
-        Files.delete(tempPath);
-        throw new IllegalStateException("Checksum " + checksum + " for resource " + url
-            + " does not match checksum in context definition " + resource.getChecksum());
+    var task = new FutureTask<Void>(() -> downloadFile(source, tempPath, resource), null);
+    var t = new Thread(task);
+    t.setDaemon(true);
+    t.setName("downloading " + url + " to " + tempPath);
+
+    LOG.trace("Storing remote resource {} locally at {} via temp file {}", url, destinationPath,
+        tempPath);
+    t.start();
+    try {
+      while (!task.isDone()) {
+        try {
+          Files.write(inProgressPath, PID.getBytes(UTF_8), StandardOpenOption.TRUNCATE_EXISTING);
+        } catch (IOException e) {
+          LOG.warn(
+              "Error writing progress file {}. Other processes may attempt downloading the same file.",
+              inProgressPath, e);
+        }
+        try {
+          task.get(5, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+          // timeout while waiting for task to complete; do nothing; keep waiting
+          LOG.trace("Still making progress downloading {}", tempPath);
+        } catch (InterruptedException e) {
+          task.cancel(true);
+          Thread.currentThread().interrupt();
+          throw new IllegalStateException(
+              "Thread was interrupted while waiting on resource to copy from " + url + " to "
+                  + tempPath,
+              e);
+        } catch (ExecutionException e) {
+          throw new IllegalStateException("Error copying resource from " + url + " to " + tempPath,
+              e);
+        }
       }
+
       Files.move(tempPath, destinationPath, ATOMIC_MOVE);
-    } catch (IOException e) {
-      LOG.error("Error copying resource from {} to {}. Retrying...", url, destinationPath, e);
+      LOG.debug("Successfully downloaded {}", destinationPath);
+
+      return destinationPath;
     } finally {
+      task.cancel(true);
+
       try {
         Files.deleteIfExists(inProgressPath);
       } catch (IOException e) {
-        // if we can't clean up this file and the file is already downloaded, then this doesn't
-        // matter; however, if the file isn't already downloaded, then this file's existence will
-        // only temporarily block others from attempting to download; so, this is fine to ignore
-        // TODO maybe log the failure to clean up
+        // if we can't clean up the in-progress file, it doesn't matter, because the destination
+        // file has already been created, and retries from other processes will check that before
+        // they wait on the in-progress file
+        LOG.debug("Error deleting the in-progress file (probably doesn't matter)", e);
+      }
+
+      if (t.isAlive()) {
+        LOG.debug("Unexpectedly found download thread " + t.getId()
+            + " still alive (thread was likely interrupted): " + t.getName());
       }
     }
-    return destinationPath;
   }
 
+  void downloadFile(FileResolver source, Path tempPath, Resource resource) {
+    try (InputStream is = source.getInputStream()) {
+      Files.copy(is, tempPath);
+      final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
+      if (!resource.getChecksum().equals(checksum)) {
+        Files.delete(tempPath);
+        throw new IllegalStateException(
+            "Checksum " + checksum + " for resource " + resource.getLocation()
+                + " does not match checksum in context definition " + resource.getChecksum());
+      }
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
+  }
 }

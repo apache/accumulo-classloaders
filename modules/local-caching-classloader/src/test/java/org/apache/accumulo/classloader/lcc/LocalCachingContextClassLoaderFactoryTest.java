@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -275,7 +276,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
-    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
+    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."), ex::getMessage);
   }
 
   @Test
@@ -317,11 +318,17 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
-    assertTrue(ex.getMessage().startsWith("Error getting classloader for context: Checksum"));
-    Throwable t = ex.getCause();
-    assertTrue(t instanceof IllegalStateException);
+    assertTrue(ex.getCause() instanceof IllegalStateException);
+    assertTrue(ex.getCause().getMessage().startsWith("Error copying resource from file:"),
+        ex::getMessage);
+    assertTrue(ex.getCause().getCause() instanceof ExecutionException);
+    assertTrue(ex.getCause().getCause().getCause() instanceof IllegalStateException);
+    assertTrue(ex.getCause().getCause().getCause().getMessage().startsWith("Checksum"),
+        ex.getCause().getCause().getCause()::getMessage);
     assertTrue(
-        t.getMessage().endsWith("TestA.jar does not match checksum in context definition 1234"));
+        ex.getCause().getCause().getCause().getMessage()
+            .endsWith("TestA.jar does not match checksum in context definition 1234"),
+        ex.getCause().getCause().getCause()::getMessage);
   }
 
   @Test
@@ -719,7 +726,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> localFactory.getClassLoader(updateDefUrl.toString()));
-    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."));
+    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."), ex::getMessage);
 
   }
 
