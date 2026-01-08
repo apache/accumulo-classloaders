@@ -18,6 +18,5 @@
     under the License.
 
 -->
-
 # Apache Accumulo Classloader Extras
 

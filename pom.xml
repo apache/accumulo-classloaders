@@ -178,7 +178,14 @@ under the License.
             <licenseSets>
               <licenseSet>
                 <inlineHeader>${accumulo.build.license.header}</inlineHeader>
+                <includes>
+                  <!-- override some of the default exclusions -->
+                  <include>**/*.md</include>
+                  <include>**/.github</include>
+                  <include>**/.github/**</include>
+                </includes>
                 <excludes combine.children="append">
+                  <exclude>**/.github/ISSUE_TEMPLATE/**</exclude>
                   <exclude>**/DEPENDENCIES</exclude>
                   <exclude>**/LICENSE</exclude>
                   <exclude>**/NOTICE</exclude>
@@ -188,9 +195,10 @@ under the License.
             </licenseSets>
             <mapping combine.children="append">
               <!-- general mappings; module-specific mappings appear in their respective pom -->
-              <java>SLASHSTAR_STYLE</java>
               <HelloWorldTemplate>SLASHSTAR_STYLE</HelloWorldTemplate>
               <TestTemplate>SLASHSTAR_STYLE</TestTemplate>
+              <java>SLASHSTAR_STYLE</java>
+              <md>XML_STYLE</md>
             </mapping>
           </configuration>
         </plugin>
