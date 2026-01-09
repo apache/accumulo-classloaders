@@ -81,8 +81,7 @@ public class UniqueFileReplicator implements VfsComponent, FileReplicator {
 
   @Override
   public void setLogger(Log logger) {
-    // TODO Auto-generated method stub
-
+    // nothing to do
   }
 
   @Override

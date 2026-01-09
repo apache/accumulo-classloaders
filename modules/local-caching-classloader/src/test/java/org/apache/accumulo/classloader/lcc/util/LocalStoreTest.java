@@ -34,6 +34,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
+import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.accumulo.classloader.lcc.TestUtils;
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -204,8 +205,8 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoader() throws Exception {
-    var helper = new LocalStore(baseCacheDir).storeContextResources(def);
-    ClassLoader contextClassLoader = helper.createClassLoader();
+    var urls = new LocalStore(baseCacheDir).storeContextResources(def);
+    var contextClassLoader = LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -213,10 +214,11 @@ public class LocalStoreTest {
   }
 
   @Test
-  public void testUpdate() throws Exception {
+  public void testClassLoaderUpdate() throws Exception {
     var localStore = new LocalStore(baseCacheDir);
-    var helper = localStore.storeContextResources(def);
-    final ClassLoader contextClassLoader = helper.createClassLoader();
+    var urls = localStore.storeContextResources(def);
+    final var contextClassLoader =
+        LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -234,7 +236,7 @@ public class LocalStoreTest {
         .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
 
     var updatedDef = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
-    helper = localStore.storeContextResources(updatedDef);
+    urls = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir.resolve("contexts")
@@ -247,7 +249,8 @@ public class LocalStoreTest {
           baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
     }
 
-    final ClassLoader updatedContextClassLoader = helper.createClassLoader();
+    final var updatedContextClassLoader =
+        LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
 
     assertNotEquals(contextClassLoader, updatedContextClassLoader);
     testClassLoads(updatedContextClassLoader, classA);

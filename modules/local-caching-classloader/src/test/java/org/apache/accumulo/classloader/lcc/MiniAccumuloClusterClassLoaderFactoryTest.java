@@ -187,8 +187,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       vp.cols = params.cols;
       VerifyIngest.verifyIngest(client, vp);
 
-      // Set the table classloader context. Context name is the URL to the context
-      // definition file
+      // Set the table classloader context. The context is the URL to the context definition file
       final String contextURL = testContextDefFile.toURI().toURL().toString();
       client.tableOperations().setProperty(tableName, Property.TABLE_CLASSLOADER_CONTEXT.getKey(),
           contextURL);

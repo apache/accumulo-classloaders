@@ -68,14 +68,12 @@ public class ContextDefinition {
         throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
       }
       def.sourceFileName = resolver.getFileName();
-      def.localFileName = sourceToLocalFileName(def.sourceFileName);
       return def;
     }
   }
 
   // transient fields that don't go in the json
   private transient String sourceFileName;
-  private transient String localFileName;
   private volatile transient String checksum = null;
 
   // serialized fields for json
@@ -83,17 +81,11 @@ public class ContextDefinition {
   private int monitorIntervalSeconds;
   private LinkedHashSet<Resource> resources;
 
-  private static String sourceToLocalFileName(String sourceFileName) {
-    return sourceFileName.toLowerCase().endsWith(".json") ? sourceFileName
-        : sourceFileName + ".json";
-  }
-
   public ContextDefinition() {}
 
   public ContextDefinition(String sourceFileName, int monitorIntervalSeconds,
       LinkedHashSet<Resource> resources) {
     this.sourceFileName = requireNonNull(sourceFileName, "source file name must be supplied");
-    this.localFileName = sourceToLocalFileName(sourceFileName);
 
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
@@ -103,10 +95,6 @@ public class ContextDefinition {
 
   public String getSourceFileName() {
     return sourceFileName;
-  }
-
-  public String getLocalFileName() {
-    return localFileName;
   }
 
   public int getMonitorIntervalSeconds() {

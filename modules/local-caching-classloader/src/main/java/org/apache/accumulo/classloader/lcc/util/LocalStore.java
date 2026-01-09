@@ -88,17 +88,20 @@ public final class LocalStore {
   }
 
   static String tempName(String baseName) {
-    return "." + requireNonNull(baseName) + ".tmp_" + PID + "_" + UUID.randomUUID();
+    return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
-  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
-      throws IOException {
+  public URL[] storeContextResources(final ContextDefinition contextDefinition) throws IOException {
     requireNonNull(contextDefinition, "definition must be supplied");
-    final String contextName = contextDefinition.getLocalFileName();
     // use a LinkedHashSet to preserve the order of the context resources
     final Set<Path> localFiles = new LinkedHashSet<>();
+    // store it with a .json suffix, if the original file didn't have one
+    final String origSourceName = contextDefinition.getSourceFileName();
+    final String sourceNameWithSuffix =
+        origSourceName.toLowerCase().endsWith(".json") ? origSourceName : origSourceName + ".json";
+    final String destinationName = localName(sourceNameWithSuffix, contextDefinition.getChecksum());
     try {
-      storeContextDefinition(contextDefinition);
+      storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;
       while (!successful) {
         localFiles.clear();
@@ -116,26 +119,21 @@ public final class LocalStore {
       }
 
     } catch (IOException | RuntimeException e) {
-      LOG.error("Error initializing context: " + contextName, e);
+      LOG.error("Error initializing context: " + destinationName, e);
       throw e;
     }
-    return new URLClassLoaderParams(contextName + "_" + contextDefinition.getChecksum(),
-        localFiles.stream().map(p -> {
-          try {
-            return p.toUri().toURL();
-          } catch (MalformedURLException e) {
-            // this shouldn't happen since these are local file paths
-            throw new UncheckedIOException(e);
-          }
-        }).toArray(URL[]::new));
+    return localFiles.stream().map(p -> {
+      try {
+        return p.toUri().toURL();
+      } catch (MalformedURLException e) {
+        // this shouldn't happen since these are local file paths
+        throw new UncheckedIOException(e);
+      }
+    }).toArray(URL[]::new);
   }
 
-  private void storeContextDefinition(final ContextDefinition contextDefinition)
-      throws IOException {
-    // context names could contain anything, so let's remove any path separators that would mess
-    // with the file names
-    String destinationName =
-        localName(contextDefinition.getLocalFileName(), contextDefinition.getChecksum());
+  private void storeContextDefinition(final ContextDefinition contextDefinition,
+      final String destinationName) throws IOException {
     Path destinationPath = contextsDir.resolve(destinationName);
     if (Files.exists(destinationPath)) {
       return;

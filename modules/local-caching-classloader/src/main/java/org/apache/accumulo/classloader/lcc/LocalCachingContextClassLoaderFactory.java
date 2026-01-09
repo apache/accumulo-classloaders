@@ -27,6 +27,7 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,7 +41,6 @@ import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
-import org.apache.accumulo.classloader.lcc.util.URLClassLoaderParams;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.apache.accumulo.core.util.Timer;
@@ -49,31 +49,33 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+
 /**
- * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a named
- * context. This factory expects the parameter passed to {@link #getClassLoader(String)} to be the
- * URL of a json formatted {@link ContextDefinition} file. The file contains an interval at which
- * this class should monitor the file for changes and a list of {@link Resource} objects. Each
- * resource is defined by a URL to the file and an expected MD5 hash value.
+ * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a context
+ * definition at a remote URL, and referencing remotely stored resources. This factory expects the
+ * parameter passed to {@link #getClassLoader(String)} to be the URL of a JSON-formatted
+ * {@link ContextDefinition} file. The file contains an interval at which this class should monitor
+ * the file for changes and a list of {@link Resource} objects. Each resource is defined by a URL to
+ * the file and an expected SHA-256 checksum.
  * <p>
  * The URLs supplied for the context definition file and for the resources can use one of the
- * following protocols: file://, http://, or hdfs://.
+ * following URL schemes: file, http, https, or hdfs.
  * <p>
- * As this class processes the ContextDefinition it fetches the contents of the resource from the
+ * As this class processes the ContextDefinition, it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
  * the property {@link Constants#CACHE_DIR_PROPERTY} passed via
  * {@link #init(ContextClassLoaderEnvironment)} as the root directory and creates a sub-directory
- * for each context name. Each context cache directory contains a lock file and a copy of each
- * fetched resource that is named using the following format: fileName_checksum.
+ * for context definition files, and another for resource files. All cached files have a name that
+ * includes their checksum.
  * <p>
- * The lock file prevents processes from manipulating the contexts of the context cache directory
- * concurrently, which enables the cache directories to be shared among multiple processes on the
- * host.
+ * An in-progress signal file is used for each resource file while it is being downloaded, to allow
+ * multiple processes or threads to try to avoid redundant downloads. Atomic filesystem moves are
+ * used to guarantee correctness if multiple downloads do occur.
  * <p>
  * Note that because the cache directory is shared among multiple processes, and one process can't
  * know what the other processes are doing, this class cannot clean up the shared cache directory.
- * It is left to the user to remove unused context cache directories and unused old files within a
- * context cache directory.
+ * It is left to the user to remove unused old files.
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
@@ -82,14 +84,15 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   public final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
 
-  // stores the latest seen ContextDefinition for a context name
+  // stores the latest seen ContextDefinition for a remote URL location; String types are used here
+  // for the key instead of URL because URL.hashCode could trigger network activity for hostname
+  // lookups
   private final ConcurrentHashMap<String,ContextDefinition> contextDefs = new ConcurrentHashMap<>();
 
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
-  private final DeduplicationCache<String,URLClassLoaderParams,
-      URLClassLoader> classloaders = new DeduplicationCache<>(
-          (String key, URLClassLoaderParams helper) -> helper.createClassLoader(),
+  private final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
+      new DeduplicationCache<>(LocalCachingContextClassLoaderFactory::createClassLoader,
           Duration.ofHours(24));
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
@@ -180,17 +183,28 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader =
-        classloaders.computeIfAbsent(contextLocation + "-" + computedDefinition.getChecksum(),
-            (Supplier<URLClassLoaderParams>) () -> {
-              try {
-                return localStore.get().storeContextResources(computedDefinition);
-              } catch (IOException e) {
-                throw new UncheckedIOException(e);
-              }
-            });
+    final URLClassLoader classloader = classloaders.computeIfAbsent(
+        newCacheKey(contextLocation, computedDefinition.getChecksum()), (Supplier<URL[]>) () -> {
+          try {
+            return localStore.get().storeContextResources(computedDefinition);
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
+        });
     resultHolder.set(classloader);
     return computedDefinition;
+  }
+
+  private static String newCacheKey(String contextLocation, String contextChecksum) {
+    // the checksum can't contain '-', so everything before the last one is the location
+    return contextLocation + "-" + contextChecksum;
+  }
+
+  private static boolean cacheKeyMatchesContextLocation(String cacheKey, String contextLocation) {
+    // the checksum can't contain '-', so everything before the last one is the location
+    // we can't just use startsWith(contextLocation) because there may be other contextLocations
+    // that contain this contextLocation as a prefix, so we do an exact match on the location part
+    return cacheKey.substring(0, cacheKey.lastIndexOf('-')).equals(contextLocation);
   }
 
   private void checkMonitoredLocation(String contextLocation, long interval) {
@@ -199,9 +213,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           if (previousDefinition == null) {
             return null;
           }
+          // check for any classloaders still in the cache that were created for a context
+          // definition found at this URL
           if (!classloaders
-              .anyMatch(k2 -> k2.substring(0, k2.lastIndexOf('-')).equals(contextLocation))) {
-            // context has been removed from the map, no need to check for update
+              .anyMatch(cacheKey -> cacheKeyMatchesContextLocation(cacheKey, contextLocation))) {
             LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
                 contextLocation);
             return null;
@@ -257,6 +272,17 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       monitorContext(contextLocation, nextInterval);
     }
 
+  }
+
+  @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
+      justification = "doPrivileged is deprecated without replacement and removed in newer Java")
+  public static URLClassLoader createClassLoader(String name, URL[] urls) {
+    final var cl = new URLClassLoader(name, urls,
+        LocalCachingContextClassLoaderFactory.class.getClassLoader());
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
+    }
+    return cl;
   }
 
 }
