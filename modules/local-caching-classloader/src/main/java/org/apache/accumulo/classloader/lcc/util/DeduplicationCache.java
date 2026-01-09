@@ -33,24 +33,25 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  */
 public class DeduplicationCache<KEY,PARAMS,VALUE> {
 
-  private Cache<KEY,VALUE> canonical;
-  private Cache<KEY,VALUE> onAccess;
-  private BiFunction<KEY,PARAMS,VALUE> loaderFunction;
+  private final Cache<KEY,VALUE> canonicalWeakValuesCache;
+  private final Cache<KEY,VALUE> expireAfterAccessStrongRefs;
+  private final BiFunction<KEY,PARAMS,VALUE> loaderFunction;
 
-  public DeduplicationCache(BiFunction<KEY,PARAMS,VALUE> loaderFunction, Duration minLifetime) {
+  public DeduplicationCache(final BiFunction<KEY,PARAMS,VALUE> loaderFunction,
+      final Duration minLifetime) {
     this.loaderFunction = loaderFunction;
-    this.canonical = Caffeine.newBuilder().weakValues().build();
-    this.onAccess = Caffeine.newBuilder().expireAfterAccess(minLifetime).build();
+    this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues().build();
+    this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime).build();
   }
 
-  public VALUE computeIfAbsent(KEY key, Supplier<PARAMS> params) {
-    var cl = canonical.get(key, k -> loaderFunction.apply(k, params.get()));
-    onAccess.put(key, cl);
+  public VALUE computeIfAbsent(final KEY key, final Supplier<PARAMS> params) {
+    var cl = canonicalWeakValuesCache.get(key, k -> loaderFunction.apply(k, params.get()));
+    expireAfterAccessStrongRefs.put(key, cl);
     return cl;
   }
 
-  public boolean anyMatch(Predicate<KEY> keyPredicate) {
-    return canonical.asMap().keySet().stream().anyMatch(keyPredicate);
+  public boolean anyMatch(final Predicate<KEY> keyPredicate) {
+    return canonicalWeakValuesCache.asMap().keySet().stream().anyMatch(keyPredicate);
   }
 
 }

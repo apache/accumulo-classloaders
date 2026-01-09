@@ -30,23 +30,22 @@ changes, at the monitoring interval specified in the context definition file.
 
 ## Introduction
 
-This factory allows you to create `ClassLoader` instances that point to locally
-cached copies of remote resource files. In this way, this factory allows you to
-place common resources in a remote location for use across many hosts, but
-without many of the problems that can occur when loading resources from a
-remote location.
+This factory creates `ClassLoader` instances that point to locally cached
+copies of remote resource files. In this way, this factory allows placing
+common resources in a remote location for use across many hosts, but without
+many of the problems that can occur when loading resources from a remote
+location.
 
 This factory uses a storage cache in the local filesystem for any files it
 downloads from a remote URL.
 
-To use this factory, you must store your resource files in a location that can
-be specified by a supported URL, and then you must create a JSON-formatted
-context definition file that contains a monitoring interval (in seconds,
-greater than 0), and a list of resource URLs along with a checksum for each
-resource file. You must then store this context definition file somewhere where
-this factory can download it, and use the URL to that context definition file
-as the `context` parameter for this factory's `getClassLoader(String context)`
-method.
+To use this factory, one must store resource files in a location that can be
+specified by a supported URL, and then must create a JSON-formatted context
+definition file that contains a monitoring interval (in seconds, greater than
+0), and a list of resource URLs along with a checksum for each resource file.
+This context definition file must then be stored somewhere where this factory
+can download it, and use the URL to that context definition file as the
+`context` parameter for this factory's `getClassLoader(String context)` method.
 
 This factory can handle context and resource URLs that use the `file`, `hdfs`,
 `http`, or `https` URL scheme.
@@ -108,47 +107,17 @@ The selected location should be a persistent location with plenty of space to
 store downloaded resources (usually jar files), and should be writable by all
 the processes which use this factory to share the same resources.
 
-Files downloaded to this cache may be used by multiple threads or processes, so
-be very careful when removing old contents to ensure that they are no longer
-needed.
+Resources downloaded to this cache may be used by multiple contexts, threads,
+and processes, so be very careful when removing old contents to ensure that
+they are no longer needed. If a resource file is deleted from the local storage
+cache while a `ClassLoader` exists that references it, that `ClassLoader` may,
+and probably will, stop working correctly. Similarly, files that have been
+downloaded should not be modified, because checksums are only verified on first
+download, and any modification will likely cause unexpected behavior.
 
-Do **NOT** use a temporary directory for the local storage cache location.
-
-If a resource file is deleted from the local storage cache while a
-`ClassLoader` exists that references it, that `ClassLoader` may, and probably
-will, stop working correctly.
-
-The layout of the local storage cache is two directories: `contexts` and
-`resources`. Context definition files are stored in the `contexts` directory.
-These are for reference only. This factory will not use them once they are
-written. All of the resources used by all contexts are stored in the `contexts`
-directory.
-
-Both context definition files, and resource files use a naming scheme that
-includes the hash of their contents to avoid conflicts with similarly named
-remote resources.
-
-Multiple contexts, multiple threads, and multiple processes, can use the same
-resource files, once they are downloaded. If the resource file already exists,
-it is assumed that it is safe to use. Checksums are only verified on first
-download.
-
-When a resource file is first downloaded, it downloads to a temporary file, and
-then atomically renames it to the final location. **Important**: this factory
-depends on the local filesystem's ability to atomically move files and will
-only work on filesystems with that capability.
-
-This factory will only download one file at a time for each context. While each
-file is being downloaded, a tracking file is written to signal to other
-threads/processes that the file is currently being downloaded. If this file is
-detected, and its last modified time is less than 30 seconds old, then the
-download code will skip the file and come back to it after it is done
-downloading the other resource files for a context. If the tracking file
-doesn't exist or its last modified time is greater than 30 seconds, it will
-download the file. One thread or process whose download is stalled may result
-in duplicate attempts to download that file from other threads or processes,
-but the use of the tracking file is an attempt to limit the number of
-concurrent download attempts for any given file to just one.
+* Do **NOT** use a temporary directory for the local storage cache location.
+* The local storage cache location **MUST** use a filesystem that supports
+  atomic moves.
 
 ## Creating a ContextDefinition file
 
@@ -203,15 +172,17 @@ constructed at that time.
 
 Because the cache directory is shared among multiple processes, and one process
 can't know what the other processes are doing, this class cannot clean up the
-shared cache directory. It is left to the user to remove unused files from the
-cache. While the context definition JSON files are always safe to delete, it is
-not recommended to do so for any that are still in use, because they can be
-useful for troubleshooting. **IMPORTANT**: it is not safe to delete resource
-files that are still referenced by any `ClassLoader` instances. Each
-`ClassLoader` instance assumes that the locally cached resources exist and can
-be read. They will not attempt to download any files. Downloading and verifying
-files only occurs when `ClassLoader` instances are initially created for a
-context definition.
+shared cache directory of unused resources. It is left to the user to remove
+unused files from the cache. While the context definition JSON files are always
+safe to delete, it is not recommended to do so for any that are still in use,
+because they can be useful for troubleshooting.
+
+**IMPORTANT**: as mentioned earlier, it is not safe to delete resource files
+that are still referenced by any `ClassLoader` instances. Each `ClassLoader`
+instance assumes that the locally cached resources exist and can be read. They
+will not attempt to download any files.  Downloading and verifying files only
+occurs when `ClassLoader` instances are initially created for a context
+definition.
 
 ## Accumulo Configuration
 

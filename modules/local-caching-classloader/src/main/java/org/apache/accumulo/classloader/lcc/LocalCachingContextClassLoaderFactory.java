@@ -176,6 +176,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       try {
         URL url = new URL(contextLocation);
         computedDefinition = ContextDefinition.fromRemoteURL(url);
+        // we can set up monitoring now, but it will be blocked from doing anything yet, until this
+        // finishes, since this code and the monitoring code both use contextDefs.compute(), which
+        // is atomic/blocking for the same key
         monitorContext(contextLocation, computedDefinition.getMonitorIntervalSeconds());
       } catch (IOException e) {
         throw new UncheckedIOException(e);

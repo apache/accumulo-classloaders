@@ -62,23 +62,17 @@ import org.slf4j.LoggerFactory;
  * </ul>
  *
  * <p>
- * When downloading any file, the file is first downloaded to a temporary file with a unique name,
- * and then atomically renamed, so it works correctly even if there are multiple processes or
- * threads doing the same thing. The use of `CREATE_NEW` and the lack of `REPLACE_EXISTING` when
- * creating the temporary files is to ensure we do not silently collide with other processes, when
- * these temporary files should be unique.
+ * Files downloaded to these directories use a naming convention that includes their checksum, so
+ * that each unique file will be stored exactly once, regardless of how many threads, processes, or
+ * contexts reference the file.
  *
  * <p>
- * When downloading resource files, an additional "in-progress" signal file derived from the name of
- * the file being downloaded with the suffix ".downloading" is also used. This file is updated with
- * the current process' PID every 5 seconds so long as the file is still being downloaded. This
- * serves as a signal to other processes or threads that they can wait instead of attempting to
- * download the same file. This avoids duplicate work. If an attempt to download a resource file is
- * detected, and it has been updated within the last 30 seconds, it is skipped and the remaining
- * files are downloaded before attempting it again. If this signal file hasn't been updated in the
- * last 30 seconds, a download will be attempted. Failures to download are propagated up to the
- * higher level. `CREATE_NEW` is used when creating this signal file, in order to atomically detect
- * race collisions with other threads or processes, and to try to avoid duplicate work.
+ * Downloads make a best effort attempt to avoid multiple processes or threads from downloading the
+ * same file at the same time, using a temporary signal file with the suffix ".downloading" to avoid
+ * duplicate effort. Duplicate effort and race conditions can occur if one download attempt stalls.
+ * This is intentional, so that others will not be blocked indefinitely. When multiple attempts to
+ * download a file do occur concurrently, they use unique temporary file names and atomic file
+ * system moves to ensure correctness, even under these circumstances.
  *
  * <p>
  * Once all files for a context are downloaded, an array of {@link URL}s will be returned, which
@@ -128,6 +122,10 @@ public final class LocalStore {
     return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
+  /**
+   * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
+   * resources directory.
+   */
   public URL[] storeContextResources(final ContextDefinition contextDefinition) throws IOException {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
@@ -156,7 +154,7 @@ public final class LocalStore {
       }
 
     } catch (IOException | RuntimeException e) {
-      LOG.error("Error initializing context: " + destinationName, e);
+      LOG.error("Error storing resources for context {}", destinationName, e);
       throw e;
     }
     return localFiles.stream().map(p -> {
@@ -176,26 +174,48 @@ public final class LocalStore {
       return;
     }
     Path tempPath = contextsDir.resolve(tempName(destinationName));
+    // the temporary file name should be unique for this attempt, but CREATE_NEW is used here, along
+    // with the subsequent ATOMIC_MOVE, to guarantee we don't collide with any other task saving the
+    // same file
     Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8), CREATE_NEW);
     Files.move(tempPath, destinationPath, ATOMIC_MOVE);
   }
 
+  /*
+   * If the resource is already downloaded, attempt cleanup of old ".downloading" files and return.
+   * If it needs to be downloaded, attempt to create a ".downloading" file to signal progress. If
+   * that file already exists and has been updated within the last 30 seconds, return null to signal
+   * to the calling code to wait and retry later.
+   *
+   * Once downloading begins, update the ".downloading" file with the current PID every 5 seconds so
+   * long as the file is still being downloaded, so that others will wait on this to finish instead
+   * of starting a duplicate attempt.
+   *
+   * Failures to download are not re-attempted, but will propagate up to the caller.
+   */
   private Path storeResource(final Resource resource) throws IOException {
     final URL url = resource.getLocation();
     final FileResolver source = FileResolver.resolve(url);
     final String baseName = localName(source.getFileName(), resource.getChecksum());
     final Path destinationPath = resourcesDir.resolve(baseName);
     final Path tempPath = resourcesDir.resolve(tempName(baseName));
-    final Path inProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
+    final Path downloadingProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
 
     if (Files.exists(destinationPath)) {
       LOG.trace("Resource {} is already cached at {}", url, destinationPath);
+      try {
+        // clean up any in progress files that may have been left behind by previous failed attempts
+        Files.deleteIfExists(downloadingProgressPath);
+      } catch (IOException e) {
+        // this is a best effort, and it doesn't matter if we fail
+        LOG.trace("Unable to clean up an old progress file {}", downloadingProgressPath, e);
+      }
       return destinationPath;
     }
 
     try {
-      if (System.currentTimeMillis() - Files.getLastModifiedTime(inProgressPath).toMillis() < 30_000
-          || Files.deleteIfExists(inProgressPath)) {
+      if (System.currentTimeMillis() - Files.getLastModifiedTime(downloadingProgressPath).toMillis()
+          < 30_000 || Files.deleteIfExists(downloadingProgressPath)) {
         return null;
       }
     } catch (NoSuchFileException e) {
@@ -203,7 +223,9 @@ public final class LocalStore {
     }
 
     try {
-      Files.write(inProgressPath, PID.getBytes(UTF_8), CREATE_NEW);
+      // CREATE_NEW forces an exception if the file already exists, so we can avoid colliding with
+      // others attempts to start progress on the same resource file
+      Files.write(downloadingProgressPath, PID.getBytes(UTF_8), CREATE_NEW);
     } catch (FileAlreadyExistsException e) {
       // somebody else beat us to it, let them try to download it; we'll check back later
       return null;
@@ -220,11 +242,11 @@ public final class LocalStore {
     try {
       while (!task.isDone()) {
         try {
-          Files.write(inProgressPath, PID.getBytes(UTF_8), TRUNCATE_EXISTING);
+          Files.write(downloadingProgressPath, PID.getBytes(UTF_8), TRUNCATE_EXISTING);
         } catch (IOException e) {
           LOG.warn(
               "Error writing progress file {}. Other processes may attempt downloading the same file.",
-              inProgressPath, e);
+              downloadingProgressPath, e);
         }
         try {
           task.get(5, TimeUnit.SECONDS);
@@ -244,6 +266,7 @@ public final class LocalStore {
         }
       }
 
+      // ATOMIC_MOVE is used to guarantee we don't collide with any other task saving the same file
       Files.move(tempPath, destinationPath, ATOMIC_MOVE);
       LOG.debug("Successfully downloaded {}", destinationPath);
 
@@ -252,12 +275,11 @@ public final class LocalStore {
       task.cancel(true);
 
       try {
-        Files.deleteIfExists(inProgressPath);
+        Files.deleteIfExists(downloadingProgressPath);
       } catch (IOException e) {
-        // if we can't clean up the in-progress file, it doesn't matter, because the destination
-        // file has already been created, and retries from other processes will check that before
-        // they wait on the in-progress file
-        LOG.debug("Error deleting the in-progress file (probably doesn't matter)", e);
+        // if we can't clean up the downloading progress file, it doesn't matter, because the
+        // destination file has already been created; retries from other processes check that first
+        LOG.debug("Error deleting the downloading progress file (probably doesn't matter)", e);
       }
 
       if (t.isAlive()) {
@@ -269,6 +291,9 @@ public final class LocalStore {
 
   private void downloadFile(FileResolver source, Path tempPath, Resource resource) {
     try (InputStream is = source.getInputStream()) {
+      // the temporary file name should be unique for this attempt, but the lack of REPLACE_EXISTING
+      // in this copy, along with the subsequent ATOMIC_MOVE, to guarantee we don't collide with any
+      // other task saving the same file
       Files.copy(is, tempPath);
       final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
       if (!resource.getChecksum().equals(checksum)) {

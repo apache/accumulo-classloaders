@@ -45,6 +45,11 @@ public class ContextDefinition {
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
+  public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
+      throws IOException {
+    return create("unknown", monitorIntervalSecs, sources);
+  }
+
   public static ContextDefinition create(String sourceFileName, int monitorIntervalSecs,
       URL... sources) throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
