@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc.util;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
@@ -28,11 +29,11 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -49,6 +50,42 @@ import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * A simple storage service backed by a local file system for storing downloaded
+ * {@link ContextDefinition} files and the {@link Resource} objects it references.
+ * <p>
+ * The layout of the storage area consists of two directories:
+ * <ul>
+ * <li><b>contexts</b> stores a copy of the {@link ContextDefinition} JSON files for each context,
+ * and exist primarily for user convenience (they aren't used again by this factory)
+ * <li><b>resources</b> stores a copy of all the {@link Resource} files for all contexts
+ * </ul>
+ *
+ * <p>
+ * When downloading any file, the file is first downloaded to a temporary file with a unique name,
+ * and then atomically renamed, so it works correctly even if there are multiple processes or
+ * threads doing the same thing. The use of `CREATE_NEW` and the lack of `REPLACE_EXISTING` when
+ * creating the temporary files is to ensure we do not silently collide with other processes, when
+ * these temporary files should be unique.
+ *
+ * <p>
+ * When downloading resource files, an additional "in-progress" signal file derived from the name of
+ * the file being downloaded with the suffix ".downloading" is also used. This file is updated with
+ * the current process' PID every 5 seconds so long as the file is still being downloaded. This
+ * serves as a signal to other processes or threads that they can wait instead of attempting to
+ * download the same file. This avoids duplicate work. If an attempt to download a resource file is
+ * detected, and it has been updated within the last 30 seconds, it is skipped and the remaining
+ * files are downloaded before attempting it again. If this signal file hasn't been updated in the
+ * last 30 seconds, a download will be attempted. Failures to download are propagated up to the
+ * higher level. `CREATE_NEW` is used when creating this signal file, in order to atomically detect
+ * race collisions with other threads or processes, and to try to avoid duplicate work.
+ *
+ * <p>
+ * Once all files for a context are downloaded, an array of {@link URL}s will be returned, which
+ * point to the local files that have been downloaded for the context, in the same order as
+ * specified in the {@link ContextDefinition} file, to be used for constructing a
+ * {@link URLClassLoader}.
+ */
 public final class LocalStore {
   private static final Logger LOG = LoggerFactory.getLogger(LocalStore.class);
   private static final String PID = Long.toString(ProcessHandle.current().pid());
@@ -87,7 +124,7 @@ public final class LocalStore {
     return String.format("%s-%s", remoteFileName, checksum);
   }
 
-  static String tempName(String baseName) {
+  private static String tempName(String baseName) {
     return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
@@ -183,7 +220,7 @@ public final class LocalStore {
     try {
       while (!task.isDone()) {
         try {
-          Files.write(inProgressPath, PID.getBytes(UTF_8), StandardOpenOption.TRUNCATE_EXISTING);
+          Files.write(inProgressPath, PID.getBytes(UTF_8), TRUNCATE_EXISTING);
         } catch (IOException e) {
           LOG.warn(
               "Error writing progress file {}. Other processes may attempt downloading the same file.",
@@ -230,7 +267,7 @@ public final class LocalStore {
     }
   }
 
-  void downloadFile(FileResolver source, Path tempPath, Resource resource) {
+  private void downloadFile(FileResolver source, Path tempPath, Resource resource) {
     try (InputStream is = source.getInputStream()) {
       Files.copy(is, tempPath);
       final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
