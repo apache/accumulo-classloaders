@@ -228,6 +228,7 @@ public class LocalStoreTest {
     var updatedResources = def.getResources().stream().limit(def.getResources().size() - 1)
         .collect(Collectors.toCollection(LinkedHashSet::new));
     assertEquals(def.getResources().size() - 1, updatedResources.size());
+    var removedResource = def.getResources().stream().reduce((a, b) -> b).orElseThrow();
 
     // Add D
     final URL jarDOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar");
@@ -248,6 +249,11 @@ public class LocalStoreTest {
       assertTrue(Files.exists(
           baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
     }
+
+    String filename = TestUtils.getFileName(removedResource.getLocation());
+    assertTrue(filename.contains("C"), "cache location should still contain 'C'");
+    assertTrue(Files.exists(baseCacheDir.resolve("resources")
+        .resolve(LocalStore.localName(filename, removedResource.getChecksum()))));
 
     final var updatedContextClassLoader =
         LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
