@@ -27,7 +27,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,16 +39,16 @@ import java.util.function.Supplier;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
+import org.apache.accumulo.classloader.lcc.util.LccUtils;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
+import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
-import org.apache.accumulo.core.util.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
-
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
+import com.google.common.base.Stopwatch;
 
 /**
  * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a context
@@ -79,10 +78,16 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  public static final Logger LOG =
+  public static final String CACHE_DIR_PROPERTY =
+      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.cache.dir";
+
+  public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
+      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
+
+  private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  public final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
+  private final ScheduledExecutorService EXECUTOR = Executors.newScheduledThreadPool(0);
 
   // stores the latest seen ContextDefinition for a remote URL location; String types are used here
   // for the key instead of URL because URL.hashCode could trigger network activity for hostname
@@ -92,12 +97,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
   private final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
-      new DeduplicationCache<>(LocalCachingContextClassLoaderFactory::createClassLoader,
-          Duration.ofHours(24));
+      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24));
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
-  private final Map<String,Timer> classloaderFailures = new HashMap<>();
+  private final Map<String,Stopwatch> classloaderFailures = new HashMap<>();
   private volatile Duration updateFailureGracePeriodMins;
 
   /**
@@ -121,9 +125,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   @Override
   public void init(ContextClassLoaderEnvironment env) {
-    String value = requireNonNull(env.getConfiguration().get(Constants.CACHE_DIR_PROPERTY),
-        "Property " + Constants.CACHE_DIR_PROPERTY + " not set, cannot create cache directory.");
-    String graceProp = env.getConfiguration().get(Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS);
+    String value = requireNonNull(env.getConfiguration().get(CACHE_DIR_PROPERTY),
+        "Property " + CACHE_DIR_PROPERTY + " not set, cannot create cache directory.");
+    String graceProp = env.getConfiguration().get(UPDATE_FAILURE_GRACE_PERIOD_MINS);
     long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
     updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
     final Path baseCacheDir;
@@ -174,8 +178,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     ContextDefinition computedDefinition;
     if (previousDefinition == null) {
       try {
-        URL url = new URL(contextLocation);
-        computedDefinition = ContextDefinition.fromRemoteURL(url);
+        computedDefinition = getDefinition(contextLocation);
         // we can set up monitoring now, but it will be blocked from doing anything yet, until this
         // finishes, since this code and the monitoring code both use contextDefs.compute(), which
         // is atomic/blocking for the same key
@@ -196,6 +199,12 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         });
     resultHolder.set(classloader);
     return computedDefinition;
+  }
+
+  private static ContextDefinition getDefinition(String contextLocation) throws IOException {
+    LOG.trace("Retrieving context definition file from {}", contextLocation);
+    URL url = new URL(contextLocation);
+    return ContextDefinition.fromRemoteURL(url);
   }
 
   private static String newCacheKey(String contextLocation, String contextChecksum) {
@@ -234,8 +243,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
     long nextInterval = interval;
     try {
-      URL url = new URL(contextLocation);
-      final ContextDefinition update = ContextDefinition.fromRemoteURL(url);
+      final ContextDefinition update = getDefinition(contextLocation);
       if (!currentDef.getChecksum().equals(update.getChecksum())) {
         LOG.debug("Context definition for {} has changed", contextLocation);
         localStore.get().storeContextResources(update);
@@ -248,18 +256,18 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } catch (IOException | RuntimeException e) {
       LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
           contextLocation, e);
-      final Timer failureTimer = classloaderFailures.get(contextLocation);
+      final Stopwatch failureTimer = classloaderFailures.get(contextLocation);
       if (updateFailureGracePeriodMins.isZero()) {
         // failure monitoring is disabled
         LOG.debug("Property {} not set, not tracking classloader failures for context {}",
-            Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS, contextLocation);
+            UPDATE_FAILURE_GRACE_PERIOD_MINS, contextLocation);
       } else if (failureTimer == null) {
         // first failure, start the timer
-        classloaderFailures.put(contextLocation, Timer.startNew());
+        classloaderFailures.put(contextLocation, Stopwatch.createStarted());
         LOG.debug(
             "Tracking classloader failures for context {}, will NOT return working classloader if failures continue for {} minutes",
             contextLocation, updateFailureGracePeriodMins.toMinutes());
-      } else if (failureTimer.hasElapsed(updateFailureGracePeriodMins)) {
+      } else if (failureTimer.elapsed().compareTo(updateFailureGracePeriodMins) > 0) {
         // has been failing for the grace period
         // unset the classloader reference so that the failure
         // will return from getClassLoader in the calling thread
@@ -275,17 +283,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       monitorContext(contextLocation, nextInterval);
     }
 
-  }
-
-  @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
-      justification = "doPrivileged is deprecated without replacement and removed in newer Java")
-  public static URLClassLoader createClassLoader(String name, URL[] urls) {
-    final var cl = new URLClassLoader(name, urls,
-        LocalCachingContextClassLoaderFactory.class.getClassLoader());
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
-    }
-    return cl;
   }
 
 }

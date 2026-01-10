@@ -18,6 +18,8 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.CACHE_DIR_PROPERTY;
+import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.UPDATE_FAILURE_GRACE_PERIOD_MINS;
 import static org.apache.accumulo.classloader.lcc.TestUtils.createContextDefinitionFile;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
@@ -91,8 +93,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
   public static void beforeAll() throws Exception {
     java.nio.file.Path baseCacheDir = tempDir.resolve("base");
 
-    ConfigurationCopy acuConf = new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY,
-        baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
+    ConfigurationCopy acuConf = new ConfigurationCopy(
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
     FACTORY.init(() -> new ConfigurationImpl(acuConf));
 
     // Find the Test jar files
@@ -661,8 +663,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
         new LocalCachingContextClassLoaderFactory();
 
     String baseCacheDir = tempDir.resolve("base").toUri().toString();
-    ConfigurationCopy acuConf = new ConfigurationCopy(Map.of(Constants.CACHE_DIR_PROPERTY,
-        baseCacheDir, Constants.UPDATE_FAILURE_GRACE_PERIOD_MINS, "1"));
+    ConfigurationCopy acuConf = new ConfigurationCopy(
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir, UPDATE_FAILURE_GRACE_PERIOD_MINS, "1"));
     localFactory.init(() -> new ConfigurationImpl(acuConf));
 
     final var def = ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation);

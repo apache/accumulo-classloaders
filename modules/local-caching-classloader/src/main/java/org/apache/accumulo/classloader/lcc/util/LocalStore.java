@@ -23,6 +23,7 @@ import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.util.Objects.requireNonNull;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,7 +44,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 
-import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
@@ -295,7 +295,7 @@ public final class LocalStore {
       // in this copy, along with the subsequent ATOMIC_MOVE, to guarantee we don't collide with any
       // other task saving the same file
       Files.copy(is, tempPath);
-      final String checksum = Constants.getChecksummer().digestAsHex(tempPath);
+      final String checksum = DIGESTER.digestAsHex(tempPath);
       if (!resource.getChecksum().equals(checksum)) {
         Files.delete(tempPath);
         throw new IllegalStateException(

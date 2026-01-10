@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc.definition;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -31,12 +32,12 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
-import org.apache.accumulo.classloader.lcc.Constants;
-import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -56,7 +57,7 @@ public class ContextDefinition {
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
       try (InputStream is = resolver.getInputStream()) {
-        String checksum = Constants.getChecksummer().digestAsHex(is);
+        String checksum = DIGESTER.digestAsHex(is);
         resources.add(new Resource(u, checksum));
       }
     }
@@ -64,8 +65,6 @@ public class ContextDefinition {
   }
 
   public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
-    LocalCachingContextClassLoaderFactory.LOG.trace("Retrieving context definition file from {}",
-        url);
     final FileResolver resolver = FileResolver.resolve(url);
     try (InputStream is = resolver.getInputStream()) {
       var def = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
@@ -79,7 +78,8 @@ public class ContextDefinition {
 
   // transient fields that don't go in the json
   private transient String sourceFileName;
-  private volatile transient String checksum = null;
+  private final transient Supplier<String> checksum =
+      Suppliers.memoize(() -> DIGESTER.digestAsHex(toJson()));
 
   // serialized fields for json
   // use a LinkedHashSet to preserve the order specified in the context file
@@ -132,11 +132,8 @@ public class ContextDefinition {
         && Objects.equals(resources, other.resources);
   }
 
-  public synchronized String getChecksum() {
-    if (checksum == null) {
-      checksum = Constants.getChecksummer().digestAsHex(toJson());
-    }
-    return checksum;
+  public String getChecksum() {
+    return checksum.get();
   }
 
   public String toJson() {

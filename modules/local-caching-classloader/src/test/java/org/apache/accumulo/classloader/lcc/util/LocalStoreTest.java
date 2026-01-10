@@ -34,7 +34,6 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
-import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.accumulo.classloader.lcc.TestUtils;
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -206,7 +205,7 @@ public class LocalStoreTest {
   @Test
   public void testClassLoader() throws Exception {
     var urls = new LocalStore(baseCacheDir).storeContextResources(def);
-    var contextClassLoader = LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
+    var contextClassLoader = LccUtils.createClassLoader("url", urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -217,8 +216,7 @@ public class LocalStoreTest {
   public void testClassLoaderUpdate() throws Exception {
     var localStore = new LocalStore(baseCacheDir);
     var urls = localStore.storeContextResources(def);
-    final var contextClassLoader =
-        LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
+    final var contextClassLoader = LccUtils.createClassLoader("url", urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -255,8 +253,7 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir.resolve("resources")
         .resolve(LocalStore.localName(filename, removedResource.getChecksum()))));
 
-    final var updatedContextClassLoader =
-        LocalCachingContextClassLoaderFactory.createClassLoader("url", urls);
+    final var updatedContextClassLoader = LccUtils.createClassLoader("url", urls);
 
     assertNotEquals(contextClassLoader, updatedContextClassLoader);
     testClassLoads(updatedContextClassLoader, classA);
