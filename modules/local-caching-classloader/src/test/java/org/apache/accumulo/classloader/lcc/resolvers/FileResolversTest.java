@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
@@ -50,7 +49,7 @@ public class FileResolversTest {
     }
   }
 
-  private long getFileSize(FileResolver resolver) throws IOException, ContextClassLoaderException {
+  private long getFileSize(FileResolver resolver) throws IOException {
     try (InputStream is = resolver.getInputStream()) {
       return IOUtils.consume(is);
     }
