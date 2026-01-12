@@ -55,18 +55,19 @@ import com.google.common.base.Stopwatch;
  * definition at a remote URL, and referencing remotely stored resources. This factory expects the
  * parameter passed to {@link #getClassLoader(String)} to be the URL of a JSON-formatted
  * {@link ContextDefinition} file. The file contains an interval at which this class should monitor
- * the file for changes and a list of {@link Resource} objects. Each resource is defined by a URL to
- * the file and an expected SHA-256 checksum.
+ * the file for changes and a list of {@link Resource} objects. If the monitoring fails for a period
+ * configurable with the {@link #UPDATE_FAILURE_GRACE_PERIOD_MINS} property, then monitoring will
+ * discontinue until the next use of that context. Each resource is defined by a URL to the file and
+ * an expected SHA-256 checksum.
  * <p>
  * The URLs supplied for the context definition file and for the resources can use one of the
  * following URL schemes: file, http, https, or hdfs.
  * <p>
  * As this class processes the ContextDefinition, it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
- * the property {@link Constants#CACHE_DIR_PROPERTY} passed via
- * {@link #init(ContextClassLoaderEnvironment)} as the root directory and creates a sub-directory
- * for context definition files, and another for resource files. All cached files have a name that
- * includes their checksum.
+ * the property {@link #CACHE_DIR_PROPERTY} passed via {@link #init(ContextClassLoaderEnvironment)}
+ * as the root directory and creates a sub-directory for context definition files, and another for
+ * resource files. All cached files have a name that includes their checksum.
  * <p>
  * An in-progress signal file is used for each resource file while it is being downloaded, to allow
  * multiple processes or threads to try to avoid redundant downloads. Atomic filesystem moves are

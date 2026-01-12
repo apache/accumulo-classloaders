@@ -21,12 +21,13 @@ package org.apache.accumulo.classloader.lcc.util;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static java.nio.file.StandardOpenOption.SYNC;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -290,11 +291,11 @@ public final class LocalStore {
   }
 
   private void downloadFile(FileResolver source, Path tempPath, Resource resource) {
-    try (InputStream is = source.getInputStream()) {
-      // the temporary file name should be unique for this attempt, but the lack of REPLACE_EXISTING
-      // in this copy, along with the subsequent ATOMIC_MOVE, to guarantee we don't collide with any
-      // other task saving the same file
-      Files.copy(is, tempPath);
+    // CREATE_NEW ensures the temporary file name is unique for this attempt
+    // SYNC ensures file integrity on each write, in case of system failure
+    try (var in = source.getInputStream();
+        var out = Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC)) {
+      in.transferTo(out);
       final String checksum = DIGESTER.digestAsHex(tempPath);
       if (!resource.getChecksum().equals(checksum)) {
         Files.delete(tempPath);
