@@ -19,6 +19,7 @@
 package org.apache.accumulo.classloader.lcc;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -168,7 +169,7 @@ public class TestUtils {
       justification = "user-supplied URL is the intended functionality")
   public static String computeResourceChecksum(URL resourceLocation) throws IOException {
     try (InputStream is = resourceLocation.openStream()) {
-      return Constants.getChecksummer().digestAsHex(is);
+      return DIGESTER.digestAsHex(is);
     }
   }
 

@@ -18,23 +18,22 @@
  */
 package org.apache.accumulo.classloader.lcc.definition;
 
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Objects;
 
-public class Resource implements Comparable<Resource> {
+public class Resource {
 
-  private String location;
+  private URL location;
   private String checksum;
 
   public Resource() {}
 
-  public Resource(String location, String checksum) {
+  public Resource(URL location, String checksum) {
     this.location = location;
     this.checksum = checksum;
   }
 
-  public String getLocation() {
+  public URL getLocation() {
     return location;
   }
 
@@ -42,13 +41,9 @@ public class Resource implements Comparable<Resource> {
     return checksum;
   }
 
-  public URL getURL() throws MalformedURLException {
-    return new URL(location);
-  }
-
   @Override
   public int hashCode() {
-    return Objects.hash(checksum, location);
+    return Objects.hash(location, checksum);
   }
 
   @Override
@@ -66,12 +61,4 @@ public class Resource implements Comparable<Resource> {
     return Objects.equals(checksum, other.checksum) && Objects.equals(location, other.location);
   }
 
-  @Override
-  public int compareTo(Resource other) {
-    int result = this.location.compareTo(other.location);
-    if (result == 0) {
-      return this.checksum.compareTo(other.checksum);
-    }
-    return result;
-  }
 }
