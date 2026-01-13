@@ -18,28 +18,35 @@
  */
 package org.apache.accumulo.classloader.lcc.definition;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URL;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.TreeSet;
+import java.util.Set;
+import java.util.function.Supplier;
 
-import org.apache.accumulo.classloader.lcc.Constants;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.cli.Help;
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.start.spi.KeywordExecutable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
 import com.beust.jcommander.Parameter;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Suppliers;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
@@ -60,62 +67,76 @@ public class ContextDefinition implements KeywordExecutable {
     public List<String> files = new ArrayList<>();
   }
 
-  public static ContextDefinition create(String contextName, int monitorIntervalSecs,
-      URL... sources) throws ContextClassLoaderException, IOException {
-    TreeSet<Resource> resources = new TreeSet<>();
+  private static final Gson GSON =
+      new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
+
+  public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
+      throws IOException {
+    return create("unknown", monitorIntervalSecs, sources);
+  }
+
+  public static ContextDefinition create(String sourceFileName, int monitorIntervalSecs,
+      URL... sources) throws IOException {
+    LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
       try (InputStream is = resolver.getInputStream()) {
-        String checksum = Constants.getChecksummer().digestAsHex(is);
-        resources.add(new Resource(u.toString(), checksum));
+        String checksum = DIGESTER.digestAsHex(is);
+        resources.add(new Resource(u, checksum));
       }
     }
-    return new ContextDefinition(contextName, monitorIntervalSecs, resources);
+    return new ContextDefinition(sourceFileName, monitorIntervalSecs, resources);
   }
 
-  private String contextName;
-  private volatile int monitorIntervalSeconds;
-  private TreeSet<Resource> resources;
-  private volatile transient byte[] checksum = null;
+  public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
+    final FileResolver resolver = FileResolver.resolve(url);
+    try (InputStream is = resolver.getInputStream()) {
+      var def = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
+      if (def == null) {
+        throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
+      }
+      def.sourceFileName = resolver.getFileName();
+      return def;
+    }
+  }
+
+  // transient fields that don't go in the json
+  private transient String sourceFileName;
+  private final transient Supplier<String> checksum =
+      Suppliers.memoize(() -> DIGESTER.digestAsHex(toJson()));
+
+  // serialized fields for json
+  // use a LinkedHashSet to preserve the order specified in the context file
+  private int monitorIntervalSeconds;
+  private LinkedHashSet<Resource> resources;
 
   public ContextDefinition() {}
 
-  public ContextDefinition(String contextName, int monitorIntervalSeconds,
-      TreeSet<Resource> resources) {
-    this.contextName = requireNonNull(contextName, "context name must be supplied");
+  public ContextDefinition(String sourceFileName, int monitorIntervalSeconds,
+      LinkedHashSet<Resource> resources) {
+    this.sourceFileName = requireNonNull(sourceFileName, "source file name must be supplied");
+
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
     this.resources = requireNonNull(resources, "resources must be supplied");
   }
 
-  public String getContextName() {
-    return contextName;
+  public String getSourceFileName() {
+    return sourceFileName;
   }
 
   public int getMonitorIntervalSeconds() {
     return monitorIntervalSeconds;
   }
 
-  public TreeSet<Resource> getResources() {
-    return resources;
-  }
-
-  public void setContextName(String contextName) {
-    this.contextName = contextName;
-  }
-
-  public void setMonitorIntervalSeconds(int monitorIntervalSeconds) {
-    this.monitorIntervalSeconds = monitorIntervalSeconds;
-  }
-
-  public void setResources(TreeSet<Resource> resources) {
-    this.resources = resources;
+  public Set<Resource> getResources() {
+    return Collections.unmodifiableSet(resources);
   }
 
   @Override
   public int hashCode() {
-    return hash(contextName, monitorIntervalSeconds, resources);
+    return hash(sourceFileName, monitorIntervalSeconds, resources);
   }
 
   @Override
@@ -130,20 +151,17 @@ public class ContextDefinition implements KeywordExecutable {
       return false;
     }
     ContextDefinition other = (ContextDefinition) obj;
-    return Objects.equals(contextName, other.contextName)
+    return Objects.equals(sourceFileName, other.sourceFileName)
         && monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
   }
 
-  public synchronized byte[] getChecksum() throws NoSuchAlgorithmException {
-    if (checksum == null) {
-      checksum = Constants.getChecksummer().digest(toJson());
-    }
-    return checksum;
+  public String getChecksum() {
+    return checksum.get();
   }
 
   public String toJson() {
-    return Constants.GSON.toJson(this);
+    return GSON.toJson(this);
   }
 
   @Override

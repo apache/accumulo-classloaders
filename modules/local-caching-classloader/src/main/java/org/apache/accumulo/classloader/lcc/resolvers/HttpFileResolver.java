@@ -22,13 +22,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 
-import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
-
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public final class HttpFileResolver extends FileResolver {
 
-  protected HttpFileResolver(URL url) throws ContextClassLoaderException {
+  protected HttpFileResolver(URL url) throws IOException {
     super(url);
   }
 
@@ -39,7 +37,8 @@ public final class HttpFileResolver extends FileResolver {
   }
 
   @Override
-  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD")
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
   public InputStream getInputStream() throws IOException {
     return getURL().openStream();
   }

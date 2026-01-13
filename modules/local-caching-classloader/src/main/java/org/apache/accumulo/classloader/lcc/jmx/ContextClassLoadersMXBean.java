@@ -18,7 +18,8 @@
  */
 package org.apache.accumulo.classloader.lcc.jmx;
 
-import java.util.Set;
+import java.util.List;
+import java.util.Map;
 
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
@@ -29,6 +30,6 @@ public interface ContextClassLoadersMXBean {
     return new ObjectName("org.apache.accumulo.classloader:type=ContextClassLoaders");
   }
 
-  Set<String> getReferencedFiles();
+  Map<String,List<String>> getReferencedFiles();
 
 }

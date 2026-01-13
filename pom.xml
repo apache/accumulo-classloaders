@@ -178,7 +178,14 @@ under the License.
             <licenseSets>
               <licenseSet>
                 <inlineHeader>${accumulo.build.license.header}</inlineHeader>
+                <includes>
+                  <!-- override some of the default exclusions -->
+                  <include>**/*.md</include>
+                  <include>**/.github</include>
+                  <include>**/.github/**</include>
+                </includes>
                 <excludes combine.children="append">
+                  <exclude>**/.github/ISSUE_TEMPLATE/**</exclude>
                   <exclude>**/DEPENDENCIES</exclude>
                   <exclude>**/LICENSE</exclude>
                   <exclude>**/NOTICE</exclude>
@@ -188,9 +195,10 @@ under the License.
             </licenseSets>
             <mapping combine.children="append">
               <!-- general mappings; module-specific mappings appear in their respective pom -->
-              <java>SLASHSTAR_STYLE</java>
               <HelloWorldTemplate>SLASHSTAR_STYLE</HelloWorldTemplate>
               <TestTemplate>SLASHSTAR_STYLE</TestTemplate>
+              <java>SLASHSTAR_STYLE</java>
+              <md>XML_STYLE</md>
             </mapping>
           </configuration>
         </plugin>
@@ -205,7 +213,7 @@ under the License.
         <plugin>
           <groupId>com.github.spotbugs</groupId>
           <artifactId>spotbugs-maven-plugin</artifactId>
-          <version>4.9.5.0</version>
+          <version>4.9.8.2</version>
           <configuration>
             <xmlOutput>true</xmlOutput>
             <effort>Max</effort>
@@ -750,6 +758,20 @@ under the License.
               <configuration>
                 <lifecycleMappingMetadata>
                   <pluginExecutions>
+                    <pluginExecution>
+                      <pluginExecutionFilter>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-dependency-plugin</artifactId>
+                        <versionRange>[0,)</versionRange>
+                        <goals>
+                          <goal>analyze-only</goal>
+                          <goal>copy</goal>
+                        </goals>
+                      </pluginExecutionFilter>
+                      <action>
+                        <ignore />
+                      </action>
+                    </pluginExecution>
                     <pluginExecution>
                       <pluginExecutionFilter>
                         <groupId>org.codehaus.mojo</groupId>

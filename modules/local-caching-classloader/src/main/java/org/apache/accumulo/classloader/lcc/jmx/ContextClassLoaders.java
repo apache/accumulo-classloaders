@@ -18,26 +18,16 @@
  */
 package org.apache.accumulo.classloader.lcc.jmx;
 
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
-import org.apache.accumulo.classloader.lcc.LocalCachingContextCleaner;
+import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 
 public class ContextClassLoaders implements ContextClassLoadersMXBean {
 
   @Override
-  public Set<String> getReferencedFiles() {
-    final List<URLClassLoader> loaders = LocalCachingContextCleaner.getReferencedClassLoaders();
-    final Set<String> files = new HashSet<>();
-    loaders.forEach(l -> {
-      for (URL u : l.getURLs()) {
-        files.add(u.toString());
-      }
-    });
-    return files;
+  public Map<String,List<String>> getReferencedFiles() {
+    return LocalCachingContextClassLoaderFactory.getReferencedFiles();
   }
 
 }

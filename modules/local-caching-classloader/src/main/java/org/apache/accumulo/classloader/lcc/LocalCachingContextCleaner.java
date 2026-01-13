@@ -20,10 +20,7 @@ package org.apache.accumulo.classloader.lcc;
 
 import java.io.IOException;
 import java.lang.ref.Cleaner;
-import java.lang.ref.SoftReference;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,25 +28,16 @@ import org.slf4j.LoggerFactory;
 public class LocalCachingContextCleaner {
 
   private static final Logger LOG = LoggerFactory.getLogger(LocalCachingContextCleaner.class);
-  private static final List<SoftReference<URLClassLoader>> LOADERS = new ArrayList<>();
   private static final Cleaner CLEANER = Cleaner.create();
 
   public static void registerClassLoader(final URLClassLoader cl) {
-    LOADERS.add(new SoftReference<>(cl));
     CLEANER.register(cl, () -> {
-      LOADERS.removeIf((sr) -> sr.get() == cl);
       try {
         cl.close();
       } catch (IOException ioe) {
         LOG.warn("Error closing LocalCachingContext URLClassLoader", ioe);
       }
     });
-  }
-
-  public static List<URLClassLoader> getReferencedClassLoaders() {
-    List<URLClassLoader> cll = new ArrayList<>();
-    LOADERS.forEach(sr -> cll.add(sr.get()));
-    return cll;
   }
 
 }
