@@ -27,6 +27,7 @@ import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
@@ -204,6 +205,7 @@ public final class LocalStore {
 
     if (Files.exists(destinationPath)) {
       LOG.trace("Resource {} is already cached at {}", url, destinationPath);
+      verifyDownload(resource, destinationPath, null);
       try {
         // clean up any in progress files that may have been left behind by previous failed attempts
         Files.deleteIfExists(downloadingProgressPath);
@@ -296,15 +298,32 @@ public final class LocalStore {
     try (var in = source.getInputStream();
         var out = Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC)) {
       in.transferTo(out);
-      final String checksum = DIGESTER.digestAsHex(tempPath);
-      if (!resource.getChecksum().equals(checksum)) {
-        Files.delete(tempPath);
-        throw new IllegalStateException(
-            "Checksum " + checksum + " for resource " + resource.getLocation()
-                + " does not match checksum in context definition " + resource.getChecksum());
-      }
     } catch (IOException e) {
       throw new UncheckedIOException(e);
+    }
+    verifyDownload(resource, tempPath, () -> Files.delete(tempPath));
+  }
+
+  private void verifyDownload(Resource resource, Path downloadPath, Closeable cleanUpAction) {
+    final String checksum;
+    try {
+      checksum = DIGESTER.digestAsHex(downloadPath);
+    } catch (IOException e) {
+      throw new UncheckedIOException("Unable to perform checksum verification on " + downloadPath
+          + " for resource " + resource.getLocation(), e);
+    }
+    if (!resource.getChecksum().equals(checksum)) {
+      var ise = new IllegalStateException(
+          "Checksum " + checksum + " for resource " + resource.getLocation()
+              + " does not match checksum in context definition " + resource.getChecksum());
+      if (cleanUpAction != null) {
+        try {
+          cleanUpAction.close();
+        } catch (IOException e) {
+          ise.addSuppressed(e);
+        }
+      }
+      throw ise;
     }
   }
 }
