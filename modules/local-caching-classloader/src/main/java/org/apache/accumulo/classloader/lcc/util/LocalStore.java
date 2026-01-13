@@ -27,6 +27,8 @@ import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -292,11 +294,15 @@ public final class LocalStore {
     }
   }
 
+  private static final int DL_BUFF_SIZE = 1024 * 1024;
+
   private void downloadFile(FileResolver source, Path tempPath, Resource resource) {
     // CREATE_NEW ensures the temporary file name is unique for this attempt
-    // SYNC ensures file integrity on each write, in case of system failure
-    try (var in = source.getInputStream();
-        var out = Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC)) {
+    // SYNC ensures file integrity on each write, in case of system failure. Buffering minimizes
+    // system calls te read/write data which minimizes the number of syncs.
+    try (var in = new BufferedInputStream(source.getInputStream(), DL_BUFF_SIZE);
+        var out = new BufferedOutputStream(Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC),
+            DL_BUFF_SIZE)) {
       in.transferTo(out);
     } catch (IOException e) {
       throw new UncheckedIOException(e);
