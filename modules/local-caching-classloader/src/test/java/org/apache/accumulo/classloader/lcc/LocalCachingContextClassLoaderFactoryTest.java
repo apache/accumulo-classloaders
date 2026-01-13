@@ -716,4 +716,35 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   }
 
+  @Test
+  public void testExternalFileModification() throws Exception {
+    var def = ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation,
+        jarBOrigLocation, jarCOrigLocation, jarDOrigLocation);
+    final Path update =
+        createContextDefinitionFile(fs, "UpdateChangingContextDefinition.json", def.toJson());
+    final URL updatedDefUrl = new URL(fs.getUri().toString() + update.toUri().toString());
+
+    final ClassLoader cl = FACTORY.getClassLoader(updatedDefUrl.toString());
+    testClassLoads(cl, classA);
+    testClassLoads(cl, classB);
+    testClassLoads(cl, classC);
+    testClassLoads(cl, classD);
+
+    var resources = tempDir.resolve("base").resolve("resources");
+    var files = resources.toFile().listFiles();
+    assertEquals(4, files.length);
+
+    // overwrite one downloaded jar with others content
+    Files.copy(files[0].toPath(), files[1].toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+    final Path update2 =
+        createContextDefinitionFile(fs, "UpdateChangingContextDefinition2.json", def.toJson());
+    final URL updatedDefUrl2 = new URL(fs.getUri().toString() + update2.toUri().toString());
+
+    // The classloader should fail to create because one of the files in the local filesystem cache
+    // has a checksum mismatch
+    var exception = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(updatedDefUrl2.toString()));
+    assertTrue(exception.getMessage().contains("Checksum"), exception::getMessage);
+  }
 }
