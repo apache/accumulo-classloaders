@@ -746,5 +746,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
     var exception = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(updatedDefUrl2.toString()));
     assertTrue(exception.getMessage().contains("Checksum"), exception::getMessage);
+
+    // clean up corrupt file
+    Files.delete(files[1].toPath());
   }
 }
