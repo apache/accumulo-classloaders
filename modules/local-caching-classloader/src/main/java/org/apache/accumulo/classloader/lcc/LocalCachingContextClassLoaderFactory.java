@@ -109,7 +109,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
   private static final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
-      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24));
+      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
