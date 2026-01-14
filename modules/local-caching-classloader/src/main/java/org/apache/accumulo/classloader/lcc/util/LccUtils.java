@@ -18,11 +18,16 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
+import java.io.IOException;
+import java.lang.ref.Cleaner;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
-import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,15 +39,48 @@ public class LccUtils {
 
   public static final DigestUtils DIGESTER = new DigestUtils(DigestUtils.getSha256Digest());
 
+  private static final Cleaner CLEANER = Cleaner.create();
+
   @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
       justification = "doPrivileged is deprecated without replacement and removed in newer Java")
   public static URLClassLoader createClassLoader(String name, URL[] urls) {
-    final var cl = new URLClassLoader(name, urls,
-        LocalCachingContextClassLoaderFactory.class.getClassLoader());
+    final var parent = LccUtils.class.getClassLoader();
+    final var cl = new URLClassLoader(name, urls, parent);
+
+    // a pass-through wrapper for the URLClassLoader, so the Cleaner can monitor for this proxy
+    // object's reachability, but then the clean action can clean up the real URLClassLoader when
+    // the proxy object becomes phantom-reachable (this won't work)
+    var proxiedCl = (URLClassLoader) Proxy.newProxyInstance(parent,
+        getInterfaces(URLClassLoader.class).toArray(new Class<?>[0]), (obj, method, args) -> {
+          try {
+            return method.invoke(cl, args);
+          } catch (InvocationTargetException e) {
+            throw e.getCause();
+          }
+        });
+
+    CLEANER.register(proxiedCl, () -> {
+      try {
+        cl.close();
+      } catch (IOException e) {
+        LOG.debug("Problem closing phantom-reachable classloader instance {}", name);
+      }
+    });
+
     if (LOG.isTraceEnabled()) {
       LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
     }
-    return cl;
+    return proxiedCl;
   }
 
+  private static Set<Class<?>> getInterfaces(Class<?> clazz) {
+    var set = new HashSet<Class<?>>();
+    if (clazz != null) {
+      set.addAll(getInterfaces(clazz.getSuperclass()));
+      for (Class<?> interfaze : clazz.getInterfaces()) {
+        set.add(interfaze);
+      }
+    }
+    return set;
+  }
 }
