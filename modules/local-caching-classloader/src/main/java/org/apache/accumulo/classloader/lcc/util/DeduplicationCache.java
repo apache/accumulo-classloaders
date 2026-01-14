@@ -56,7 +56,8 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
       final Duration minLifetime, RemovalListener<KEY,VALUE> listener) {
     this.loaderFunction = loaderFunction;
     this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues()
-        .evictionListener(listener == null ? defaultListener : listener).build();
+        .evictionListener(listener == null ? defaultListener : listener)
+        .scheduler(Scheduler.systemScheduler()).build();
     this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime)
         .evictionListener(listener == null ? defaultListener : listener)
         .scheduler(Scheduler.systemScheduler()).build();
