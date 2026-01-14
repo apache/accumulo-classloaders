@@ -28,30 +28,19 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.RemovalListener;
 
 public class DeduplicationCacheTest {
 
-  private static final Logger LOG = LoggerFactory.getLogger(DeduplicationCacheTest.class);
-
   @Test
   public void testCollectionNotification() throws Exception {
 
     final AtomicBoolean listenerCalled = new AtomicBoolean(false);
 
-    final RemovalListener<String,URLClassLoader> removalListener = new RemovalListener<>() {
-      @Override
-      public void onRemoval(String key, URLClassLoader value, RemovalCause cause) {
-        LOG.info("Entry removed due to {}. K = {}, V = {}", cause, key, value);
-        if (cause == RemovalCause.COLLECTED) {
-          listenerCalled.set(true);
-        }
-      }
-    };
+    final RemovalListener<String,URLClassLoader> removalListener =
+        (key, value, cause) -> listenerCalled.compareAndSet(false, cause == RemovalCause.COLLECTED);
 
     final DeduplicationCache<String,URL[],URLClassLoader> cache = new DeduplicationCache<>(
         LccUtils::createClassLoader, Duration.ofSeconds(5), removalListener);
@@ -60,26 +49,23 @@ public class DeduplicationCacheTest {
         DeduplicationCacheTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
 
-    Thread t = new Thread(() -> {
-      cache.computeIfAbsent("TEST", () -> new URL[] {jarAOrigLocation});
-    });
+    Thread t = new Thread(() -> cache.computeIfAbsent("TEST", () -> new URL[] {jarAOrigLocation}));
     t.start();
     t.join();
 
-    boolean exists = cache.anyMatch((k) -> k.equals("TEST"));
+    boolean exists = cache.anyMatch("TEST"::equals);
     assertTrue(exists);
 
-    Thread.sleep(10_000); // sleep twice as long as the access time duration in the strong reference
-                          // cache
-
-    exists = cache.anyMatch((k) -> k.equals("TEST"));
+    // sleep twice as long as the access time duration in the strong reference cache
+    Thread.sleep(10_000);
+    exists = cache.anyMatch("TEST"::equals);
     assertTrue(exists); // This is true because it's coming from the weak reference cache
 
-    Thread.sleep(10_000); // sleep twice as long as the access time duration in the strong reference
-                          // cache
+    // sleep twice as long as the access time duration in the strong reference cache
+    Thread.sleep(10_000);
     System.gc();
 
-    exists = cache.anyMatch((k) -> k.equals("TEST"));
+    exists = cache.anyMatch("TEST"::equals);
     assertFalse(exists);
     assertTrue(listenerCalled.get());
 

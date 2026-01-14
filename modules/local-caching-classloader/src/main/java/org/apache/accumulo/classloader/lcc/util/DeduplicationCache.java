@@ -18,6 +18,8 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
+import static java.util.Objects.requireNonNull;
+
 import java.time.Duration;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
@@ -28,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.github.benmanes.caffeine.cache.Scheduler;
 
@@ -45,22 +46,22 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
   private final Cache<KEY,VALUE> expireAfterAccessStrongRefs;
   private final BiFunction<KEY,PARAMS,VALUE> loaderFunction;
 
-  private final RemovalListener<KEY,VALUE> defaultListener = new RemovalListener<>() {
-    @Override
-    public void onRemoval(KEY key, VALUE value, RemovalCause cause) {
-      LOG.info("Entry removed due to {}. K = {}, V = {}", cause, key, value);
-    }
-  };
+  private final RemovalListener<KEY,VALUE> logListener = (key, value, cause) -> LOG
+      .trace("Entry removed due to {}. K = {}, V = {}", cause, key, value);
 
   public DeduplicationCache(final BiFunction<KEY,PARAMS,VALUE> loaderFunction,
-      final Duration minLifetime, RemovalListener<KEY,VALUE> listener) {
-    this.loaderFunction = loaderFunction;
+      final Duration minLifetime, final RemovalListener<KEY,VALUE> listener) {
+    this.loaderFunction = requireNonNull(loaderFunction);
+    RemovalListener<KEY,VALUE> actualListener =
+        listener == null ? logListener : (key, value, cause) -> {
+          logListener.onRemoval(key, value, cause);
+          listener.onRemoval(key, value, cause);
+        };
     this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues()
-        .evictionListener(listener == null ? defaultListener : listener)
-        .scheduler(Scheduler.systemScheduler()).build();
-    this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime)
-        .evictionListener(listener == null ? defaultListener : listener)
-        .scheduler(Scheduler.systemScheduler()).build();
+        .evictionListener(actualListener).scheduler(Scheduler.systemScheduler()).build();
+    this.expireAfterAccessStrongRefs =
+        Caffeine.newBuilder().expireAfterAccess(requireNonNull(minLifetime))
+            .evictionListener(actualListener).scheduler(Scheduler.systemScheduler()).build();
   }
 
   public VALUE computeIfAbsent(final KEY key, final Supplier<PARAMS> params) {
