@@ -48,9 +48,6 @@ import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
-@SuppressFBWarnings(value = {"EI_EXPOSE_REP"})
 public class ContextDefinition implements KeywordExecutable {
 
   static class Opts extends Help {

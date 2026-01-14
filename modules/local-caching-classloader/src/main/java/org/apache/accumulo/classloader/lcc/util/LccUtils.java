@@ -23,7 +23,6 @@ import java.net.URLClassLoader;
 import java.util.Arrays;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
-import org.apache.accumulo.classloader.lcc.LocalCachingContextCleaner;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +42,6 @@ public class LccUtils {
     if (LOG.isTraceEnabled()) {
       LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
     }
-    LocalCachingContextCleaner.registerClassLoader(cl);
     return cl;
   }
 
