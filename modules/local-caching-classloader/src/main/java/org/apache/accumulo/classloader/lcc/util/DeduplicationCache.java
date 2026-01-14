@@ -18,13 +18,20 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
+import static java.util.Objects.requireNonNull;
+
 import java.time.Duration;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalListener;
+import com.github.benmanes.caffeine.cache.Scheduler;
 
 /**
  * A simple de-duplication cache of weakly referenced values that retains a strong reference for a
@@ -33,15 +40,28 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  */
 public class DeduplicationCache<KEY,PARAMS,VALUE> {
 
+  private static final Logger LOG = LoggerFactory.getLogger(DeduplicationCache.class);
+
   private final Cache<KEY,VALUE> canonicalWeakValuesCache;
   private final Cache<KEY,VALUE> expireAfterAccessStrongRefs;
   private final BiFunction<KEY,PARAMS,VALUE> loaderFunction;
 
+  private final RemovalListener<KEY,VALUE> logListener = (key, value, cause) -> LOG
+      .trace("Entry removed due to {}. K = {}, V = {}", cause, key, value);
+
   public DeduplicationCache(final BiFunction<KEY,PARAMS,VALUE> loaderFunction,
-      final Duration minLifetime) {
-    this.loaderFunction = loaderFunction;
-    this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues().build();
-    this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime).build();
+      final Duration minLifetime, final RemovalListener<KEY,VALUE> listener) {
+    this.loaderFunction = requireNonNull(loaderFunction);
+    RemovalListener<KEY,VALUE> actualListener =
+        listener == null ? logListener : (key, value, cause) -> {
+          logListener.onRemoval(key, value, cause);
+          listener.onRemoval(key, value, cause);
+        };
+    this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues()
+        .evictionListener(actualListener).scheduler(Scheduler.systemScheduler()).build();
+    this.expireAfterAccessStrongRefs =
+        Caffeine.newBuilder().expireAfterAccess(requireNonNull(minLifetime))
+            .evictionListener(actualListener).scheduler(Scheduler.systemScheduler()).build();
   }
 
   public VALUE computeIfAbsent(final KEY key, final Supplier<PARAMS> params) {
@@ -51,6 +71,7 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
   }
 
   public boolean anyMatch(final Predicate<KEY> keyPredicate) {
+    canonicalWeakValuesCache.cleanUp();
     return canonicalWeakValuesCache.asMap().keySet().stream().anyMatch(keyPredicate);
   }
 
