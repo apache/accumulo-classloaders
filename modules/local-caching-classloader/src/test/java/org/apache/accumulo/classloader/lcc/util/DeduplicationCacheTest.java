@@ -27,7 +27,6 @@ import java.net.URLClassLoader;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +45,7 @@ public class DeduplicationCacheTest {
 
     final RemovalListener<String,URLClassLoader> removalListener = new RemovalListener<>() {
       @Override
-      public void onRemoval(@Nullable String key, @Nullable URLClassLoader value,
-          RemovalCause cause) {
+      public void onRemoval(String key, URLClassLoader value, RemovalCause cause) {
         LOG.info("Entry removed due to {}. K = {}, V = {}", cause, key, value);
         if (cause == RemovalCause.COLLECTED) {
           listenerCalled.set(true);

@@ -23,7 +23,6 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,7 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
 
   private final RemovalListener<KEY,VALUE> defaultListener = new RemovalListener<>() {
     @Override
-    public void onRemoval(@Nullable KEY key, @Nullable VALUE value, RemovalCause cause) {
+    public void onRemoval(KEY key, VALUE value, RemovalCause cause) {
       LOG.info("Entry removed due to {}. K = {}, V = {}", cause, key, value);
     }
   };
