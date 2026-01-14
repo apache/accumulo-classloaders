@@ -23,8 +23,15 @@ import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.github.benmanes.caffeine.cache.RemovalListener;
+import com.github.benmanes.caffeine.cache.Scheduler;
 
 /**
  * A simple de-duplication cache of weakly referenced values that retains a strong reference for a
@@ -33,15 +40,27 @@ import com.github.benmanes.caffeine.cache.Caffeine;
  */
 public class DeduplicationCache<KEY,PARAMS,VALUE> {
 
+  private static final Logger LOG = LoggerFactory.getLogger(DeduplicationCache.class);
+
   private final Cache<KEY,VALUE> canonicalWeakValuesCache;
   private final Cache<KEY,VALUE> expireAfterAccessStrongRefs;
   private final BiFunction<KEY,PARAMS,VALUE> loaderFunction;
 
+  private final RemovalListener<KEY,VALUE> defaultListener = new RemovalListener<>() {
+    @Override
+    public void onRemoval(@Nullable KEY key, @Nullable VALUE value, RemovalCause cause) {
+      LOG.info("Entry removed due to {}. K = {}, V = {}", cause, key, value);
+    }
+  };
+
   public DeduplicationCache(final BiFunction<KEY,PARAMS,VALUE> loaderFunction,
-      final Duration minLifetime) {
+      final Duration minLifetime, RemovalListener<KEY,VALUE> listener) {
     this.loaderFunction = loaderFunction;
-    this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues().build();
-    this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime).build();
+    this.canonicalWeakValuesCache = Caffeine.newBuilder().weakValues()
+        .evictionListener(listener == null ? defaultListener : listener).build();
+    this.expireAfterAccessStrongRefs = Caffeine.newBuilder().expireAfterAccess(minLifetime)
+        .evictionListener(listener == null ? defaultListener : listener)
+        .scheduler(Scheduler.systemScheduler()).build();
   }
 
   public VALUE computeIfAbsent(final KEY key, final Supplier<PARAMS> params) {
@@ -51,6 +70,7 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
   }
 
   public boolean anyMatch(final Predicate<KEY> keyPredicate) {
+    canonicalWeakValuesCache.cleanUp();
     return canonicalWeakValuesCache.asMap().keySet().stream().anyMatch(keyPredicate);
   }
 
