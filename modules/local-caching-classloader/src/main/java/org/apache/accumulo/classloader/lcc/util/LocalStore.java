@@ -112,7 +112,7 @@ public final class LocalStore {
   // extension, and will instead just append the checksum to the original file name
   private static Pattern fileNamesWithExtensionPattern = Pattern.compile("^(.*[^.].*)[.]([^.]+)$");
 
-  static String localName(String remoteFileName, String checksum) {
+  static String localResourceName(String remoteFileName, String checksum) {
     requireNonNull(remoteFileName);
     requireNonNull(checksum);
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
@@ -134,11 +134,7 @@ public final class LocalStore {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
     final Set<Path> localFiles = new LinkedHashSet<>();
-    // store it with a .json suffix, if the original file didn't have one
-    final String origSourceName = contextDefinition.getSourceFileName();
-    final String sourceNameWithSuffix =
-        origSourceName.toLowerCase().endsWith(".json") ? origSourceName : origSourceName + ".json";
-    final String destinationName = localName(sourceNameWithSuffix, contextDefinition.getChecksum());
+    final String destinationName = contextDefinition.getChecksum() + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;
@@ -200,7 +196,7 @@ public final class LocalStore {
   private Path storeResource(final Resource resource) throws IOException {
     final URL url = resource.getLocation();
     final FileResolver source = FileResolver.resolve(url);
-    final String baseName = localName(source.getFileName(), resource.getChecksum());
+    final String baseName = localResourceName(source.getFileName(), resource.getChecksum());
     final Path destinationPath = resourcesDir.resolve(baseName);
     final Path tempPath = resourcesDir.resolve(tempName(baseName));
     final Path downloadingProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
@@ -250,7 +246,7 @@ public final class LocalStore {
           Files.write(downloadingProgressPath, PID.getBytes(UTF_8), TRUNCATE_EXISTING);
         } catch (IOException e) {
           LOG.warn(
-              "Error writing progress file {}. Other processes may attempt downloading the same file.",
+              "Error writing progress file {}. Other processes may attempt to download the same file concurrently.",
               downloadingProgressPath, e);
         }
         try {
