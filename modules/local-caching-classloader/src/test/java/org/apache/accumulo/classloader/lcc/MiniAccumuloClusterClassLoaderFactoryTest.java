@@ -152,9 +152,9 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   @Test
   public void testClassLoader() throws Exception {
-    var baseDirPath = tempDir.resolve("base");
-    var jsonDirPath = baseDirPath.resolve("contextFiles");
-    var resourcesDirPath = baseDirPath.resolve("resources");
+    final var baseDirPath = tempDir.resolve("base");
+    final var resourcesDirPath = baseDirPath.resolve("resources");
+    final var jsonDirPath = baseDirPath.resolve("contextFiles");
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
@@ -251,9 +251,9 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(testContextDefFile.toPath()));
 
       Resource jarBResource = testContextDefUpdate.getResources().iterator().next();
-      String jarBLocalFileName =
-          LocalStore.localResourceName(FileResolver.resolve(jarBResource.getLocation()).getFileName(),
-              jarBResource.getChecksum());
+      String jarBLocalFileName = LocalStore.localResourceName(
+          FileResolver.resolve(jarBResource.getLocation()).getFileName(),
+          jarBResource.getChecksum());
 
       // Wait 2x the monitor interval
       Thread.sleep(2 * MONITOR_INTERVAL_SECS * 1000);
