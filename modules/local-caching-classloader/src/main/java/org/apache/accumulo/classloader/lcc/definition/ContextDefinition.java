@@ -57,7 +57,7 @@ public class ContextDefinition implements KeywordExecutable {
         description = "monitor interval (in seconds)", arity = 1, order = 1)
     int monitorInterval;
 
-    @Parameter(names = {"-f", "--files"}, required = true, description = "-f <url>[ -f <url>...]",
+    @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
         arity = -1, order = 2)
     public List<String> files = new ArrayList<>();
   }

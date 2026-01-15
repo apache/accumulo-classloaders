@@ -133,7 +133,7 @@ json is printed to stdout and can be redirected to a file. The command takes
 two arguments:
 
 1. the monitor interval, in seconds (e.g. `-i 300`), and
-2. a list of file URLs (e.g. `-f hdfs://host:port/path/to/one.jar -f file://host/path/to/two.jar`)
+2. a list of file URLs (e.g. `hdfs://host:port/path/to/one.jar file://host/path/to/two.jar`)
 
 ## Updating a ContextDefinition file
 
