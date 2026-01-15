@@ -226,7 +226,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertEquals(0, countExpectedValues(client, tableName, jarAValueBytes));
       Set<String> refFiles = getReferencedFiles();
       assertEquals(1, refFiles.size());
-      assertTrue(refFiles.contains(resourcesDirPath + jarALocalFileName));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarALocalFileName).toUri().toURL().toString()));
 
       // Attach a scan iterator to the table
       IteratorSetting is = new IteratorSetting(101, "example", ITER_CLASS_NAME);
@@ -240,7 +241,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       }
       refFiles = getReferencedFiles();
       assertEquals(1, refFiles.size());
-      assertTrue(refFiles.contains(resourcesDirPath + jarALocalFileName));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarALocalFileName).toUri().toURL().toString()));
 
       // Update the context definition to point to jar B
       final ContextDefinition testContextDefUpdate =
@@ -265,8 +267,10 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
       refFiles = getReferencedFiles();
       assertEquals(2, refFiles.size());
-      assertTrue(refFiles.contains(resourcesDirPath + jarALocalFileName));
-      assertTrue(refFiles.contains(resourcesDirPath + jarBLocalFileName));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarALocalFileName).toUri().toURL().toString()));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarBLocalFileName).toUri().toURL().toString()));
 
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
@@ -298,8 +302,10 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertEquals(1000, countExpectedValues(client, tableName, jarBValueBytes));
       refFiles = getReferencedFiles();
       assertEquals(2, refFiles.size());
-      assertTrue(refFiles.contains(resourcesDirPath + jarALocalFileName));
-      assertTrue(refFiles.contains(resourcesDirPath + jarBLocalFileName));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarALocalFileName).toUri().toURL().toString()));
+      assertTrue(refFiles
+          .contains(resourcesDirPath.resolve(jarBLocalFileName).toUri().toURL().toString()));
 
       // Wait 2 minutes, 2 times the UPDATE_FAILURE_GRACE_PERIOD_MINS
       Thread.sleep(120_000);
@@ -317,7 +323,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     final Map<String,List<String>> referencedFiles = new HashMap<>();
     List<VirtualMachineDescriptor> vmdl = VirtualMachine.list();
     for (VirtualMachineDescriptor vmd : vmdl) {
-      if (vmd.displayName().contains("org.apache.accumulo.start.Main")) {
+      if (vmd.displayName().contains("org.apache.accumulo.start.Main")
+          && !vmd.displayName().contains("zookeeper")) {
         LOG.info("Attempting to connect to {}", vmd.displayName());
         try {
           VirtualMachine vm = VirtualMachine.attach(vmd);
@@ -340,9 +347,9 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
         }
       }
     }
-    LOG.info("Referenced files: {}", referencedFiles);
     Set<String> justTheFiles = new HashSet<>();
     referencedFiles.values().forEach(justTheFiles::addAll);
+    LOG.info("Referenced files: {}", justTheFiles);
     return justTheFiles;
   }
 
