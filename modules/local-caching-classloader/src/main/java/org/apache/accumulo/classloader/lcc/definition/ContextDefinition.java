@@ -52,11 +52,11 @@ public class ContextDefinition implements KeywordExecutable {
 
   static class Opts extends Help {
     @Parameter(names = {"-i", "--interval"}, required = true,
-        description = "monitor interval (in seconds)", arity = 1, order = 2)
+        description = "monitor interval (in seconds)", arity = 1, order = 1)
     int monitorInterval;
 
     @Parameter(names = {"-f", "--files"}, required = true, description = "-f <url>[ -f <url>...]",
-        arity = -1, order = 3)
+        arity = -1, order = 2)
     public List<String> files = new ArrayList<>();
   }
 
