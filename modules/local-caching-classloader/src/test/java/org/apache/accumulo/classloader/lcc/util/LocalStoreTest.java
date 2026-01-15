@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
@@ -40,7 +41,6 @@ import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -52,7 +52,7 @@ import org.junit.jupiter.api.io.TempDir;
 public class LocalStoreTest {
 
   @TempDir
-  private static java.nio.file.Path tempDir;
+  private static Path tempDir;
 
   private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
@@ -62,7 +62,7 @@ public class LocalStoreTest {
   private static TestClassInfo classB;
   private static TestClassInfo classC;
   private static TestClassInfo classD;
-  private static java.nio.file.Path baseCacheDir = null;
+  private static Path baseCacheDir = null;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
@@ -79,16 +79,15 @@ public class LocalStoreTest {
     // Put B into HDFS
     hdfs = TestUtils.getMiniCluster();
     final FileSystem fs = hdfs.getFileSystem();
-    assertTrue(fs.mkdirs(new Path("/contextB")));
-    final Path dst = new Path("/contextB/TestB.jar");
-    fs.copyFromLocalFile(new Path(jarBOrigLocation.toURI()), dst);
+    assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/contextB")));
+    final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
+    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
     assertTrue(fs.exists(dst));
     URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
     final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
-    java.nio.file.Path jarCParentDirectory =
-        java.nio.file.Path.of(jarCOrigLocation.toURI()).getParent();
+    var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
@@ -123,8 +122,7 @@ public class LocalStoreTest {
   public void cleanBaseDir() throws Exception {
     if (Files.exists(baseCacheDir)) {
       try (var walker = Files.walk(baseCacheDir)) {
-        walker.map(java.nio.file.Path::toFile).sorted(Comparator.reverseOrder())
-            .forEach(File::delete);
+        walker.map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
       }
     }
   }

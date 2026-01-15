@@ -117,13 +117,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         TimeUnit.SECONDS);
   }
 
-  // for tests only
-  void resetForTests() {
-    // Removing the contexts will cause the
-    // background monitor task to end
-    contextDefs.clear();
-  }
-
   @Override
   public void init(ContextClassLoaderEnvironment env) {
     String value = requireNonNull(env.getConfiguration().get(CACHE_DIR_PROPERTY),
