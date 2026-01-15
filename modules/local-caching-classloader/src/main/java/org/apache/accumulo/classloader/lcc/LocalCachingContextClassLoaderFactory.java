@@ -98,7 +98,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
   private final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
-      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24));
+      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
@@ -111,10 +111,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
    * (if it changed).
    */
   private void monitorContext(final String contextLocation, long interval) {
-    EXECUTOR.schedule(() -> checkMonitoredLocation(contextLocation, interval), interval,
-        TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
         contextLocation, interval);
+    EXECUTOR.schedule(() -> checkMonitoredLocation(contextLocation, interval), interval,
+        TimeUnit.SECONDS);
   }
 
   // for tests only

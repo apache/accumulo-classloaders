@@ -48,11 +48,6 @@ public class ContextDefinition {
 
   public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
       throws IOException {
-    return create("unknown", monitorIntervalSecs, sources);
-  }
-
-  public static ContextDefinition create(String sourceFileName, int monitorIntervalSecs,
-      URL... sources) throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
@@ -61,7 +56,7 @@ public class ContextDefinition {
         resources.add(new Resource(u, checksum));
       }
     }
-    return new ContextDefinition(sourceFileName, monitorIntervalSecs, resources);
+    return new ContextDefinition(monitorIntervalSecs, resources);
   }
 
   public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
@@ -71,13 +66,11 @@ public class ContextDefinition {
       if (def == null) {
         throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
       }
-      def.sourceFileName = resolver.getFileName();
       return def;
     }
   }
 
   // transient fields that don't go in the json
-  private transient String sourceFileName;
   private final transient Supplier<String> checksum =
       Suppliers.memoize(() -> DIGESTER.digestAsHex(toJson()));
 
@@ -88,18 +81,11 @@ public class ContextDefinition {
 
   public ContextDefinition() {}
 
-  public ContextDefinition(String sourceFileName, int monitorIntervalSeconds,
-      LinkedHashSet<Resource> resources) {
-    this.sourceFileName = requireNonNull(sourceFileName, "source file name must be supplied");
-
+  public ContextDefinition(int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
     this.resources = requireNonNull(resources, "resources must be supplied");
-  }
-
-  public String getSourceFileName() {
-    return sourceFileName;
   }
 
   public int getMonitorIntervalSeconds() {
@@ -112,7 +98,7 @@ public class ContextDefinition {
 
   @Override
   public int hashCode() {
-    return hash(sourceFileName, monitorIntervalSeconds, resources);
+    return hash(monitorIntervalSeconds, resources);
   }
 
   @Override
@@ -127,8 +113,7 @@ public class ContextDefinition {
       return false;
     }
     ContextDefinition other = (ContextDefinition) obj;
-    return Objects.equals(sourceFileName, other.sourceFileName)
-        && monitorIntervalSeconds == other.monitorIntervalSeconds
+    return monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
   }
 
