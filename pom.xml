@@ -419,7 +419,12 @@ under the License.
                 <reactorModuleConvergence />
                 <banDuplicatePomDependencyVersions />
                 <dependencyConvergence />
-                <!--                <banDynamicVersions />-->
+                <banDynamicVersions>
+                  <ignores>
+                    <!-- allow Accumulo snapshots -->
+                    <ignore>org.apache.accumulo:*:*-SNAPSHOT</ignore>
+                  </ignores>
+                </banDynamicVersions>
                 <bannedDependencies>
                   <excludes>
                     <!-- we redirect logging to log4j2, so we should have those bridges instead -->

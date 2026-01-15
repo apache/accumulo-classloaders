@@ -122,16 +122,18 @@ download, and any modification will likely cause unexpected behavior.
 ## Creating a ContextDefinition file
 
 Users may take advantage of the `ContextDefinition.create(int,URL[])` method to
-construct a `ContextDefinition` object. This will calculate the checksums of
-the classpath elements. `ContextDefinition.toJson()` can be used to serialize
-the `ContextDefinition` to a `String` to store in a file.
+construct a `ContextDefinition` object, programmatically. This will calculate
+the checksums of the classpath elements. `ContextDefinition.toJson()` can be
+used to serialize the `ContextDefinition` to a `String` to store in a file.
 
-Alternatively, if the local-caching-classloader jar is built and placed into the $ACCUMULO_HOME/lib directory, then
-the `$ACCUMULO_HOME/bin/accumulo create-context-definition` command can be used to create the
-ContextDefinition json. The command takes 3 arguments: the name of the context, the monitor interval,
-and a list of file URLs. The resulting json is printed to stdout and can be redirected to a file. Users
-may take advantage of the `ContextDefinition.create` and `ContextDefinition.toJson` methods to
-construct a ContextDefinition object if they wish to do this programmatically.
+Alternatively, if this library's jar is built and placed onto Accumulo's
+`CLASSPATH`, then one can run `bin/accumulo create-context-definition` to
+create the ContextDefinition json file using the command-line. The resulting
+json is printed to stdout and can be redirected to a file. The command takes
+two arguments:
+
+1. the monitor interval, in seconds (e.g. `-i 300`), and
+2. a list of file URLs (e.g. `-f hdfs://host:port/path/to/one.jar http://host/path/to/two.jar`)
 
 ## Updating a ContextDefinition file
 
@@ -177,7 +179,6 @@ constructed at that time.
 
 ## Cleanup
 
-
 Because the cache directory is shared among multiple processes, and one process
 can't know what the other processes are doing, this class cannot clean up the
 shared cache directory of unused resources. It is left to the user to remove
@@ -185,19 +186,22 @@ unused files from the cache. While the context definition JSON files are always
 safe to delete, it is not recommended to do so for any that are still in use,
 because they can be useful for troubleshooting.
 
-To aid in this task a JMX MXBean has been created to expose the files that are still referenced
- by the classloaders that are created. For an example of how to use this MXBean, please see the test method `MiniAccumuloClusterClassLoaderFactoryTest.getReferencedFiles`. This method attaches to the
-local Accumulo JVM processes to get the set of referenced files. It should be safe to delete files that are located
-in the base cache directory (set by property `general.custom.classloader.lcc.cache.dir`) that are NOT in the set
-of referenced files and existed before references were gathered.
+To aid in this task, a JMX MXBean has been created to expose the files that are
+still referenced by the classloaders that have been created by this factory and
+currently still exist in the system. For an example of how to use this MXBean,
+please see the test method
+`MiniAccumuloClusterClassLoaderFactoryTest.getReferencedFiles`. This method
+attaches to the local Accumulo JVM processes to get the set of referenced
+files. It should be safe to delete files that are located in the local cache
+directory (set by property `general.custom.classloader.lcc.cache.dir`) that are
+NOT in the set of referenced files, so long as no new classloaders have been
+created that reference the files being deleted.
 
 **IMPORTANT**: as mentioned earlier, it is not safe to delete resource files
 that are still referenced by any `ClassLoader` instances. Each `ClassLoader`
 instance assumes that the locally cached resources exist and can be read. They
-will not attempt to download any files.  Downloading and verifying files only
-occurs when `ClassLoader` instances are initially created for a context
-definition.
-
+will not attempt to download any files.  Downloading files only occurs when
+`ClassLoader` instances are initially created for a context definition.
 
 ## Accumulo Configuration
 
