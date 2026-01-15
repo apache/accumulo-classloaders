@@ -112,7 +112,7 @@ public final class LocalStore {
   // extension, and will instead just append the checksum to the original file name
   private static Pattern fileNamesWithExtensionPattern = Pattern.compile("^(.*[^.].*)[.]([^.]+)$");
 
-  static String localResourceName(String remoteFileName, String checksum) {
+  public static String localResourceName(String remoteFileName, String checksum) {
     requireNonNull(remoteFileName);
     requireNonNull(checksum);
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);

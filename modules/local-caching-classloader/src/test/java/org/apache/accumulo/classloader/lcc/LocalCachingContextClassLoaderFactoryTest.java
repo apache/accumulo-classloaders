@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.EOFException;
 import java.io.File;
+import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -41,14 +42,18 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
+import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.core.util.ConfigurationImpl;
@@ -85,13 +90,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
   private static TestClassInfo classB;
   private static TestClassInfo classC;
   private static TestClassInfo classD;
+  private static java.nio.file.Path baseCacheDir;
 
   @TempDir
   private static java.nio.file.Path tempDir;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    java.nio.file.Path baseCacheDir = tempDir.resolve("base");
+    baseCacheDir = tempDir.resolve("base");
 
     ConfigurationCopy acuConf = new ConfigurationCopy(
         Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
@@ -170,6 +176,17 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @AfterEach
   public void afterEach() {
     FACTORY.resetForTests();
+
+  }
+
+  @AfterEach
+  public void cleanBaseDir() throws Exception {
+    if (Files.exists(baseCacheDir)) {
+      try (var walker = Files.walk(baseCacheDir)) {
+        walker.map(java.nio.file.Path::toFile).sorted(Comparator.reverseOrder())
+            .forEach(File::delete);
+      }
+    }
   }
 
   @Test
@@ -718,8 +735,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @Test
   public void testExternalFileModification() throws Exception {
-    var def = ContextDefinition.create("update", MONITOR_INTERVAL_SECS, jarAOrigLocation,
-        jarBOrigLocation, jarCOrigLocation, jarDOrigLocation);
+    var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation, jarBOrigLocation,
+        jarCOrigLocation, jarDOrigLocation);
     final Path update =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition.json", def.toJson());
     final URL updatedDefUrl = new URL(fs.getUri().toString() + update.toUri().toString());
@@ -731,11 +748,20 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classD);
 
     var resources = tempDir.resolve("base").resolve("resources");
-    var files = resources.toFile().listFiles();
-    assertEquals(4, files.length);
+    List<java.nio.file.Path> files = def.getResources().stream().map(r -> {
+      String basename;
+      try {
+        basename = FileResolver.resolve(r.getLocation()).getFileName();
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+      var checksum = r.getChecksum();
+      return resources.resolve(LocalStore.localResourceName(basename, checksum));
+    }).limit(2).collect(Collectors.toList());
+    assertEquals(2, files.size());
 
     // overwrite one downloaded jar with others content
-    Files.copy(files[0].toPath(), files[1].toPath(), StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(files.get(0), files.get(1), StandardCopyOption.REPLACE_EXISTING);
 
     final Path update2 =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition2.json", def.toJson());
@@ -748,6 +774,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertTrue(exception.getMessage().contains("Checksum"), exception::getMessage);
 
     // clean up corrupt file
-    Files.delete(files[1].toPath());
+    Files.delete(files.get(1));
+
+    // ensure it works now
+    FACTORY.getClassLoader(updatedDefUrl2.toString());
   }
 }
