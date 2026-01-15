@@ -117,7 +117,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
   }
 
   @TempDir
-  private static java.nio.file.Path tempDir;
+  private static Path tempDir;
 
   private static final Set<PosixFilePermission> CACHE_DIR_PERMS =
       EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE);
@@ -152,22 +152,21 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   @Test
   public void testClassLoader() throws Exception {
-    final String contextName = "test";
-    final Path baseDirPath = tempDir.resolve("base");
-    final String resourcesDirPath = baseDirPath.resolve("resources").toUri().toURL().toString();
-    final Path jsonDirPath = baseDirPath.resolve("contextFiles");
+    final var baseDirPath = tempDir.resolve("base");
+    final var resourcesDirPath = baseDirPath.resolve("resources");
+    final var jsonDirPath = baseDirPath.resolve("contextFiles");
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
     final ContextDefinition testContextDef =
-        ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarAOrigLocation);
+        ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final String testContextDefJson = testContextDef.toJson();
     final File testContextDefFile = jsonDirPath.resolve("testContextDefinition.json").toFile();
     Files.writeString(testContextDefFile.toPath(), testContextDefJson, StandardOpenOption.CREATE);
     assertTrue(Files.exists(testContextDefFile.toPath()));
 
     Resource jarAResource = testContextDef.getResources().iterator().next();
-    String jarALocalFileName = LocalStore.localName(
+    String jarALocalFileName = LocalStore.localResourceName(
         FileResolver.resolve(jarAResource.getLocation()).getFileName(), jarAResource.getChecksum());
 
     final String[] names = this.getUniqueNames(1);
@@ -245,16 +244,16 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
       // Update the context definition to point to jar B
       final ContextDefinition testContextDefUpdate =
-          ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarBOrigLocation);
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarBOrigLocation);
       final String testContextDefUpdateJson = testContextDefUpdate.toJson();
       Files.writeString(testContextDefFile.toPath(), testContextDefUpdateJson,
           StandardOpenOption.TRUNCATE_EXISTING);
       assertTrue(Files.exists(testContextDefFile.toPath()));
 
       Resource jarBResource = testContextDefUpdate.getResources().iterator().next();
-      String jarBLocalFileName =
-          LocalStore.localName(FileResolver.resolve(jarBResource.getLocation()).getFileName(),
-              jarBResource.getChecksum());
+      String jarBLocalFileName = LocalStore.localResourceName(
+          FileResolver.resolve(jarBResource.getLocation()).getFileName(),
+          jarBResource.getChecksum());
 
       // Wait 2x the monitor interval
       Thread.sleep(2 * MONITOR_INTERVAL_SECS * 1000);
@@ -272,16 +271,16 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
       // updates.
-      Path jarAPath = Path.of(jarAOrigLocation.toURI());
-      Path jarAPathParent = jarAPath.getParent();
+      var jarAPath = Path.of(jarAOrigLocation.toURI());
+      var jarAPathParent = jarAPath.getParent();
       assertNotNull(jarAPathParent);
-      Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
+      var jarACopy = jarAPathParent.resolve("jarACopy.jar");
       assertTrue(!Files.exists(jarACopy));
       Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
       assertTrue(Files.exists(jarACopy));
 
       final ContextDefinition testContextDefUpdate2 =
-          ContextDefinition.create(contextName, MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 

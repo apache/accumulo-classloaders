@@ -122,17 +122,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
    * (if it changed).
    */
   private void monitorContext(final String contextLocation, long interval) {
-    EXECUTOR.schedule(() -> checkMonitoredLocation(contextLocation, interval), interval,
-        TimeUnit.SECONDS);
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
         contextLocation, interval);
-  }
-
-  // for tests only
-  void resetForTests() {
-    // Removing the contexts will cause the
-    // background monitor task to end
-    contextDefs.clear();
+    EXECUTOR.schedule(() -> checkMonitoredLocation(contextLocation, interval), interval,
+        TimeUnit.SECONDS);
   }
 
   @Override

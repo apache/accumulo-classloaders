@@ -51,10 +51,6 @@ import com.google.gson.GsonBuilder;
 public class ContextDefinition implements KeywordExecutable {
 
   static class Opts extends Help {
-    @Parameter(names = {"-n", "--name"}, required = true, description = "context name", arity = 1,
-        order = 1)
-    String contextName;
-
     @Parameter(names = {"-i", "--interval"}, required = true,
         description = "monitor interval (in seconds)", arity = 1, order = 2)
     int monitorInterval;
@@ -69,11 +65,6 @@ public class ContextDefinition implements KeywordExecutable {
 
   public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
       throws IOException {
-    return create("unknown", monitorIntervalSecs, sources);
-  }
-
-  public static ContextDefinition create(String sourceFileName, int monitorIntervalSecs,
-      URL... sources) throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
@@ -82,7 +73,7 @@ public class ContextDefinition implements KeywordExecutable {
         resources.add(new Resource(u, checksum));
       }
     }
-    return new ContextDefinition(sourceFileName, monitorIntervalSecs, resources);
+    return new ContextDefinition(monitorIntervalSecs, resources);
   }
 
   public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
@@ -92,13 +83,11 @@ public class ContextDefinition implements KeywordExecutable {
       if (def == null) {
         throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
       }
-      def.sourceFileName = resolver.getFileName();
       return def;
     }
   }
 
   // transient fields that don't go in the json
-  private transient String sourceFileName;
   private final transient Supplier<String> checksum =
       Suppliers.memoize(() -> DIGESTER.digestAsHex(toJson()));
 
@@ -109,18 +98,11 @@ public class ContextDefinition implements KeywordExecutable {
 
   public ContextDefinition() {}
 
-  public ContextDefinition(String sourceFileName, int monitorIntervalSeconds,
-      LinkedHashSet<Resource> resources) {
-    this.sourceFileName = requireNonNull(sourceFileName, "source file name must be supplied");
-
+  public ContextDefinition(int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
     this.resources = requireNonNull(resources, "resources must be supplied");
-  }
-
-  public String getSourceFileName() {
-    return sourceFileName;
   }
 
   public int getMonitorIntervalSeconds() {
@@ -133,7 +115,7 @@ public class ContextDefinition implements KeywordExecutable {
 
   @Override
   public int hashCode() {
-    return hash(sourceFileName, monitorIntervalSeconds, resources);
+    return hash(monitorIntervalSeconds, resources);
   }
 
   @Override
@@ -148,8 +130,7 @@ public class ContextDefinition implements KeywordExecutable {
       return false;
     }
     ContextDefinition other = (ContextDefinition) obj;
-    return Objects.equals(sourceFileName, other.sourceFileName)
-        && monitorIntervalSeconds == other.monitorIntervalSeconds
+    return monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
   }
 
@@ -182,7 +163,7 @@ public class ContextDefinition implements KeywordExecutable {
     for (String f : opts.files) {
       urls[count++] = new URL(f);
     }
-    ContextDefinition def = create(opts.contextName, opts.monitorInterval, urls);
+    ContextDefinition def = create(opts.monitorInterval, urls);
     System.out.println(def.toJson());
   }
 }

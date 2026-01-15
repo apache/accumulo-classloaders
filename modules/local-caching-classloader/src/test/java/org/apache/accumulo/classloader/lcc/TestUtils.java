@@ -30,11 +30,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.nio.file.Path;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
@@ -64,11 +64,11 @@ public class TestUtils {
     }
   }
 
-  public static Path createContextDefinitionFile(FileSystem fs, String name, String contents)
-      throws Exception {
-    Path baseHdfsPath = new Path("/contextDefs");
+  public static org.apache.hadoop.fs.Path createContextDefinitionFile(FileSystem fs, String name,
+      String contents) throws Exception {
+    var baseHdfsPath = new org.apache.hadoop.fs.Path("/contextDefs");
     assertTrue(fs.mkdirs(baseHdfsPath));
-    Path newContextDefinitionFile = new Path(baseHdfsPath, name);
+    var newContextDefinitionFile = new org.apache.hadoop.fs.Path(baseHdfsPath, name);
 
     if (contents == null) {
       assertTrue(fs.createNewFile(newContextDefinitionFile));
@@ -81,8 +81,8 @@ public class TestUtils {
     return newContextDefinitionFile;
   }
 
-  public static void updateContextDefinitionFile(FileSystem fs, Path defFilePath, String contents)
-      throws Exception {
+  public static void updateContextDefinitionFile(FileSystem fs,
+      org.apache.hadoop.fs.Path defFilePath, String contents) throws Exception {
     // Update the contents of the context definition json file
     assertTrue(fs.exists(defFilePath));
     fs.delete(defFilePath, false);
@@ -154,7 +154,7 @@ public class TestUtils {
     return cluster;
   }
 
-  public static Server getJetty(java.nio.file.Path resourceDirectory) throws Exception {
+  public static Server getJetty(Path resourceDirectory) throws Exception {
     PathResource directory = new PathResource(resourceDirectory);
     ResourceHandler handler = new ResourceHandler();
     handler.setBaseResource(directory);

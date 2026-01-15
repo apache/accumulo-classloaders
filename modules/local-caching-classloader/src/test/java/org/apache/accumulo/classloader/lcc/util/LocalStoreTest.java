@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.File;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
@@ -40,7 +41,6 @@ import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -52,9 +52,8 @@ import org.junit.jupiter.api.io.TempDir;
 public class LocalStoreTest {
 
   @TempDir
-  private static java.nio.file.Path tempDir;
+  private static Path tempDir;
 
-  private static final String CONTEXT_NAME = "TEST_CONTEXT";
   private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
   private static Server jetty;
@@ -63,7 +62,7 @@ public class LocalStoreTest {
   private static TestClassInfo classB;
   private static TestClassInfo classC;
   private static TestClassInfo classD;
-  private static java.nio.file.Path baseCacheDir = null;
+  private static Path baseCacheDir = null;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
@@ -80,16 +79,15 @@ public class LocalStoreTest {
     // Put B into HDFS
     hdfs = TestUtils.getMiniCluster();
     final FileSystem fs = hdfs.getFileSystem();
-    assertTrue(fs.mkdirs(new Path("/contextB")));
-    final Path dst = new Path("/contextB/TestB.jar");
-    fs.copyFromLocalFile(new Path(jarBOrigLocation.toURI()), dst);
+    assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/contextB")));
+    final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
+    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
     assertTrue(fs.exists(dst));
     URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
     final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
-    java.nio.file.Path jarCParentDirectory =
-        java.nio.file.Path.of(jarCOrigLocation.toURI()).getParent();
+    var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
@@ -102,7 +100,7 @@ public class LocalStoreTest {
     resources
         .add(new Resource(jarCNewLocation, TestUtils.computeResourceChecksum(jarCOrigLocation)));
 
-    def = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, resources);
+    def = new ContextDefinition(MONITOR_INTERVAL_SECS, resources);
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
     classB = new TestClassInfo("test.TestObjectB", "Hello from B");
     classC = new TestClassInfo("test.TestObjectC", "Hello from C");
@@ -124,8 +122,7 @@ public class LocalStoreTest {
   public void cleanBaseDir() throws Exception {
     if (Files.exists(baseCacheDir)) {
       try (var walker = Files.walk(baseCacheDir)) {
-        walker.map(java.nio.file.Path::toFile).sorted(Comparator.reverseOrder())
-            .forEach(File::delete);
+        walker.map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
       }
     }
   }
@@ -158,31 +155,31 @@ public class LocalStoreTest {
 
   @Test
   public void testLocalFileName() {
-    // regular json
-    assertEquals("f1-chk1.json", LocalStore.localName("f1.json", "chk1"));
-    // dotfile json
-    assertEquals(".f1-chk1.json", LocalStore.localName(".f1.json", "chk1"));
+    // regular war
+    assertEquals("f1-chk1.war", LocalStore.localResourceName("f1.war", "chk1"));
+    // dotfile war
+    assertEquals(".f1-chk1.war", LocalStore.localResourceName(".f1.war", "chk1"));
     // regular jar (has multiple dots)
-    assertEquals("f2-1.0-chk2.jar", LocalStore.localName("f2-1.0.jar", "chk2"));
+    assertEquals("f2-1.0-chk2.jar", LocalStore.localResourceName("f2-1.0.jar", "chk2"));
     // dotfile jar (has multiple dots)
-    assertEquals(".f2-1.0-chk2.jar", LocalStore.localName(".f2-1.0.jar", "chk2"));
+    assertEquals(".f2-1.0-chk2.jar", LocalStore.localResourceName(".f2-1.0.jar", "chk2"));
     // regular file with no suffix
-    assertEquals("f3-chk3", LocalStore.localName("f3", "chk3"));
+    assertEquals("f3-chk3", LocalStore.localResourceName("f3", "chk3"));
 
     // weird files with trailing dots and no file suffix
-    assertEquals("f4.-chk4", LocalStore.localName("f4.", "chk4"));
-    assertEquals("f4..-chk4", LocalStore.localName("f4..", "chk4"));
-    assertEquals("f4...-chk4", LocalStore.localName("f4...", "chk4"));
+    assertEquals("f4.-chk4", LocalStore.localResourceName("f4.", "chk4"));
+    assertEquals("f4..-chk4", LocalStore.localResourceName("f4..", "chk4"));
+    assertEquals("f4...-chk4", LocalStore.localResourceName("f4...", "chk4"));
     // weird dotfiles that don't really have a suffix
-    assertEquals(".f5-chk5", LocalStore.localName(".f5", "chk5"));
-    assertEquals("..f5-chk5", LocalStore.localName("..f5", "chk5"));
+    assertEquals(".f5-chk5", LocalStore.localResourceName(".f5", "chk5"));
+    assertEquals("..f5-chk5", LocalStore.localResourceName("..f5", "chk5"));
     // weird files with weird dots, but do have a valid suffix
-    assertEquals("f6.-chk6.jar", LocalStore.localName("f6..jar", "chk6"));
-    assertEquals("f6..-chk6.jar", LocalStore.localName("f6...jar", "chk6"));
-    assertEquals(".f6-chk6.jar", LocalStore.localName(".f6.jar", "chk6"));
-    assertEquals("..f6-chk6.jar", LocalStore.localName("..f6.jar", "chk6"));
-    assertEquals(".f6.-chk6.jar", LocalStore.localName(".f6..jar", "chk6"));
-    assertEquals("..f6.-chk6.jar", LocalStore.localName("..f6..jar", "chk6"));
+    assertEquals("f6.-chk6.jar", LocalStore.localResourceName("f6..jar", "chk6"));
+    assertEquals("f6..-chk6.jar", LocalStore.localResourceName("f6...jar", "chk6"));
+    assertEquals(".f6-chk6.jar", LocalStore.localResourceName(".f6.jar", "chk6"));
+    assertEquals("..f6-chk6.jar", LocalStore.localResourceName("..f6.jar", "chk6"));
+    assertEquals(".f6.-chk6.jar", LocalStore.localResourceName(".f6..jar", "chk6"));
+    assertEquals("..f6.-chk6.jar", LocalStore.localResourceName("..f6..jar", "chk6"));
   }
 
   @Test
@@ -192,13 +189,12 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts")
-        .resolve(CONTEXT_NAME + "-" + def.getChecksum() + ".json")));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(def.getChecksum() + ".json")));
     for (Resource r : def.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(
-          baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
+      assertTrue(Files.exists(baseCacheDir.resolve("resources")
+          .resolve(LocalStore.localResourceName(filename, checksum))));
     }
   }
 
@@ -234,24 +230,24 @@ public class LocalStoreTest {
     updatedResources
         .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
 
-    var updatedDef = new ContextDefinition(CONTEXT_NAME, MONITOR_INTERVAL_SECS, updatedResources);
+    var updatedDef = new ContextDefinition(MONITOR_INTERVAL_SECS, updatedResources);
     urls = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts")
-        .resolve(CONTEXT_NAME + "-" + updatedDef.getChecksum() + ".json")));
+    assertTrue(
+        Files.exists(baseCacheDir.resolve("contexts").resolve(updatedDef.getChecksum() + ".json")));
     for (Resource r : updatedDef.getResources()) {
       String filename = TestUtils.getFileName(r.getLocation());
       assertFalse(filename.contains("C"));
       String checksum = r.getChecksum();
-      assertTrue(Files.exists(
-          baseCacheDir.resolve("resources").resolve(LocalStore.localName(filename, checksum))));
+      assertTrue(Files.exists(baseCacheDir.resolve("resources")
+          .resolve(LocalStore.localResourceName(filename, checksum))));
     }
 
     String filename = TestUtils.getFileName(removedResource.getLocation());
     assertTrue(filename.contains("C"), "cache location should still contain 'C'");
     assertTrue(Files.exists(baseCacheDir.resolve("resources")
-        .resolve(LocalStore.localName(filename, removedResource.getChecksum()))));
+        .resolve(LocalStore.localResourceName(filename, removedResource.getChecksum()))));
 
     final var updatedContextClassLoader = LccUtils.createClassLoader("url", urls);
 
