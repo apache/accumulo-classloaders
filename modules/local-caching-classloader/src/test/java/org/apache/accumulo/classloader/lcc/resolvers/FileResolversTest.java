@@ -26,13 +26,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ public class FileResolversTest {
 
   private static final Logger LOG = LoggerFactory.getLogger(FileResolversTest.class);
 
-  private long getFileSize(java.nio.file.Path p) throws IOException {
+  private long getFileSize(Path p) throws IOException {
     try (InputStream is = Files.newInputStream(p, StandardOpenOption.READ)) {
       return IOUtils.consume(is);
     }
@@ -59,7 +59,7 @@ public class FileResolversTest {
   public void testLocalFile() throws Exception {
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
+    var p = Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
     FileResolver resolver = FileResolver.resolve(jarPath);
     assertTrue(resolver instanceof LocalFileResolver);
@@ -73,7 +73,7 @@ public class FileResolversTest {
 
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
+    var p = Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
 
     Server jetty = TestUtils.getJetty(p.getParent());
@@ -94,15 +94,15 @@ public class FileResolversTest {
 
     URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
-    java.nio.file.Path p = java.nio.file.Path.of(jarPath.toURI());
+    var p = Path.of(jarPath.toURI());
     final long origFileSize = getFileSize(p);
 
     MiniDFSCluster cluster = TestUtils.getMiniCluster();
     try {
       FileSystem fs = cluster.getFileSystem();
-      assertTrue(fs.mkdirs(new Path("/context1")));
-      Path dst = new Path("/context1/HelloWorld.jar");
-      fs.copyFromLocalFile(new Path(jarPath.toURI()), dst);
+      assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/context1")));
+      var dst = new org.apache.hadoop.fs.Path("/context1/HelloWorld.jar");
+      fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarPath.toURI()), dst);
       assertTrue(fs.exists(dst));
 
       URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(cluster.getConfiguration(0)));

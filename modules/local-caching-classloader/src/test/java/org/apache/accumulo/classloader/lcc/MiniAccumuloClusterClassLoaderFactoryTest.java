@@ -95,7 +95,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
   }
 
   @TempDir
-  private static java.nio.file.Path tempDir;
+  private static Path tempDir;
 
   private static final Set<PosixFilePermission> CACHE_DIR_PERMS =
       EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE);
@@ -131,8 +131,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
   @Test
   public void testClassLoader() throws Exception {
 
-    Path baseDirPath = tempDir.resolve("base");
-    Path jsonDirPath = baseDirPath.resolve("contextFiles");
+    var baseDirPath = tempDir.resolve("base");
+    var jsonDirPath = baseDirPath.resolve("contextFiles");
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
@@ -230,10 +230,10 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
       // updates.
-      Path jarAPath = Path.of(jarAOrigLocation.toURI());
-      Path jarAPathParent = jarAPath.getParent();
+      var jarAPath = Path.of(jarAOrigLocation.toURI());
+      var jarAPathParent = jarAPath.getParent();
       assertNotNull(jarAPathParent);
-      Path jarACopy = jarAPathParent.resolve("jarACopy.jar");
+      var jarACopy = jarAPathParent.resolve("jarACopy.jar");
       assertTrue(!Files.exists(jarACopy));
       Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
       assertTrue(Files.exists(jarACopy));
