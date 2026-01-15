@@ -189,7 +189,7 @@ To aid in this task a JMX MXBean has been created to expose the files that are s
  by the classloaders that are created. For an example of how to use this MXBean, please see the test method `MiniAccumuloClusterClassLoaderFactoryTest.getReferencedFiles`. This method attaches to the
 local Accumulo JVM processes to get the set of referenced files. It should be safe to delete files that are located
 in the base cache directory (set by property `general.custom.classloader.lcc.cache.dir`) that are NOT in the set
-of referenced files.
+of referenced files and existed before references were gathered.
 
 **IMPORTANT**: as mentioned earlier, it is not safe to delete resource files
 that are still referenced by any `ClassLoader` instances. Each `ClassLoader`
