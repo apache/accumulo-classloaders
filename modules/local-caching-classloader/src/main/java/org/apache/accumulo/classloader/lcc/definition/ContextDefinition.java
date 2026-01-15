@@ -43,11 +43,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
 import com.beust.jcommander.Parameter;
+import com.google.auto.service.AutoService;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+@AutoService(KeywordExecutable.class)
 public class ContextDefinition implements KeywordExecutable {
 
   static class Opts extends Help {

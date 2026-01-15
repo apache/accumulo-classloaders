@@ -77,6 +77,7 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
   }
 
   public void values(final BiConsumer<KEY,VALUE> consumer) {
+    canonicalWeakValuesCache.cleanUp();
     canonicalWeakValuesCache.asMap().forEach(consumer);
   }
 
