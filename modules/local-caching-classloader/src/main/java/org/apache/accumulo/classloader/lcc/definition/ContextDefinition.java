@@ -62,6 +62,7 @@ public class ContextDefinition implements KeywordExecutable {
     public List<String> files = new ArrayList<>();
   }
 
+  // pretty-print uses Unix newline
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
@@ -141,7 +142,10 @@ public class ContextDefinition implements KeywordExecutable {
   }
 
   public String toJson() {
-    return GSON.toJson(this);
+    // GSON pretty print uses Unix line-endings, and may or may not have a trailing one, so
+    // ensure a trailing one exists, so it's included in checksum computations and in
+    // any files written from this (for better readability)
+    return GSON.toJson(this).stripTrailing() + "\n";
   }
 
   @Override
@@ -166,6 +170,6 @@ public class ContextDefinition implements KeywordExecutable {
       urls[count++] = new URL(f);
     }
     ContextDefinition def = create(opts.monitorInterval, urls);
-    System.out.println(def.toJson());
+    System.out.print(def.toJson());
   }
 }

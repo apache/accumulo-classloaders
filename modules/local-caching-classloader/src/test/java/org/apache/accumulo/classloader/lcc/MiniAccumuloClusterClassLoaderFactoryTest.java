@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,8 +53,7 @@ import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import javax.management.JMX;
-import javax.management.MBeanServerConnection;
-import javax.management.remote.JMXConnector;
+import javax.management.MalformedObjectNameException;
 import javax.management.remote.JMXConnectorFactory;
 import javax.management.remote.JMXServiceURL;
 
@@ -93,6 +93,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 
@@ -154,7 +155,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
   public void testClassLoader() throws Exception {
     final var baseDirPath = tempDir.resolve("base");
     final var resourcesDirPath = baseDirPath.resolve("resources");
-    final var jsonDirPath = baseDirPath.resolve("contextFiles");
+    final var jsonDirPath = tempDir.resolve("simulatedRemoteContextFiles");
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
@@ -319,36 +320,34 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     }
   }
 
-  public Set<String> getReferencedFiles() {
+  private Set<String> getReferencedFiles() {
     final Map<String,List<String>> referencedFiles = new HashMap<>();
-    List<VirtualMachineDescriptor> vmdl = VirtualMachine.list();
-    for (VirtualMachineDescriptor vmd : vmdl) {
+    for (VirtualMachineDescriptor vmd : VirtualMachine.list()) {
       if (vmd.displayName().contains("org.apache.accumulo.start.Main")
           && !vmd.displayName().contains("zookeeper")) {
         LOG.info("Attempting to connect to {}", vmd.displayName());
         try {
-          VirtualMachine vm = VirtualMachine.attach(vmd);
+          var vm = VirtualMachine.attach(vmd);
           String connectorAddress = vm.getAgentProperties()
               .getProperty("com.sun.management.jmxremote.localConnectorAddress");
           if (connectorAddress == null) {
             connectorAddress = vm.startLocalManagementAgent();
-            connectorAddress = vm.getAgentProperties()
-                .getProperty("com.sun.management.jmxremote.localConnectorAddress");
           }
-          JMXServiceURL url = new JMXServiceURL(connectorAddress);
-          try (JMXConnector connector = JMXConnectorFactory.connect(url)) {
-            MBeanServerConnection mbsc = connector.getMBeanServerConnection();
-            ContextClassLoadersMXBean proxy = JMX.newMXBeanProxy(mbsc,
-                ContextClassLoadersMXBean.getObjectName(), ContextClassLoadersMXBean.class);
+          var url = new JMXServiceURL(connectorAddress);
+          try (var connector = JMXConnectorFactory.connect(url)) {
+            var mbsc = connector.getMBeanServerConnection();
+            var proxy = JMX.newMXBeanProxy(mbsc, ContextClassLoadersMXBean.getObjectName(),
+                ContextClassLoadersMXBean.class);
             referencedFiles.putAll(proxy.getReferencedFiles());
           }
-        } catch (Exception e) {
+        } catch (MalformedObjectNameException | AttachNotSupportedException | IOException e) {
           LOG.error("Error getting referenced files from {}", vmd.displayName(), e);
         }
       }
     }
     Set<String> justTheFiles = new HashSet<>();
     referencedFiles.values().forEach(justTheFiles::addAll);
+    LOG.info("Referenced files with contexts: {}", referencedFiles);
     LOG.info("Referenced files: {}", justTheFiles);
     return justTheFiles;
   }

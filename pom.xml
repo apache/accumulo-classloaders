@@ -367,7 +367,13 @@ under the License.
             </goals>
             <configuration>
               <failOnWarning>true</failOnWarning>
+              <ignoredUsedUndeclaredDependencies>
+                <!-- auto-service-annotations is transitive via auto-service -->
+                <undeclared>com.google.auto.service:auto-service-annotations:jar:*</undeclared>
+              </ignoredUsedUndeclaredDependencies>
               <ignoredUnusedDeclaredDependencies>
+                <!-- auto-service used by the compiler for annotation processing, not by code -->
+                <unused>com.google.auto.service:auto-service:jar:*</unused>
                 <!-- ignore false positive runtime dependencies -->
                 <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
                 <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>

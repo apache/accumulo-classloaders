@@ -52,9 +52,10 @@
       <optional>true</optional>
     </dependency>
     <dependency>
+      <!-- needed for annotation processor during compile, but not after -->
       <groupId>com.google.auto.service</groupId>
-      <artifactId>auto-service-annotations</artifactId>
-      <version>1.1.1</version>
+      <artifactId>auto-service</artifactId>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>com.beust</groupId>
@@ -147,26 +148,6 @@
   </dependencies>
   <build>
     <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-compiler-plugin</artifactId>
-        <configuration>
-          <showDeprecation>true</showDeprecation>
-          <showWarnings>true</showWarnings>
-          <compilerArgs>
-            <arg>-Xlint:all</arg>
-            <arg>-Xlint:-processing</arg>
-            <arg>-Xmaxwarns</arg>
-            <arg>5</arg>
-          </compilerArgs>
-          <annotationProcessorPaths combine.children="append">
-            <path>
-              <groupId>com.google.auto.service</groupId>
-              <artifactId>auto-service</artifactId>
-            </path>
-          </annotationProcessorPaths>
-        </configuration>
-      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>

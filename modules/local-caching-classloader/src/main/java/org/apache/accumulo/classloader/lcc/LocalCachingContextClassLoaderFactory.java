@@ -302,14 +302,12 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   public static Map<String,List<String>> getReferencedFiles() {
     final Map<String,List<String>> referencedContexts = new HashMap<>();
-    LocalCachingContextClassLoaderFactory.classloaders.values((defUrl, cl) -> {
-      if (cl != null) {
-        List<String> files = new ArrayList<>();
-        for (URL u : cl.getURLs()) {
-          files.add(u.toString());
-        }
-        referencedContexts.put(defUrl, files);
+    classloaders.forEach((cacheKey, cl) -> {
+      List<String> files = new ArrayList<>();
+      for (URL u : cl.getURLs()) {
+        files.add(u.toString());
       }
+      referencedContexts.put(cacheKey, files);
     });
     return referencedContexts;
   }
