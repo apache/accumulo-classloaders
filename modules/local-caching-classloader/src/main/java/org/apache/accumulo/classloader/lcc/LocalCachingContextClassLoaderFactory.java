@@ -50,11 +50,13 @@ import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoaders;
 import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
+import org.apache.accumulo.classloader.lcc.util.HdfsUrlStreamHandlerFactory;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,6 +91,14 @@ import com.google.common.base.Stopwatch;
  * It is left to the user to remove unused old files.
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
+
+  // Configure the URL class to know about the "hdfs://" protocol. This can only be
+  // called once in the JVM, so it has to be in a static initializer vs the init
+  // method. We are not using org.apache.hadoop.fs.FsUrlStreamHandlerFactory
+  // because it overrides the handling of the "file" protocol.
+  static {
+    URL.setURLStreamHandlerFactory(new HdfsUrlStreamHandlerFactory(new Configuration()));
+  }
 
   public static final String CACHE_DIR_PROPERTY =
       Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.cache.dir";

@@ -58,7 +58,6 @@ import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.core.util.ConfigurationImpl;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -96,6 +95,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @BeforeAll
   public static void beforeAll() throws Exception {
+
+    // Need to run the static initializer
+    new LocalCachingContextClassLoaderFactory();
+
     // Find the Test jar files
     jarAOrigLocation =
         LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestA/TestA.jar");
@@ -115,7 +118,6 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     // Put B into HDFS
     hdfs = TestUtils.getMiniCluster();
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
 
     fs = hdfs.getFileSystem();
     assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/contextB")));

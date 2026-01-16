@@ -40,7 +40,6 @@ import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -83,7 +82,7 @@ public class LocalStoreTest {
     final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
     fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
     assertTrue(fs.exists(dst));
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
+    URL.setURLStreamHandlerFactory(new HdfsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
     final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
