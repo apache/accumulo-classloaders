@@ -107,7 +107,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     @Override
     public void configureMiniCluster(MiniAccumuloConfigImpl cfg,
         org.apache.hadoop.conf.Configuration coreSite) {
-      cfg.getJvmOptions().remove("-XX:+PerfDisableSharedMem");
+      cfg.getJvmOptions().add("-XX:-PerfDisableSharedMem");
       cfg.setNumTservers(3);
       cfg.setProperty(Property.TSERV_NATIVEMAP_ENABLED.getKey(), "false");
       cfg.setProperty(Property.GENERAL_CONTEXT_CLASSLOADER_FACTORY.getKey(),
