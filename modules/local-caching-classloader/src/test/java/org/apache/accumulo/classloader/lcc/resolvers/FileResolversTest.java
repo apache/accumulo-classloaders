@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -32,7 +32,6 @@ import java.nio.file.StandardOpenOption;
 import org.apache.accumulo.classloader.lcc.TestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.Test;
@@ -57,13 +56,13 @@ public class FileResolversTest {
 
   @Test
   public void testLocalFile() throws Exception {
-    URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
+    URI jarPath = FileResolversTest.class.getResource("/HelloWorld.jar").toURI();
     assertNotNull(jarPath);
-    var p = Path.of(jarPath.toURI());
+    var p = Path.of(jarPath);
     final long origFileSize = getFileSize(p);
     FileResolver resolver = FileResolver.resolve(jarPath);
     assertTrue(resolver instanceof LocalFileResolver);
-    assertEquals(jarPath, resolver.getURL());
+    assertEquals(jarPath, resolver.getURI());
     assertEquals("HelloWorld.jar", resolver.getFileName());
     assertEquals(origFileSize, getFileSize(resolver));
   }
@@ -71,17 +70,17 @@ public class FileResolversTest {
   @Test
   public void testHttpFile() throws Exception {
 
-    URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
+    URI jarPath = FileResolversTest.class.getResource("/HelloWorld.jar").toURI();
     assertNotNull(jarPath);
-    var p = Path.of(jarPath.toURI());
+    var p = Path.of(jarPath);
     final long origFileSize = getFileSize(p);
 
     Server jetty = TestUtils.getJetty(p.getParent());
     LOG.debug("Jetty listening at: {}", jetty.getURI());
-    URL httpPath = jetty.getURI().resolve("HelloWorld.jar").toURL();
+    URI httpPath = jetty.getURI().resolve("HelloWorld.jar");
     FileResolver resolver = FileResolver.resolve(httpPath);
     assertTrue(resolver instanceof HttpFileResolver);
-    assertEquals(httpPath, resolver.getURL());
+    assertEquals(httpPath, resolver.getURI());
     assertEquals("HelloWorld.jar", resolver.getFileName());
     assertEquals(origFileSize, getFileSize(resolver));
 
@@ -92,9 +91,9 @@ public class FileResolversTest {
   @Test
   public void testHdfsFile() throws Exception {
 
-    URL jarPath = FileResolversTest.class.getResource("/HelloWorld.jar");
+    URI jarPath = FileResolversTest.class.getResource("/HelloWorld.jar").toURI();
     assertNotNull(jarPath);
-    var p = Path.of(jarPath.toURI());
+    var p = Path.of(jarPath);
     final long origFileSize = getFileSize(p);
 
     MiniDFSCluster cluster = TestUtils.getMiniCluster();
@@ -102,17 +101,15 @@ public class FileResolversTest {
       FileSystem fs = cluster.getFileSystem();
       assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/context1")));
       var dst = new org.apache.hadoop.fs.Path("/context1/HelloWorld.jar");
-      fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarPath.toURI()), dst);
+      fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarPath), dst);
       assertTrue(fs.exists(dst));
 
-      URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(cluster.getConfiguration(0)));
-
-      URL fullPath = new URL(fs.getUri().toString() + dst.toUri().toString());
+      URI fullPath = new URI(fs.getUri().toString() + dst.toUri().toString());
       LOG.info("Path to hdfs file: {}", fullPath);
 
       FileResolver resolver = FileResolver.resolve(fullPath);
       assertTrue(resolver instanceof HdfsFileResolver);
-      assertEquals(fullPath, resolver.getURL());
+      assertEquals(fullPath, resolver.getURI());
       assertEquals("HelloWorld.jar", resolver.getFileName());
       assertEquals(origFileSize, getFileSize(resolver));
 

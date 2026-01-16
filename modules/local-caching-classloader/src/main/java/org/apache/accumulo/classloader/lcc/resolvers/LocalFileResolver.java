@@ -23,8 +23,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -32,22 +30,17 @@ public final class LocalFileResolver extends FileResolver {
 
   private final File file;
 
-  public LocalFileResolver(URL url) throws IOException {
-    super(url);
-    if (url.getHost() != null && !url.getHost().isBlank()) {
+  public LocalFileResolver(URI uri) throws IOException {
+    super(uri);
+    if (uri.getHost() != null && !uri.getHost().isBlank()) {
       throw new IOException(
-          "Unsupported file url, only local files are supported. host = " + url.getHost());
+          "Unsupported file uri, only local files are supported. host = " + uri.getHost());
     }
-    try {
-      final URI uri = url.toURI();
-      final Path path = Path.of(uri);
-      if (Files.notExists(Path.of(uri))) {
-        throw new IOException("File: " + url + " does not exist.");
-      }
-      file = path.toFile();
-    } catch (URISyntaxException e) {
-      throw new IOException("Error creating URI from url: " + url, e);
+    final Path path = Path.of(uri);
+    if (Files.notExists(path)) {
+      throw new IOException("File: " + uri + " does not exist.");
     }
+    file = path.toFile();
   }
 
   @Override

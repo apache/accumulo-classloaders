@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -40,7 +40,6 @@ import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -69,11 +68,14 @@ public class LocalStoreTest {
     baseCacheDir = tempDir.resolve("base");
 
     // Find the Test jar files
-    final URL jarAOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+    final URI jarAOrigLocation =
+        LocalStoreTest.class.getResource("/ClassLoaderTestA/TestA.jar").toURI();
     assertNotNull(jarAOrigLocation);
-    final URL jarBOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+    final URI jarBOrigLocation =
+        LocalStoreTest.class.getResource("/ClassLoaderTestB/TestB.jar").toURI();
     assertNotNull(jarBOrigLocation);
-    final URL jarCOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+    final URI jarCOrigLocation =
+        LocalStoreTest.class.getResource("/ClassLoaderTestC/TestC.jar").toURI();
     assertNotNull(jarCOrigLocation);
 
     // Put B into HDFS
@@ -81,15 +83,14 @@ public class LocalStoreTest {
     final FileSystem fs = hdfs.getFileSystem();
     assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/contextB")));
     final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
-    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
+    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation), dst);
     assertTrue(fs.exists(dst));
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
-    final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
+    final URI jarBNewLocation = new URI(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
-    var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
+    var jarCParentDirectory = Path.of(jarCOrigLocation).getParent();
     jetty = TestUtils.getJetty(jarCParentDirectory);
-    final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
+    final URI jarCNewLocation = jetty.getURI().resolve("TestC.jar");
 
     // Create ContextDefinition with all three resources
     final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
@@ -225,7 +226,8 @@ public class LocalStoreTest {
     var removedResource = def.getResources().stream().reduce((a, b) -> b).orElseThrow();
 
     // Add D
-    final URL jarDOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+    final URI jarDOrigLocation =
+        LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar").toURI();
     assertNotNull(jarDOrigLocation);
     updatedResources
         .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));

@@ -23,6 +23,7 @@ import static java.util.Objects.requireNonNull;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.management.ManagementFactory;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -200,6 +201,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         monitorContext(contextLocation, computedDefinition.getMonitorIntervalSeconds());
       } catch (IOException e) {
         throw new UncheckedIOException(e);
+      } catch (URISyntaxException e) {
+        throw new IllegalArgumentException(e);
       }
     } else {
       computedDefinition = previousDefinition;
@@ -216,10 +219,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return computedDefinition;
   }
 
-  private static ContextDefinition getDefinition(String contextLocation) throws IOException {
+  private static ContextDefinition getDefinition(String contextLocation)
+      throws IOException, URISyntaxException {
     LOG.trace("Retrieving context definition file from {}", contextLocation);
-    URL url = new URL(contextLocation);
-    return ContextDefinition.fromRemoteURL(url);
+    URI uri = new URI(contextLocation);
+    return ContextDefinition.fromRemoteURL(uri);
   }
 
   private static String newCacheKey(String contextLocation, String contextChecksum) {
@@ -268,7 +272,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } else {
         LOG.trace("Context definition for {} has not changed", contextLocation);
       }
-    } catch (IOException | RuntimeException e) {
+    } catch (IOException | RuntimeException | URISyntaxException e) {
       LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
           contextLocation, e);
       final Stopwatch failureTimer = classloaderFailures.get(contextLocation);

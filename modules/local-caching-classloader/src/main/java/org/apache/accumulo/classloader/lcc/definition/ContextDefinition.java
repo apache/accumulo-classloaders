@@ -27,7 +27,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URL;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -39,8 +39,6 @@ import java.util.function.Supplier;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.start.spi.KeywordExecutable;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
 import com.beust.jcommander.Parameter;
 import com.google.auto.service.AutoService;
@@ -66,10 +64,10 @@ public class ContextDefinition implements KeywordExecutable {
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
-  public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
+  public static ContextDefinition create(int monitorIntervalSecs, URI... sources)
       throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    for (URL u : sources) {
+    for (URI u : sources) {
       FileResolver resolver = FileResolver.resolve(u);
       try (InputStream is = resolver.getInputStream()) {
         String checksum = DIGESTER.digestAsHex(is);
@@ -79,12 +77,12 @@ public class ContextDefinition implements KeywordExecutable {
     return new ContextDefinition(monitorIntervalSecs, resources);
   }
 
-  public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
-    final FileResolver resolver = FileResolver.resolve(url);
+  public static ContextDefinition fromRemoteURL(final URI uri) throws IOException {
+    final FileResolver resolver = FileResolver.resolve(uri);
     try (InputStream is = resolver.getInputStream()) {
       var def = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
       if (def == null) {
-        throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
+        throw new EOFException("InputStream does not contain a valid ContextDefinition at " + uri);
       }
       return def;
     }
@@ -160,14 +158,12 @@ public class ContextDefinition implements KeywordExecutable {
 
   @Override
   public void execute(String[] args) throws Exception {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(new Configuration()));
-
     Opts opts = new Opts();
     opts.parseArgs(ContextDefinition.class.getName(), args);
-    URL[] urls = new URL[opts.files.size()];
+    URI[] urls = new URI[opts.files.size()];
     int count = 0;
     for (String f : opts.files) {
-      urls[count++] = new URL(f);
+      urls[count++] = new URI(f);
     }
     ContextDefinition def = create(opts.monitorInterval, urls);
     System.out.print(def.toJson());

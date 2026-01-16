@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -129,18 +129,18 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
   private static final int MONITOR_INTERVAL_SECS =
       LocalCachingContextClassLoaderFactoryTest.MONITOR_INTERVAL_SECS;
 
-  private static URL jarAOrigLocation;
-  private static URL jarBOrigLocation;
+  private static URI jarAOrigLocation;
+  private static URI jarBOrigLocation;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
 
     // Find the Test jar files
     jarAOrigLocation = MiniAccumuloClusterClassLoaderFactoryTest.class
-        .getResource("/ExampleIteratorsA/example-iterators-a.jar");
+        .getResource("/ExampleIteratorsA/example-iterators-a.jar").toURI();
     assertNotNull(jarAOrigLocation);
     jarBOrigLocation = MiniAccumuloClusterClassLoaderFactoryTest.class
-        .getResource("/ExampleIteratorsB/example-iterators-b.jar");
+        .getResource("/ExampleIteratorsB/example-iterators-b.jar").toURI();
     assertNotNull(jarBOrigLocation);
 
     startMiniClusterWithConfig(new TestMACConfiguration());
@@ -216,10 +216,10 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       vp.cols = params.cols;
       VerifyIngest.verifyIngest(client, vp);
 
-      // Set the table classloader context. The context is the URL to the context definition file
-      final String contextURL = testContextDefFile.toURI().toURL().toString();
+      // Set the table classloader context. The context is the URI to the context definition file
+      final String contextURI = testContextDefFile.toURI().toString();
       client.tableOperations().setProperty(tableName, Property.TABLE_CLASSLOADER_CONTEXT.getKey(),
-          contextURL);
+          contextURI);
 
       // check that the table is returning unique values
       // before applying the iterator
@@ -276,7 +276,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Copy jar A, create a context definition using the copy, then
       // remove the copy so that it's not found when the context classloader
       // updates.
-      var jarAPath = Path.of(jarAOrigLocation.toURI());
+      var jarAPath = Path.of(jarAOrigLocation);
       var jarAPathParent = jarAPath.getParent();
       assertNotNull(jarAPathParent);
       var jarACopy = jarAPathParent.resolve("jarACopy.jar");
@@ -285,7 +285,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(jarACopy));
 
       final ContextDefinition testContextDefUpdate2 =
-          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 

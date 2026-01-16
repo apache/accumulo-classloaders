@@ -29,9 +29,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Path;
 
+import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -167,14 +168,14 @@ public class TestUtils {
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
-  public static String computeResourceChecksum(URL resourceLocation) throws IOException {
-    try (InputStream is = resourceLocation.openStream()) {
+  public static String computeResourceChecksum(URI resourceLocation) throws IOException {
+    try (InputStream is = FileResolver.resolve(resourceLocation).getInputStream()) {
       return DIGESTER.digestAsHex(is);
     }
   }
 
-  public static String getFileName(URL url) {
-    String path = url.getPath();
+  public static String getFileName(URI uri) {
+    String path = uri.getPath();
     return path.substring(path.lastIndexOf("/") + 1);
 
   }

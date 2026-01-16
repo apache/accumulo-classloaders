@@ -20,19 +20,19 @@ package org.apache.accumulo.classloader.lcc.resolvers;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public final class HttpFileResolver extends FileResolver {
 
-  protected HttpFileResolver(URL url) throws IOException {
-    super(url);
+  protected HttpFileResolver(URI uri) throws IOException {
+    super(uri);
   }
 
   @Override
   public String getFileName() {
-    String path = getURL().getPath();
+    String path = getURI().getPath();
     return path.substring(path.lastIndexOf("/") + 1);
   }
 
@@ -40,6 +40,6 @@ public final class HttpFileResolver extends FileResolver {
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
   public InputStream getInputStream() throws IOException {
-    return getURL().openStream();
+    return getURI().toURL().openStream();
   }
 }

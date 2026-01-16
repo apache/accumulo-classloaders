@@ -35,8 +35,7 @@ import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -58,7 +57,6 @@ import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.core.util.ConfigurationImpl;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
@@ -75,14 +73,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
   private static Server jetty;
-  private static URL jarAOrigLocation;
-  private static URL jarBOrigLocation;
-  private static URL jarCOrigLocation;
-  private static URL jarDOrigLocation;
-  private static URL jarEOrigLocation;
-  private static URL localAllContext;
-  private static URL hdfsAllContext;
-  private static URL jettyAllContext;
+  private static URI jarAOrigLocation;
+  private static URI jarBOrigLocation;
+  private static URI jarCOrigLocation;
+  private static URI jarDOrigLocation;
+  private static URI jarEOrigLocation;
+  private static URI localAllContext;
+  private static URI hdfsAllContext;
+  private static URI jettyAllContext;
   private static TestClassInfo classA;
   private static TestClassInfo classB;
   private static TestClassInfo classC;
@@ -97,38 +95,37 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @BeforeAll
   public static void beforeAll() throws Exception {
     // Find the Test jar files
-    jarAOrigLocation =
-        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestA/TestA.jar");
+    jarAOrigLocation = LocalCachingContextClassLoaderFactoryTest.class
+        .getResource("/ClassLoaderTestA/TestA.jar").toURI();
     assertNotNull(jarAOrigLocation);
-    jarBOrigLocation =
-        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestB/TestB.jar");
+    jarBOrigLocation = LocalCachingContextClassLoaderFactoryTest.class
+        .getResource("/ClassLoaderTestB/TestB.jar").toURI();
     assertNotNull(jarBOrigLocation);
-    jarCOrigLocation =
-        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestC/TestC.jar");
+    jarCOrigLocation = LocalCachingContextClassLoaderFactoryTest.class
+        .getResource("/ClassLoaderTestC/TestC.jar").toURI();
     assertNotNull(jarCOrigLocation);
-    jarDOrigLocation =
-        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestD/TestD.jar");
+    jarDOrigLocation = LocalCachingContextClassLoaderFactoryTest.class
+        .getResource("/ClassLoaderTestD/TestD.jar").toURI();
     assertNotNull(jarDOrigLocation);
-    jarEOrigLocation =
-        LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestE/TestE.jar");
+    jarEOrigLocation = LocalCachingContextClassLoaderFactoryTest.class
+        .getResource("/ClassLoaderTestE/TestE.jar").toURI();
     assertNotNull(jarEOrigLocation);
 
     // Put B into HDFS
     hdfs = TestUtils.getMiniCluster();
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
 
     fs = hdfs.getFileSystem();
     assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/contextB")));
     final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
-    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
+    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation), dst);
     assertTrue(fs.exists(dst));
-    final URL jarBHdfsLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
+    final URI jarBHdfsLocation = new URI(fs.getUri().toString() + dst.toUri().toString());
 
     // Have Jetty serve up files from Jar C directory
-    var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
+    var jarCParentDirectory = Path.of(jarCOrigLocation).getParent();
     assertNotNull(jarCParentDirectory);
     jetty = TestUtils.getJetty(jarCParentDirectory);
-    final URL jarCJettyLocation = jetty.getURI().resolve("TestC.jar").toURL();
+    final URI jarCJettyLocation = jetty.getURI().resolve("TestC.jar");
 
     // ContextDefinition with all jars
     var allJarsDef = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation,
@@ -144,9 +141,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(localDefFile.toURI()), hdfsDefFile);
     assertTrue(fs.exists(hdfsDefFile));
 
-    localAllContext = localDefFile.toURI().toURL();
-    hdfsAllContext = new URL(fs.getUri().toString() + hdfsDefFile.toUri().toString());
-    jettyAllContext = jetty.getURI().resolve("allContextDefinition.json").toURL();
+    localAllContext = localDefFile.toURI();
+    hdfsAllContext = new URI(fs.getUri().toString() + hdfsDefFile.toUri().toString());
+    jettyAllContext = jetty.getURI().resolve("allContextDefinition.json");
 
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
     classB = new TestClassInfo("test.TestObjectB", "Hello from B");
@@ -169,7 +166,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
   public void beforeEach() throws Exception {
     baseCacheDir = tempDir.resolve("base");
     ConfigurationCopy acuConf = new ConfigurationCopy(
-        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toString()));
     FACTORY = new LocalCachingContextClassLoaderFactory();
     FACTORY.init(() -> new ConfigurationImpl(acuConf));
   }
@@ -205,16 +202,16 @@ public class LocalCachingContextClassLoaderFactoryTest {
   public void testInvalidContextDefinitionURL() {
     var ex =
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
-    assertTrue(ex.getCause() instanceof UncheckedIOException);
-    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
-    assertEquals("no protocol: /not/a/URL", ex.getCause().getCause().getMessage());
+    ex.printStackTrace();
+    assertTrue(ex.getCause() instanceof IllegalArgumentException, ex::toString);
+    assertEquals("URI : /not/a/URL has no scheme", ex.getCause().getMessage());
   }
 
   @Test
   public void testInitialContextDefinitionEmpty() throws Exception {
     // Create a new context definition file in HDFS, but with no content
     final var def = createContextDefinitionFile(fs, "EmptyContextDefinitionFile.json", null);
-    final URL emptyDefUrl = new URL(fs.getUri().toString() + def.toUri().toString());
+    final URI emptyDefUrl = new URI(fs.getUri().toString() + def.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyDefUrl.toString()));
@@ -232,7 +229,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // write out invalid json
     final var invalid = createContextDefinitionFile(fs, "InvalidContextDefinitionFile.json",
         def.toJson().substring(0, 4));
-    final URL invalidDefUrl = new URL(fs.getUri().toString() + invalid.toUri().toString());
+    final URI invalidDefUrl = new URI(fs.getUri().toString() + invalid.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidDefUrl.toString()));
@@ -245,7 +242,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var initial =
         createContextDefinitionFile(fs, "InitialContextDefinitionFile.json", def.toJson());
-    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+    final URI initialDefUrl = new URI(fs.getUri().toString() + initial.toUri().toString());
 
     ClassLoader cl = FACTORY.getClassLoader(initialDefUrl.toString());
 
@@ -258,7 +255,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testInitialNonExistentResource() throws Exception {
     // copy jarA to some other name
-    var jarAPath = Path.of(jarAOrigLocation.toURI());
+    var jarAPath = Path.of(jarAOrigLocation);
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
@@ -266,14 +263,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
     Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
 
-    var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+    var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri());
 
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
     final var initial = createContextDefinitionFile(fs,
         "InitialContextDefinitionFileMissingResource.json", def.toJson());
-    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+    final URI initialDefUrl = new URI(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
@@ -293,16 +290,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     final var initial =
         createContextDefinitionFile(fs, "InitialContextDefinitionBadResourceURL.json", badJson);
-    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+    final URI initialDefUrl = new URI(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
     assertTrue(ex.getMessage().startsWith("Error getting classloader for context:"),
         ex::getMessage);
-    assertTrue(ex.getCause() instanceof JsonSyntaxException);
-    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
-    assertTrue(ex.getCause().getCause().getMessage().startsWith("no protocol"),
-        ex.getCause().getCause()::getMessage);
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+    assertTrue(ex.getCause().getMessage().contains("no scheme"), ex.getCause()::getMessage);
   }
 
   @Test
@@ -315,7 +310,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     final var initial = createContextDefinitionFile(fs,
         "InitialContextDefinitionBadResourceChecksum.json", def.toJson());
-    final URL initialDefUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
+    final URI initialDefUrl = new URI(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
@@ -337,7 +332,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateContextDefinitionFile.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -368,7 +363,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateContextDefinitionFile.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -401,7 +396,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateEmptyContextDefinitionFile.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -432,7 +427,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateNonExistentResource.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -444,14 +439,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // copy jarA to jarACopy
     // create a ContextDefinition that references it
     // delete jarACopy
-    var jarAPath = Path.of(jarAOrigLocation.toURI());
+    var jarAPath = Path.of(jarAOrigLocation);
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
-    var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+    var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri());
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
@@ -475,7 +470,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateBadResourceChecksum.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -510,7 +505,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateBadResourceChecksum.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -547,7 +542,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateInvalidContextDefinitionFile.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
@@ -593,7 +588,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         jarCOrigLocation, jarDOrigLocation);
     final var update =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition.json", def.toJson());
-    final URL updatedDefUrl = new URL(fs.getUri().toString() + update.toUri().toString());
+    final URI updatedDefUrl = new URI(fs.getUri().toString() + update.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updatedDefUrl.toString());
     testClassLoads(cl, classA);
@@ -601,23 +596,23 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classC);
     testClassLoads(cl, classD);
 
-    final List<URL> masterList = new ArrayList<>();
+    final List<URI> masterList = new ArrayList<>();
     masterList.add(jarAOrigLocation);
     masterList.add(jarBOrigLocation);
     masterList.add(jarCOrigLocation);
     masterList.add(jarDOrigLocation);
 
-    List<URL> priorList = masterList;
+    List<URI> priorList = masterList;
     ClassLoader priorCL = cl;
 
     for (int i = 0; i < 20; i++) {
-      final List<URL> updatedList = new ArrayList<>(masterList);
+      final List<URI> updatedList = new ArrayList<>(masterList);
       Collections.shuffle(updatedList);
-      final URL removed = updatedList.remove(0);
+      final URI removed = updatedList.remove(0);
 
       // Update the contents of the context definition json file
       var updateDef =
-          ContextDefinition.create(MONITOR_INTERVAL_SECS, updatedList.toArray(new URL[0]));
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, updatedList.toArray(new URI[0]));
       updateContextDefinitionFile(fs, update, updateDef.toJson());
 
       // wait 2x the monitor interval
@@ -629,7 +624,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         assertEquals(priorCL, updatedClassLoader);
       } else {
         assertNotEquals(cl, updatedClassLoader);
-        for (URL u : updatedList) {
+        for (URI u : updatedList) {
           if (u.toString().equals(jarAOrigLocation.toString())) {
             testClassLoads(updatedClassLoader, classA);
           } else if (u.toString().equals(jarBOrigLocation.toString())) {
@@ -672,7 +667,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateNonExistentResource.json", def.toJson());
-    final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
+    final URI updateDefUrl = new URI(fs.getUri().toString() + defFilePath.toUri().toString());
 
     final ClassLoader cl = localFactory.getClassLoader(updateDefUrl.toString());
 
@@ -684,14 +679,14 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // copy jarA to jarACopy
     // create a ContextDefinition that references it
     // delete jarACopy
-    var jarAPath = Path.of(jarAOrigLocation.toURI());
+    var jarAPath = Path.of(jarAOrigLocation);
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
-    var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+    var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri());
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
@@ -724,7 +719,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         jarCOrigLocation, jarDOrigLocation);
     final var update =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition.json", def.toJson());
-    final URL updatedDefUrl = new URL(fs.getUri().toString() + update.toUri().toString());
+    final URI updatedDefUrl = new URI(fs.getUri().toString() + update.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updatedDefUrl.toString());
     testClassLoads(cl, classA);
@@ -750,7 +745,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     final var update2 =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition2.json", def.toJson());
-    final URL updatedDefUrl2 = new URL(fs.getUri().toString() + update2.toUri().toString());
+    final URI updatedDefUrl2 = new URI(fs.getUri().toString() + update2.toUri().toString());
 
     // The classloader should fail to create because one of the files in the local filesystem cache
     // has a checksum mismatch

@@ -33,6 +33,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileAlreadyExistsException;
@@ -194,15 +195,15 @@ public final class LocalStore {
    * Failures to download are not re-attempted, but will propagate up to the caller.
    */
   private Path storeResource(final Resource resource) throws IOException {
-    final URL url = resource.getLocation();
-    final FileResolver source = FileResolver.resolve(url);
+    final URI uri = resource.getLocation();
+    final FileResolver source = FileResolver.resolve(uri);
     final String baseName = localResourceName(source.getFileName(), resource.getChecksum());
     final Path destinationPath = resourcesDir.resolve(baseName);
     final Path tempPath = resourcesDir.resolve(tempName(baseName));
     final Path downloadingProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
 
     if (Files.exists(destinationPath)) {
-      LOG.trace("Resource {} is already cached at {}", url, destinationPath);
+      LOG.trace("Resource {} is already cached at {}", uri, destinationPath);
       verifyDownload(resource, destinationPath, null);
       try {
         // clean up any in progress files that may have been left behind by previous failed attempts
@@ -235,9 +236,9 @@ public final class LocalStore {
     var task = new FutureTask<Void>(() -> downloadFile(source, tempPath, resource), null);
     var t = new Thread(task);
     t.setDaemon(true);
-    t.setName("downloading " + url + " to " + tempPath);
+    t.setName("downloading " + uri + " to " + tempPath);
 
-    LOG.trace("Storing remote resource {} locally at {} via temp file {}", url, destinationPath,
+    LOG.trace("Storing remote resource {} locally at {} via temp file {}", uri, destinationPath,
         tempPath);
     t.start();
     try {
@@ -258,11 +259,11 @@ public final class LocalStore {
           task.cancel(true);
           Thread.currentThread().interrupt();
           throw new IllegalStateException(
-              "Thread was interrupted while waiting on resource to copy from " + url + " to "
+              "Thread was interrupted while waiting on resource to copy from " + uri + " to "
                   + tempPath,
               e);
         } catch (ExecutionException e) {
-          throw new IllegalStateException("Error copying resource from " + url + " to " + tempPath,
+          throw new IllegalStateException("Error copying resource from " + uri + " to " + tempPath,
               e);
         }
       }

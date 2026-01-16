@@ -21,8 +21,6 @@ package org.apache.accumulo.classloader.lcc.resolvers;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
-import java.net.URL;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -34,17 +32,12 @@ public final class HdfsFileResolver extends FileResolver {
   private final FileSystem fs;
   private final Path path;
 
-  protected HdfsFileResolver(URL url) throws IOException {
-    super(url);
-    try {
-      final URI uri = url.toURI();
-      this.fs = FileSystem.get(uri, hadoopConf);
-      this.path = fs.makeQualified(new Path(uri));
-      if (!fs.exists(this.path)) {
-        throw new IOException("File: " + url + " does not exist.");
-      }
-    } catch (URISyntaxException e) {
-      throw new IOException("Error creating URI from url: " + url, e);
+  protected HdfsFileResolver(URI uri) throws IOException {
+    super(uri);
+    this.fs = FileSystem.get(uri, hadoopConf);
+    this.path = fs.makeQualified(new Path(uri));
+    if (!fs.exists(this.path)) {
+      throw new IOException("File: " + uri + " does not exist.");
     }
   }
 

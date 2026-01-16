@@ -18,22 +18,22 @@
  */
 package org.apache.accumulo.classloader.lcc.definition;
 
-import java.net.URL;
+import java.net.URI;
 import java.util.Objects;
 
 public class Resource {
 
-  private URL location;
+  private URI location;
   private String checksum;
 
   public Resource() {}
 
-  public Resource(URL location, String checksum) {
+  public Resource(URI location, String checksum) {
     this.location = location;
     this.checksum = checksum;
   }
 
-  public URL getLocation() {
+  public URI getLocation() {
     return location;
   }
 

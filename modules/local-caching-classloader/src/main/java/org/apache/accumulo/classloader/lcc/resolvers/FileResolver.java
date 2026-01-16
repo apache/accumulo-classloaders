@@ -23,34 +23,37 @@ import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 import java.util.Objects;
+
+import com.google.common.base.Preconditions;
 
 public abstract class FileResolver {
 
-  public static FileResolver resolve(URL url) throws IOException {
-    requireNonNull(url, "URL must be supplied");
-    switch (url.getProtocol()) {
+  public static FileResolver resolve(URI uri) throws IOException {
+    requireNonNull(uri, "URI must be supplied");
+    Preconditions.checkArgument(uri.getScheme() != null, "URI : %s has no scheme", uri);
+    switch (uri.getScheme()) {
       case "http":
       case "https":
-        return new HttpFileResolver(url);
+        return new HttpFileResolver(uri);
       case "file":
-        return new LocalFileResolver(url);
+        return new LocalFileResolver(uri);
       case "hdfs":
-        return new HdfsFileResolver(url);
+        return new HdfsFileResolver(uri);
       default:
-        throw new IOException("Unhandled protocol: " + url.getProtocol());
+        throw new IOException("Unhandled protocol: " + uri.getScheme());
     }
   }
 
-  private final URL url;
+  private final URI uri;
 
-  protected FileResolver(URL url) {
-    this.url = url;
+  protected FileResolver(URI uri) {
+    this.uri = uri;
   }
 
-  protected URL getURL() {
-    return this.url;
+  protected URI getURI() {
+    return this.uri;
   }
 
   public abstract String getFileName();
@@ -59,7 +62,7 @@ public abstract class FileResolver {
 
   @Override
   public int hashCode() {
-    return hash(url);
+    return hash(uri);
   }
 
   @Override
@@ -74,7 +77,7 @@ public abstract class FileResolver {
       return false;
     }
     FileResolver other = (FileResolver) obj;
-    return Objects.equals(url, other.url);
+    return Objects.equals(uri, other.uri);
   }
 
 }
