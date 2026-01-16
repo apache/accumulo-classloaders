@@ -42,8 +42,6 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.util.resource.PathResource;
 
-import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
-
 public class TestUtils {
 
   public static class TestClassInfo {
@@ -166,8 +164,6 @@ public class TestUtils {
     return jetty;
   }
 
-  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
-      justification = "user-supplied URL is the intended functionality")
   public static String computeResourceChecksum(URI resourceLocation) throws IOException {
     try (InputStream is = FileResolver.resolve(resourceLocation).getInputStream()) {
       return DIGESTER.digestAsHex(is);
