@@ -135,7 +135,7 @@ under the License.
         <!-- most dependencies will be provided by the accumulo installation -->
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-project</artifactId>
-        <version>2.1.4</version>
+        <version>2.1.5-SNAPSHOT</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -367,7 +367,13 @@ under the License.
             </goals>
             <configuration>
               <failOnWarning>true</failOnWarning>
+              <ignoredUsedUndeclaredDependencies>
+                <!-- auto-service-annotations is transitive via auto-service -->
+                <undeclared>com.google.auto.service:auto-service-annotations:jar:*</undeclared>
+              </ignoredUsedUndeclaredDependencies>
               <ignoredUnusedDeclaredDependencies>
+                <!-- auto-service used by the compiler for annotation processing, not by code -->
+                <unused>com.google.auto.service:auto-service:jar:*</unused>
                 <!-- ignore false positive runtime dependencies -->
                 <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
                 <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
@@ -419,7 +425,12 @@ under the License.
                 <reactorModuleConvergence />
                 <banDuplicatePomDependencyVersions />
                 <dependencyConvergence />
-                <banDynamicVersions />
+                <banDynamicVersions>
+                  <ignores>
+                    <!-- allow Accumulo snapshots -->
+                    <ignore>org.apache.accumulo:*:*-SNAPSHOT</ignore>
+                  </ignores>
+                </banDynamicVersions>
                 <bannedDependencies>
                   <excludes>
                     <!-- we redirect logging to log4j2, so we should have those bridges instead -->

@@ -22,12 +22,15 @@ import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -36,8 +39,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.NotCompliantMBeanException;
+
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
+import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoaders;
+import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
@@ -97,7 +108,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
-  private final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
+  private static final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
       new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
@@ -143,6 +154,16 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } catch (IOException e) {
       throw new UncheckedIOException("Unable to create the local storage area at " + baseCacheDir,
           e);
+    }
+    try {
+      MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
+      mbs.registerMBean(new ContextClassLoaders(), ContextClassLoadersMXBean.getObjectName());
+    } catch (MalformedObjectNameException | MBeanRegistrationException
+        | NotCompliantMBeanException e) {
+      throw new IllegalStateException("Error registering MBean", e);
+    } catch (InstanceAlreadyExistsException e) {
+      // instance was re-init'd. This is likely to happen during tests
+      // can ignore as no issue here
     }
   }
 
@@ -277,6 +298,18 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       monitorContext(contextLocation, nextInterval);
     }
 
+  }
+
+  public static Map<String,List<String>> getReferencedFiles() {
+    final Map<String,List<String>> referencedContexts = new HashMap<>();
+    classloaders.forEach((cacheKey, cl) -> {
+      List<String> files = new ArrayList<>();
+      for (URL u : cl.getURLs()) {
+        files.add(u.toString());
+      }
+      referencedContexts.put(cacheKey, files);
+    });
+    return referencedContexts;
   }
 
 }

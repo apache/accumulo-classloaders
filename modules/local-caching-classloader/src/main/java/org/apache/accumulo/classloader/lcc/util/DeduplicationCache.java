@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc.util;
 import static java.util.Objects.requireNonNull;
 
 import java.time.Duration;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -73,6 +74,15 @@ public class DeduplicationCache<KEY,PARAMS,VALUE> {
   public boolean anyMatch(final Predicate<KEY> keyPredicate) {
     canonicalWeakValuesCache.cleanUp();
     return canonicalWeakValuesCache.asMap().keySet().stream().anyMatch(keyPredicate);
+  }
+
+  public void forEach(final BiConsumer<KEY,VALUE> consumer) {
+    canonicalWeakValuesCache.cleanUp();
+    canonicalWeakValuesCache.asMap().forEach((k, v) -> {
+      if (v != null) {
+        consumer.accept(k, v);
+      }
+    });
   }
 
 }

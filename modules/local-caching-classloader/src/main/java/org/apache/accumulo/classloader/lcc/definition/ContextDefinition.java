@@ -28,21 +28,41 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
+import org.apache.accumulo.core.cli.Help;
+import org.apache.accumulo.start.spi.KeywordExecutable;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
+import com.beust.jcommander.Parameter;
+import com.google.auto.service.AutoService;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-public class ContextDefinition {
+@AutoService(KeywordExecutable.class)
+public class ContextDefinition implements KeywordExecutable {
 
+  static class Opts extends Help {
+    @Parameter(names = {"-i", "--interval"}, required = true,
+        description = "monitor interval (in seconds)", arity = 1, order = 1)
+    int monitorInterval;
+
+    @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
+        arity = -1, order = 2)
+    public List<String> files = new ArrayList<>();
+  }
+
+  // pretty-print uses Unix newline
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
@@ -122,6 +142,34 @@ public class ContextDefinition {
   }
 
   public String toJson() {
-    return GSON.toJson(this);
+    // GSON pretty print uses Unix line-endings, and may or may not have a trailing one, so
+    // ensure a trailing one exists, so it's included in checksum computations and in
+    // any files written from this (for better readability)
+    return GSON.toJson(this).stripTrailing() + "\n";
+  }
+
+  @Override
+  public String keyword() {
+    return "create-context-definition";
+  }
+
+  @Override
+  public String description() {
+    return "Creates and prints a Context Definition";
+  }
+
+  @Override
+  public void execute(String[] args) throws Exception {
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(new Configuration()));
+
+    Opts opts = new Opts();
+    opts.parseArgs(ContextDefinition.class.getName(), args);
+    URL[] urls = new URL[opts.files.size()];
+    int count = 0;
+    for (String f : opts.files) {
+      urls[count++] = new URL(f);
+    }
+    ContextDefinition def = create(opts.monitorInterval, urls);
+    System.out.print(def.toJson());
   }
 }
