@@ -26,16 +26,24 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import com.google.common.base.Preconditions;
+
 public final class LocalFileResolver extends FileResolver {
 
   private final File file;
 
   public LocalFileResolver(URI uri) throws IOException {
     super(uri);
+
+    // Converting to a URL will perform more strict checks, also ensure the protocol is correct.
+    var url = uri.toURL();
+    Preconditions.checkArgument(url.getProtocol().equals("file"), "Not a file url : " + url);
+
     if (uri.getHost() != null && !uri.getHost().isBlank()) {
       throw new IOException(
           "Unsupported file uri, only local files are supported. host = " + uri.getHost());
     }
+
     final Path path = Path.of(uri);
     if (Files.notExists(path)) {
       throw new IOException("File: " + uri + " does not exist.");

@@ -204,7 +204,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
     ex.printStackTrace();
     assertTrue(ex.getCause() instanceof IllegalArgumentException, ex::toString);
-    assertEquals("URI : /not/a/URL has no scheme", ex.getCause().getMessage());
+    assertEquals("URI is not absolute : /not/a/URL", ex.getCause().getMessage());
   }
 
   @Test
@@ -297,7 +297,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertTrue(ex.getMessage().startsWith("Error getting classloader for context:"),
         ex::getMessage);
     assertTrue(ex.getCause() instanceof IllegalArgumentException);
-    assertTrue(ex.getCause().getMessage().contains("no scheme"), ex.getCause()::getMessage);
+    assertTrue(ex.getCause().getMessage().contains("URI is not absolute"),
+        ex.getCause()::getMessage);
   }
 
   @Test

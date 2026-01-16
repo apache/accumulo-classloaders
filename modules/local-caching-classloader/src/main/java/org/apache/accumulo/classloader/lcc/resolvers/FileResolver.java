@@ -32,7 +32,7 @@ public abstract class FileResolver {
 
   public static FileResolver resolve(URI uri) throws IOException {
     requireNonNull(uri, "URI must be supplied");
-    Preconditions.checkArgument(uri.getScheme() != null, "URI : %s has no scheme", uri);
+    Preconditions.checkArgument(uri.isAbsolute(), "URI is not absolute : %s", uri);
     switch (uri.getScheme()) {
       case "http":
       case "https":

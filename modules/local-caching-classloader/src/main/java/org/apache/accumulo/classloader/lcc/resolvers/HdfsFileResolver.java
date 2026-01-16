@@ -26,6 +26,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
+import com.google.common.base.Preconditions;
+
 public final class HdfsFileResolver extends FileResolver {
 
   private final Configuration hadoopConf = new Configuration();
@@ -34,6 +36,9 @@ public final class HdfsFileResolver extends FileResolver {
 
   protected HdfsFileResolver(URI uri) throws IOException {
     super(uri);
+
+    Preconditions.checkArgument(uri.getScheme().equals("hdfs"), "Not HDFS URI : " + uri);
+
     this.fs = FileSystem.get(uri, hadoopConf);
     this.path = fs.makeQualified(new Path(uri));
     if (!fs.exists(this.path)) {

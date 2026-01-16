@@ -22,12 +22,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 
+import com.google.common.base.Preconditions;
+
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 public final class HttpFileResolver extends FileResolver {
 
   protected HttpFileResolver(URI uri) throws IOException {
     super(uri);
+    // Converting to a URL will perform more strict checks, also ensure the protocol is correct.
+    var url = uri.toURL();
+    Preconditions.checkArgument(
+        url.getProtocol().equals("http") || url.getProtocol().equals("https"),
+        "Not an HTTP url " + url);
   }
 
   @Override
