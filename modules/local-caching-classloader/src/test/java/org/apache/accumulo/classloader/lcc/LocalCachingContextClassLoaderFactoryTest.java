@@ -95,10 +95,6 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-
-    // Need to run the static initializer
-    new LocalCachingContextClassLoaderFactory();
-
     // Find the Test jar files
     jarAOrigLocation =
         LocalCachingContextClassLoaderFactoryTest.class.getResource("/ClassLoaderTestA/TestA.jar");
