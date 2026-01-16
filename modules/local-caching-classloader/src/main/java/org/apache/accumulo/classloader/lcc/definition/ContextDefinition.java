@@ -39,8 +39,6 @@ import java.util.function.Supplier;
 import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.start.spi.KeywordExecutable;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
 import com.beust.jcommander.Parameter;
 import com.google.auto.service.AutoService;
@@ -160,8 +158,6 @@ public class ContextDefinition implements KeywordExecutable {
 
   @Override
   public void execute(String[] args) throws Exception {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(new Configuration()));
-
     Opts opts = new Opts();
     opts.parseArgs(ContextDefinition.class.getName(), args);
     URL[] urls = new URL[opts.files.size()];

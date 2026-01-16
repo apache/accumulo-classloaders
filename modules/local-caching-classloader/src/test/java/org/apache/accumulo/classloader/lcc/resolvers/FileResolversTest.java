@@ -30,7 +30,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
-import org.apache.accumulo.classloader.lcc.util.HdfsUrlStreamHandlerFactory;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -104,8 +103,6 @@ public class FileResolversTest {
       var dst = new org.apache.hadoop.fs.Path("/context1/HelloWorld.jar");
       fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarPath.toURI()), dst);
       assertTrue(fs.exists(dst));
-
-      URL.setURLStreamHandlerFactory(new HdfsUrlStreamHandlerFactory(cluster.getConfiguration(0)));
 
       URL fullPath = new URL(fs.getUri().toString() + dst.toUri().toString());
       LOG.info("Path to hdfs file: {}", fullPath);

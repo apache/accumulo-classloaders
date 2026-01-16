@@ -18,6 +18,8 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
+import static java.util.Objects.requireNonNull;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -25,8 +27,8 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
-import java.net.URLStreamHandlerFactory;
-import java.util.Objects;
+import java.net.spi.URLStreamHandlerProvider;
+import java.util.function.Supplier;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -34,23 +36,25 @@ import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.auto.service.AutoService;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Suppliers;
 
-public class HdfsUrlStreamHandlerFactory implements URLStreamHandlerFactory {
+@AutoService(URLStreamHandlerProvider.class)
+public class HdfsURLStreamHandlerProvider extends URLStreamHandlerProvider {
 
-  private static final Logger LOG = LoggerFactory.getLogger(HdfsUrlStreamHandlerFactory.class);
+  private static final Logger LOG = LoggerFactory.getLogger(HdfsURLStreamHandlerProvider.class);
 
-  private class HdfsUrlConnection extends URLConnection {
+  private static class HdfsURLConnection extends URLConnection {
 
-    private final Configuration conf;
+    private final Supplier<Configuration> conf = Suppliers.memoize(Configuration::new);
 
     private InputStream is;
 
-    public HdfsUrlConnection(Configuration conf, URL url) {
-      super(url);
-      Objects.requireNonNull(conf, "null conf argument");
-      Objects.requireNonNull(url, "null url argument");
-      this.conf = conf;
+    public HdfsURLConnection(URL url) {
+      super(requireNonNull(url, "null url argument"));
+      Preconditions.checkArgument("hdfs".equals(url.getProtocol()),
+          "HdfsUrlConnection only supports hdfs: URLs");
     }
 
     @Override
@@ -59,17 +63,7 @@ public class HdfsUrlStreamHandlerFactory implements URLStreamHandlerFactory {
       try {
         LOG.debug("Connecting to {}", url);
         URI uri = url.toURI();
-        FileSystem fs = FileSystem.get(uri, conf);
-        // URI#getPath returns null value if path contains relative path
-        // i.e file:root/dir1/file1
-        // So path can not be constructed from URI.
-        // We can only use schema specific part in URI.
-        // Uri#isOpaque return true if path is relative.
-        if (uri.isOpaque() && uri.getScheme().equals("file")) {
-          is = fs.open(new Path(uri.getSchemeSpecificPart()));
-        } else {
-          is = fs.open(new Path(uri));
-        }
+        is = FileSystem.get(uri, conf.get()).open(new Path(uri));
       } catch (URISyntaxException e) {
         throw new IOException(e.toString());
       }
@@ -84,32 +78,18 @@ public class HdfsUrlStreamHandlerFactory implements URLStreamHandlerFactory {
     }
   }
 
-  private class HdfsUrlStreamHandler extends URLStreamHandler {
-
-    private Configuration conf;
-
-    HdfsUrlStreamHandler(Configuration conf) {
-      this.conf = conf;
-    }
-
+  private static class HdfsURLStreamHandler extends URLStreamHandler {
     @Override
-    protected HdfsUrlConnection openConnection(URL url) throws IOException {
-      return new HdfsUrlConnection(conf, url);
+    protected HdfsURLConnection openConnection(URL url) throws IOException {
+      return new HdfsURLConnection(url);
     }
   }
 
-  private final HdfsUrlStreamHandler handler;
-
-  public HdfsUrlStreamHandlerFactory(Configuration conf) {
-    this.handler = new HdfsUrlStreamHandler(conf);
-  }
+  private final Supplier<URLStreamHandler> handler = Suppliers.memoize(HdfsURLStreamHandler::new);
 
   @Override
   public URLStreamHandler createURLStreamHandler(String protocol) {
-    if (protocol.equals("hdfs")) {
-      return handler;
-    }
-    return null;
+    return protocol.equals("hdfs") ? handler.get() : null;
   }
 
 }

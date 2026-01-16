@@ -82,7 +82,6 @@ public class LocalStoreTest {
     final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
     fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
     assertTrue(fs.exists(dst));
-    URL.setURLStreamHandlerFactory(new HdfsUrlStreamHandlerFactory(hdfs.getConfiguration(0)));
     final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
 
     // Put C into Jetty
