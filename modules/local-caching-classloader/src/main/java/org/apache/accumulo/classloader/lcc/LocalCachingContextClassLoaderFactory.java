@@ -140,7 +140,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private volatile Duration updateFailureGracePeriodMins;
 
   public LocalCachingContextClassLoaderFactory() {
-    executor.setMaximumPoolSize(1);
     executor.allowCoreThreadTimeOut(false);
     executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
   }
