@@ -279,8 +279,15 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } else {
         LOG.trace("Context definition for {} has not changed", contextLocation);
       }
-      // reschedule this task to run
-      monitorContext(contextLocation, nextInterval);
+      // reschedule this task to run if the context definition exists.
+      // Atomically lock on the context key and only reschedule if the context is present.
+      final long finalMonitorInterval = nextInterval;
+      contextDefs.compute(contextLocation, (k, v) -> {
+        if (v != null) {
+          monitorContext(contextLocation, finalMonitorInterval);
+        }
+        return v;
+      });
     } catch (IOException | RuntimeException e) {
       LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
           contextLocation, e);
@@ -307,10 +314,17 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         LOG.trace("Failing to update classloader for context {} within the grace period",
             contextLocation, e);
       }
-      // reschedule this task to run
+      // reschedule this task to run if the context definition exists.
       // Don't put this in finally block as we only want to reschedule
       // on success or handled exception
-      monitorContext(contextLocation, nextInterval);
+      // Atomically lock on the context key and only reschedule if the context is present.
+      final long finalMonitorInterval = nextInterval;
+      contextDefs.compute(contextLocation, (k, v) -> {
+        if (v != null) {
+          monitorContext(contextLocation, finalMonitorInterval);
+        }
+        return v;
+      });
     }
   }
 
