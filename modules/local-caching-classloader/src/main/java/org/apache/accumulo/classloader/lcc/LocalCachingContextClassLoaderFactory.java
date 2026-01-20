@@ -35,7 +35,6 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -92,22 +91,6 @@ import com.google.common.base.Stopwatch;
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  private class ContextClassLoaderThreadFactory implements ThreadFactory {
-
-    @Override
-    public Thread newThread(Runnable r) {
-      Thread t = new Thread(r);
-      t.setName("LocalCachingContextClassLoaderMonitor");
-      t.setDaemon(true);
-      t.setUncaughtExceptionHandler((thread, exception) -> {
-        LOG.error("Uncaught exception occurred in monitor thread. Clearing waiting monitoring tasks"
-            + " and clearing current context definitions.", exception);
-        handleUncaughtExceptionInMonitor();
-      });
-      return t;
-    }
-  }
-
   public static final String CACHE_DIR_PROPERTY =
       Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.cache.dir";
 
@@ -117,8 +100,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final ScheduledThreadPoolExecutor executor =
-      new ScheduledThreadPoolExecutor(1, new ContextClassLoaderThreadFactory());
+  private final ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
 
   // Lock used to block access to the contextDefs object when an uncaught exception
   // occurs in a monitor thread.
@@ -152,8 +134,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private void monitorContext(final String contextLocation, long interval) {
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
         contextLocation, interval);
-    executor.schedule(() -> checkMonitoredLocation(contextLocation, interval), interval,
-        TimeUnit.SECONDS);
+    executor.schedule(() -> {
+      try {
+        checkMonitoredLocation(contextLocation, interval);
+      } catch (Throwable t) {
+        handleExceptionInMonitor();
+        throw t;
+      }
+    }, interval, TimeUnit.SECONDS);
   }
 
   @Override
@@ -349,7 +337,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return referencedContexts;
   }
 
-  private void handleUncaughtExceptionInMonitor() {
+  private void handleExceptionInMonitor() {
     cleanupLock.writeLock().lock();
     try {
       BlockingQueue<Runnable> q = executor.getQueue();
