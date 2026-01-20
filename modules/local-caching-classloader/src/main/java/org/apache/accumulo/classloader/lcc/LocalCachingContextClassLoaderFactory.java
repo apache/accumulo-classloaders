@@ -33,10 +33,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 
 import javax.management.InstanceAlreadyExistsException;
@@ -99,11 +99,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
 
-  private final ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1);
-
-  // Lock used to block access to the contextDefs object when an uncaught exception
-  // occurs in a monitor thread.
-  private final ReentrantReadWriteLock cleanupLock = new ReentrantReadWriteLock(true);
+  private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(0);
 
   // stores the latest seen ContextDefinition for a remote URL location; String types are used here
   // for the key instead of URL because URL.hashCode could trigger network activity for hostname
@@ -119,11 +115,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   private final Map<String,Stopwatch> classloaderFailures = new HashMap<>();
   private volatile Duration updateFailureGracePeriodMins;
-
-  public LocalCachingContextClassLoaderFactory() {
-    executor.allowCoreThreadTimeOut(false);
-    executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
-  }
 
   /**
    * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
@@ -142,12 +133,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       } catch (Throwable t) {
         LOG.error("Unhandled exception occurred in context definition monitor thread. Removing"
             + " context definition {}.", contextLocation, t);
-        cleanupLock.writeLock().lock();
-        try {
-          contextDefs.remove(contextLocation);
-        } finally {
-          cleanupLock.writeLock().unlock();
-        }
+        contextDefs.remove(contextLocation);
         throw t;
       }
     }, interval, TimeUnit.SECONDS);
@@ -203,14 +189,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       // get the current definition, or create it from the location if it doesn't exist; this has
       // the side effect of creating and caching a URLClassLoader instance if it doesn't exist for
       // the computed definition
-      cleanupLock.readLock().lock();
-      try {
-        contextDefs.compute(contextLocation,
-            (contextLocationKey, previousDefinition) -> computeDefinitionAndClassLoader(classloader,
-                contextLocationKey, previousDefinition));
-      } finally {
-        cleanupLock.readLock().unlock();
-      }
+      contextDefs.compute(contextLocation,
+          (contextLocationKey, previousDefinition) -> computeDefinitionAndClassLoader(classloader,
+              contextLocationKey, previousDefinition));
     } catch (RuntimeException e) {
       throw new ContextClassLoaderException(e.getMessage(), e);
     }
@@ -265,76 +246,71 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   }
 
   private void checkMonitoredLocation(String contextLocation, long interval) {
-    cleanupLock.readLock().lock();
+    ContextDefinition currentDef =
+        contextDefs.compute(contextLocation, (contextLocationKey, previousDefinition) -> {
+          if (previousDefinition == null) {
+            return null;
+          }
+          // check for any classloaders still in the cache that were created for a context
+          // definition found at this URL
+          if (!classloaders
+              .anyMatch(cacheKey -> cacheKeyMatchesContextLocation(cacheKey, contextLocation))) {
+            LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
+                contextLocation);
+            return null;
+          }
+          return previousDefinition;
+        });
+    if (currentDef == null) {
+      // context has been removed from the map, no need to check for update
+      LOG.debug("ContextDefinition for context {} not present, no longer monitoring for changes",
+          contextLocation);
+      return;
+    }
+    long nextInterval = interval;
     try {
-      ContextDefinition currentDef =
-          contextDefs.compute(contextLocation, (contextLocationKey, previousDefinition) -> {
-            if (previousDefinition == null) {
-              return null;
-            }
-            // check for any classloaders still in the cache that were created for a context
-            // definition found at this URL
-            if (!classloaders
-                .anyMatch(cacheKey -> cacheKeyMatchesContextLocation(cacheKey, contextLocation))) {
-              LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
-                  contextLocation);
-              return null;
-            }
-            return previousDefinition;
-          });
-      if (currentDef == null) {
-        // context has been removed from the map, no need to check for update
-        LOG.debug("ContextDefinition for context {} not present, no longer monitoring for changes",
+      final ContextDefinition update = getDefinition(contextLocation);
+      if (!currentDef.getChecksum().equals(update.getChecksum())) {
+        LOG.debug("Context definition for {} has changed", contextLocation);
+        localStore.get().storeContextResources(update);
+        contextDefs.put(contextLocation, update);
+        nextInterval = update.getMonitorIntervalSeconds();
+        classloaderFailures.remove(contextLocation);
+      } else {
+        LOG.trace("Context definition for {} has not changed", contextLocation);
+      }
+      // reschedule this task to run
+      monitorContext(contextLocation, nextInterval);
+    } catch (IOException | RuntimeException e) {
+      LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
+          contextLocation, e);
+      final Stopwatch failureTimer = classloaderFailures.get(contextLocation);
+      if (updateFailureGracePeriodMins.isZero()) {
+        // failure monitoring is disabled
+        LOG.debug("Property {} not set, not tracking classloader failures for context {}",
+            UPDATE_FAILURE_GRACE_PERIOD_MINS, contextLocation);
+      } else if (failureTimer == null) {
+        // first failure, start the timer
+        classloaderFailures.put(contextLocation, Stopwatch.createStarted());
+        LOG.debug(
+            "Tracking classloader failures for context {}, will NOT return working classloader if failures continue for {} minutes",
+            contextLocation, updateFailureGracePeriodMins.toMinutes());
+      } else if (failureTimer.elapsed().compareTo(updateFailureGracePeriodMins) > 0) {
+        // has been failing for the grace period
+        // unset the classloader reference so that the failure
+        // will return from getClassLoader in the calling thread
+        LOG.info("Grace period for failing classloader has elapsed for context {}",
             contextLocation);
-        return;
-      }
-      long nextInterval = interval;
-      try {
-        final ContextDefinition update = getDefinition(contextLocation);
-        if (!currentDef.getChecksum().equals(update.getChecksum())) {
-          LOG.debug("Context definition for {} has changed", contextLocation);
-          localStore.get().storeContextResources(update);
-          contextDefs.put(contextLocation, update);
-          nextInterval = update.getMonitorIntervalSeconds();
-          classloaderFailures.remove(contextLocation);
-        } else {
-          LOG.trace("Context definition for {} has not changed", contextLocation);
-        }
-        // reschedule this task to run
-        monitorContext(contextLocation, nextInterval);
-      } catch (IOException | RuntimeException e) {
-        LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
+        contextDefs.remove(contextLocation);
+        classloaderFailures.remove(contextLocation);
+      } else {
+        LOG.trace("Failing to update classloader for context {} within the grace period",
             contextLocation, e);
-        final Stopwatch failureTimer = classloaderFailures.get(contextLocation);
-        if (updateFailureGracePeriodMins.isZero()) {
-          // failure monitoring is disabled
-          LOG.debug("Property {} not set, not tracking classloader failures for context {}",
-              UPDATE_FAILURE_GRACE_PERIOD_MINS, contextLocation);
-        } else if (failureTimer == null) {
-          // first failure, start the timer
-          classloaderFailures.put(contextLocation, Stopwatch.createStarted());
-          LOG.debug(
-              "Tracking classloader failures for context {}, will NOT return working classloader if failures continue for {} minutes",
-              contextLocation, updateFailureGracePeriodMins.toMinutes());
-        } else if (failureTimer.elapsed().compareTo(updateFailureGracePeriodMins) > 0) {
-          // has been failing for the grace period
-          // unset the classloader reference so that the failure
-          // will return from getClassLoader in the calling thread
-          LOG.info("Grace period for failing classloader has elapsed for context {}",
-              contextLocation);
-          contextDefs.remove(contextLocation);
-          classloaderFailures.remove(contextLocation);
-        } else {
-          LOG.trace("Failing to update classloader for context {} within the grace period",
-              contextLocation, e);
-        }
-        // reschedule this task to run
-        // Don't put this in finally block as we only want to reschedule
-        // on success or handled exception
-        monitorContext(contextLocation, nextInterval);
       }
-    } finally {
-      cleanupLock.readLock().unlock();
+      // reschedule this task to run
+      // Don't put this in finally block as we only want to reschedule
+      // on success or handled exception
+      monitorContext(contextLocation, nextInterval);
     }
   }
 
