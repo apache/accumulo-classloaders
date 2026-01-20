@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -129,7 +128,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   /**
    * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
    * ContextDefinition has changed. The task schedules a follow-on task at the update interval value
-   * (if it changed).
+   * (if it changed) and the task is successful or throws a handled exception. When an unhandled
+   * exception is thrown, then the corresponding entry in the contextDefs map is cleared. The next
+   * call to {@code #getClassLoader(String)} will recreate the contextDefs map entry and schedule
+   * the monitor task.
    */
   private void monitorContext(final String contextLocation, long interval) {
     LOG.trace("Monitoring context definition file {} for changes at {} second intervals",
@@ -138,7 +140,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       try {
         checkMonitoredLocation(contextLocation, interval);
       } catch (Throwable t) {
-        handleExceptionInMonitor();
+        LOG.error("Unhandled exception occurred in context definition monitor thread. Removing"
+            + " context definition {}.", contextLocation, t);
+        cleanupLock.writeLock().lock();
+        try {
+          contextDefs.remove(contextLocation);
+        } finally {
+          cleanupLock.writeLock().unlock();
+        }
         throw t;
       }
     }, interval, TimeUnit.SECONDS);
@@ -291,6 +300,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         } else {
           LOG.trace("Context definition for {} has not changed", contextLocation);
         }
+        // reschedule this task to run
+        monitorContext(contextLocation, nextInterval);
       } catch (IOException | RuntimeException e) {
         LOG.error("Error parsing updated context definition at {}. Classloader NOT updated!",
             contextLocation, e);
@@ -317,7 +328,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           LOG.trace("Failing to update classloader for context {} within the grace period",
               contextLocation, e);
         }
-      } finally {
+        // reschedule this task to run
+        // Don't put this in finally block as we only want to reschedule
+        // on success or handled exception
         monitorContext(contextLocation, nextInterval);
       }
     } finally {
@@ -337,17 +350,4 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return referencedContexts;
   }
 
-  private void handleExceptionInMonitor() {
-    cleanupLock.writeLock().lock();
-    try {
-      BlockingQueue<Runnable> q = executor.getQueue();
-      List<Runnable> tasks = new ArrayList<>(q.size());
-      q.drainTo(tasks);
-      tasks.forEach(q::remove);
-      tasks.clear();
-      contextDefs.clear();
-    } finally {
-      cleanupLock.writeLock().unlock();
-    }
-  }
 }
