@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.EOFException;
 import java.io.File;
-import java.io.IOException;
+import java.io.FileNotFoundException;
 import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -52,7 +52,6 @@ import java.util.stream.Collectors;
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
@@ -275,7 +274,16 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialDefUrl.toString()));
-    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."), ex::getMessage);
+    boolean foundExpectedException = false;
+    var cause = ex.getCause();
+    do {
+      foundExpectedException =
+          cause instanceof FileNotFoundException && cause.getMessage().contains("jarACopy.jar");
+      if (cause != null) {
+        cause = cause.getCause();
+      }
+    } while (!foundExpectedException && cause != null);
+    assertTrue(foundExpectedException, "Could not find expected FileNotFoundException");
   }
 
   @Test
@@ -712,8 +720,16 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> localFactory.getClassLoader(updateDefUrl.toString()));
-    assertTrue(ex.getMessage().endsWith("jarACopy.jar does not exist."), ex::getMessage);
-
+    boolean foundExpectedException = false;
+    var cause = ex.getCause();
+    do {
+      foundExpectedException =
+          cause instanceof FileNotFoundException && cause.getMessage().contains("jarACopy.jar");
+      if (cause != null) {
+        cause = cause.getCause();
+      }
+    } while (!foundExpectedException && cause != null);
+    assertTrue(foundExpectedException, "Could not find expected FileNotFoundException");
   }
 
   @Test
@@ -731,16 +747,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classD);
 
     var resources = tempDir.resolve("base").resolve("resources");
-    List<Path> files = def.getResources().stream().map(r -> {
-      String basename;
-      try {
-        basename = FileResolver.resolve(r.getLocation()).getFileName();
-      } catch (IOException e) {
-        throw new UncheckedIOException(e);
-      }
-      var checksum = r.getChecksum();
-      return resources.resolve(LocalStore.localResourceName(basename, checksum));
-    }).limit(2).collect(Collectors.toList());
+    List<Path> files =
+        def.getResources().stream().map(r -> resources.resolve(LocalStore.localResourceName(r)))
+            .limit(2).collect(Collectors.toList());
     assertEquals(2, files.size());
 
     // overwrite one downloaded jar with others content

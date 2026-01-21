@@ -71,8 +71,8 @@ import com.google.common.base.Stopwatch;
  * discontinue until the next use of that context. Each resource is defined by a URL to the file and
  * an expected SHA-256 checksum.
  * <p>
- * The URLs supplied for the context definition file and for the resources can use one of the
- * following URL schemes: file, http, https, or hdfs.
+ * The URLs supplied for the context definition file and for the resources may use any URL type with
+ * a registered provider in your application, such as: file, http, https, or hdfs.
  * <p>
  * As this class processes the ContextDefinition, it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of

@@ -16,7 +16,7 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-package org.apache.accumulo.classloader.lcc.util;
+package org.apache.accumulo.classloader.hdfsurlstreamhandlerprovider;
 
 import static java.util.Objects.requireNonNull;
 
@@ -60,13 +60,16 @@ public class HdfsURLStreamHandlerProvider extends URLStreamHandlerProvider {
     @Override
     public void connect() throws IOException {
       Preconditions.checkState(is == null, "Already connected");
+      LOG.debug("Connecting to {}", url);
+      final URI uri;
       try {
-        LOG.debug("Connecting to {}", url);
-        URI uri = url.toURI();
-        is = FileSystem.get(uri, conf.get()).open(new Path(uri));
+        uri = url.toURI();
       } catch (URISyntaxException e) {
-        throw new IOException(e.toString());
+        // this came from a URL that should be RFC2396-compliant, so it shouldn't happen
+        throw new IllegalArgumentException(e);
       }
+      var fs = FileSystem.get(uri, conf.get());
+      is = fs.open(new Path(uri));
     }
 
     @Override

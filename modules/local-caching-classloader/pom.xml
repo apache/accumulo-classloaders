@@ -29,21 +29,6 @@
   </parent>
   <artifactId>local-caching-classloader</artifactId>
   <name>classloader-extras-local-caching</name>
-  <properties>
-    <accumulo.build.extraTestArgs>--add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.io=ALL-UNNAMED --add-opens java.base/java.net=ALL-UNNAMED --add-opens java.management/java.lang.management=ALL-UNNAMED --add-opens java.management/sun.management=ALL-UNNAMED --add-opens java.base/java.security=ALL-UNNAMED --add-opens java.base/java.lang.reflect=ALL-UNNAMED --add-opens java.base/java.util.concurrent=ALL-UNNAMED --add-opens java.base/java.util.stream=ALL-UNNAMED --add-opens java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens java.base/java.time=ALL-UNNAMED</accumulo.build.extraTestArgs>
-    <eclipseFormatterStyle>../../src/build/eclipse-codestyle.xml</eclipseFormatterStyle>
-    <failsafe.excludedGroups />
-    <failsafe.failIfNoSpecifiedTests>false</failsafe.failIfNoSpecifiedTests>
-    <failsafe.forkCount>1</failsafe.forkCount>
-    <failsafe.groups />
-    <failsafe.reuseForks>false</failsafe.reuseForks>
-    <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
-    <surefire.excludedGroups />
-    <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
-    <surefire.forkCount>1</surefire.forkCount>
-    <surefire.groups />
-    <surefire.reuseForks>false</surefire.reuseForks>
-  </properties>
   <dependencies>
     <dependency>
       <!-- needed for build checks, but not for runtime -->
@@ -109,6 +94,12 @@
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.accumulo</groupId>
+      <artifactId>hdfs-urlstreamhandler-provider</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>org.apache.accumulo</groupId>
@@ -179,6 +170,18 @@
                   <destFileName>example-iterators-b.jar</destFileName>
                 </artifactItem>
               </artifactItems>
+            </configuration>
+          </execution>
+          <execution>
+            <id>analyze</id>
+            <goals>
+              <goal>analyze-only</goal>
+            </goals>
+            <configuration>
+              <ignoredUnusedDeclaredDependencies combine.children="append">
+                <!-- ignore false positive runtime dependencies -->
+                <unused>org.apache.accumulo:hdfs-urlstreamhandler-provider:*</unused>
+              </ignoredUnusedDeclaredDependencies>
             </configuration>
           </execution>
         </executions>

@@ -19,6 +19,7 @@
 package org.apache.accumulo.classloader.lcc.definition;
 
 import java.net.URL;
+import java.nio.file.Path;
 import java.util.Objects;
 
 public class Resource {
@@ -35,6 +36,18 @@ public class Resource {
 
   public URL getLocation() {
     return location;
+  }
+
+  public String getFileName() {
+    var nameAsPath = Path.of(location.getPath()).getFileName();
+    if (nameAsPath == null) {
+      return "unknown";
+    }
+    String name = nameAsPath.toString();
+    if (name.isBlank()) {
+      return "unknown";
+    }
+    return name;
   }
 
   public String getChecksum() {

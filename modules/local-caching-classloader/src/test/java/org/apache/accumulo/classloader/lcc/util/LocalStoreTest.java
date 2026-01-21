@@ -151,33 +151,47 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir));
   }
 
+  private static Resource rsrc(String filename, String checksum) {
+    return new Resource() {
+      @Override
+      public String getFileName() {
+        return filename;
+      }
+
+      @Override
+      public String getChecksum() {
+        return checksum;
+      }
+    };
+  }
+
   @Test
   public void testLocalFileName() {
     // regular war
-    assertEquals("f1-chk1.war", LocalStore.localResourceName("f1.war", "chk1"));
+    assertEquals("f1-chk1.war", LocalStore.localResourceName(rsrc("f1.war", "chk1")));
     // dotfile war
-    assertEquals(".f1-chk1.war", LocalStore.localResourceName(".f1.war", "chk1"));
+    assertEquals(".f1-chk1.war", LocalStore.localResourceName(rsrc(".f1.war", "chk1")));
     // regular jar (has multiple dots)
-    assertEquals("f2-1.0-chk2.jar", LocalStore.localResourceName("f2-1.0.jar", "chk2"));
+    assertEquals("f2-1.0-chk2.jar", LocalStore.localResourceName(rsrc("f2-1.0.jar", "chk2")));
     // dotfile jar (has multiple dots)
-    assertEquals(".f2-1.0-chk2.jar", LocalStore.localResourceName(".f2-1.0.jar", "chk2"));
+    assertEquals(".f2-1.0-chk2.jar", LocalStore.localResourceName(rsrc(".f2-1.0.jar", "chk2")));
     // regular file with no suffix
-    assertEquals("f3-chk3", LocalStore.localResourceName("f3", "chk3"));
+    assertEquals("f3-chk3", LocalStore.localResourceName(rsrc("f3", "chk3")));
 
     // weird files with trailing dots and no file suffix
-    assertEquals("f4.-chk4", LocalStore.localResourceName("f4.", "chk4"));
-    assertEquals("f4..-chk4", LocalStore.localResourceName("f4..", "chk4"));
-    assertEquals("f4...-chk4", LocalStore.localResourceName("f4...", "chk4"));
+    assertEquals("f4.-chk4", LocalStore.localResourceName(rsrc("f4.", "chk4")));
+    assertEquals("f4..-chk4", LocalStore.localResourceName(rsrc("f4..", "chk4")));
+    assertEquals("f4...-chk4", LocalStore.localResourceName(rsrc("f4...", "chk4")));
     // weird dotfiles that don't really have a suffix
-    assertEquals(".f5-chk5", LocalStore.localResourceName(".f5", "chk5"));
-    assertEquals("..f5-chk5", LocalStore.localResourceName("..f5", "chk5"));
+    assertEquals(".f5-chk5", LocalStore.localResourceName(rsrc(".f5", "chk5")));
+    assertEquals("..f5-chk5", LocalStore.localResourceName(rsrc("..f5", "chk5")));
     // weird files with weird dots, but do have a valid suffix
-    assertEquals("f6.-chk6.jar", LocalStore.localResourceName("f6..jar", "chk6"));
-    assertEquals("f6..-chk6.jar", LocalStore.localResourceName("f6...jar", "chk6"));
-    assertEquals(".f6-chk6.jar", LocalStore.localResourceName(".f6.jar", "chk6"));
-    assertEquals("..f6-chk6.jar", LocalStore.localResourceName("..f6.jar", "chk6"));
-    assertEquals(".f6.-chk6.jar", LocalStore.localResourceName(".f6..jar", "chk6"));
-    assertEquals("..f6.-chk6.jar", LocalStore.localResourceName("..f6..jar", "chk6"));
+    assertEquals("f6.-chk6.jar", LocalStore.localResourceName(rsrc("f6..jar", "chk6")));
+    assertEquals("f6..-chk6.jar", LocalStore.localResourceName(rsrc("f6...jar", "chk6")));
+    assertEquals(".f6-chk6.jar", LocalStore.localResourceName(rsrc(".f6.jar", "chk6")));
+    assertEquals("..f6-chk6.jar", LocalStore.localResourceName(rsrc("..f6.jar", "chk6")));
+    assertEquals(".f6.-chk6.jar", LocalStore.localResourceName(rsrc(".f6..jar", "chk6")));
+    assertEquals("..f6.-chk6.jar", LocalStore.localResourceName(rsrc("..f6..jar", "chk6")));
   }
 
   @Test
@@ -189,10 +203,8 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(def.getChecksum() + ".json")));
     for (Resource r : def.getResources()) {
-      String filename = TestUtils.getFileName(r.getLocation());
-      String checksum = r.getChecksum();
-      assertTrue(Files.exists(baseCacheDir.resolve("resources")
-          .resolve(LocalStore.localResourceName(filename, checksum))));
+      assertTrue(
+          Files.exists(baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(r))));
     }
   }
 
@@ -235,17 +247,15 @@ public class LocalStoreTest {
     assertTrue(
         Files.exists(baseCacheDir.resolve("contexts").resolve(updatedDef.getChecksum() + ".json")));
     for (Resource r : updatedDef.getResources()) {
-      String filename = TestUtils.getFileName(r.getLocation());
-      assertFalse(filename.contains("C"));
-      String checksum = r.getChecksum();
-      assertTrue(Files.exists(baseCacheDir.resolve("resources")
-          .resolve(LocalStore.localResourceName(filename, checksum))));
+      assertFalse(r.getFileName().contains("C"));
+      assertTrue(
+          Files.exists(baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(r))));
     }
 
-    String filename = TestUtils.getFileName(removedResource.getLocation());
-    assertTrue(filename.contains("C"), "cache location should still contain 'C'");
-    assertTrue(Files.exists(baseCacheDir.resolve("resources")
-        .resolve(LocalStore.localResourceName(filename, removedResource.getChecksum()))));
+    assertTrue(removedResource.getFileName().contains("C"),
+        "cache location should still contain 'C'");
+    assertTrue(Files.exists(
+        baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(removedResource))));
 
     final var updatedContextClassLoader = LccUtils.createClassLoader("url", urls);
 
