@@ -116,6 +116,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   private final Map<String,Stopwatch> classloaderFailures = new HashMap<>();
   private volatile Duration updateFailureGracePeriodMins;
 
+  private static final Stopwatch pauseTimer = Stopwatch.createUnstarted();
+  private static volatile Duration pauseTime = null;
+
   /**
    * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
    * ContextDefinition has changed. The task schedules a follow-on task at the update interval value
@@ -218,6 +221,15 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     final URLClassLoader classloader = classloaders.computeIfAbsent(
         newCacheKey(contextLocation, computedDefinition.getChecksum()), (Supplier<URL[]>) () -> {
           try {
+            if (!canCreateClassloader()) {
+              var remaining = getRemainingPauseMinutes();
+              LOG.debug(
+                  "Not creating classloader for context {} because creation paused. {} minutes remaining in pause.",
+                  contextLocation, remaining);
+              throw new IllegalStateException(
+                  "Not creating classloader for context " + contextLocation
+                      + " because creation paused. " + remaining + " minutes remaining in pause.");
+            }
             return localStore.get().storeContextResources(computedDefinition);
           } catch (IOException e) {
             throw new UncheckedIOException(e);
@@ -340,4 +352,38 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return referencedContexts;
   }
 
+  public static void pauseCreation(Duration duration) {
+    requireNonNull(duration, "Pause duration cannot be null");
+    Preconditions.checkArgument(duration.toMinutes() > 0,
+        "Pause duration must be greater than zero.");
+    Preconditions.checkState(!pauseTimer.isRunning() && pauseTime == null,
+        "Pause time already set, cannot set again until it expires in %s minutes",
+        getRemainingPauseMinutes());
+    pauseTime = duration;
+    LOG.debug("Classloader creation paused for {} minutes", pauseTime.toMinutes());
+    pauseTimer.start();
+  }
+
+  private static long getRemainingPauseMinutes() {
+    if (!pauseTimer.isRunning() || pauseTime == null) {
+      return 0;
+    }
+    // Don't return zero minutes if running, return 1 instead
+    return Math.max(1, pauseTime.minus(pauseTimer.elapsed()).toMinutes());
+  }
+
+  private static boolean canCreateClassloader() {
+    if (!pauseTimer.isRunning()) {
+      pauseTime = null;
+      return true;
+    } else if (pauseTimer.elapsed().minus(pauseTime).getSeconds() > 0) {
+      LOG.debug(
+          "Classloader creation paused time has elapsed. Classloader creation will continue.");
+      pauseTimer.reset();
+      pauseTime = null;
+      return true;
+    } else {
+      return false;
+    }
+  }
 }

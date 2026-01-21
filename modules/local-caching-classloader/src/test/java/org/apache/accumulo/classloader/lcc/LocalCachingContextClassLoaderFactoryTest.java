@@ -41,6 +41,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -764,4 +765,101 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // ensure it works now
     FACTORY.getClassLoader(updatedDefUrl2.toString());
   }
+
+  @Test
+  public void testPause() throws Exception {
+    var def1 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final var cx1 = createContextDefinitionFile(fs, "TestPauseContext1.json", def1.toJson());
+    final URL cx1Url = new URL(fs.getUri().toString() + cx1.toUri().toString());
+
+    var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarBOrigLocation);
+    final var cx2 = createContextDefinitionFile(fs, "TestPauseContext2.json", def2.toJson());
+    final URL cx2Url = new URL(fs.getUri().toString() + cx2.toUri().toString());
+
+    final int pauseMinutes = 1;
+
+    ClassLoader cl = FACTORY.getClassLoader(cx1Url.toString());
+    testClassLoads(cl, classA);
+    testClassFailsToLoad(cl, classB);
+    testClassFailsToLoad(cl, classC);
+    testClassFailsToLoad(cl, classD);
+
+    var iae = assertThrows(IllegalArgumentException.class,
+        () -> LocalCachingContextClassLoaderFactory.pauseCreation(Duration.ofMinutes(0)));
+    assertTrue(iae.getMessage().equals("Pause duration must be greater than zero."));
+    LocalCachingContextClassLoaderFactory.pauseCreation(Duration.ofMinutes(pauseMinutes));
+    // Test that calling this twice fails
+    var ise = assertThrows(IllegalStateException.class, () -> LocalCachingContextClassLoaderFactory
+        .pauseCreation(Duration.ofMinutes(pauseMinutes)));
+    assertTrue(ise.getMessage().startsWith("Pause time already set"));
+
+    // Created classloaders should continue to work
+    ClassLoader cl2 = FACTORY.getClassLoader(cx1Url.toString());
+    assertEquals(cl, cl2);
+    testClassLoads(cl2, classA);
+    testClassFailsToLoad(cl2, classB);
+    testClassFailsToLoad(cl2, classC);
+    testClassFailsToLoad(cl2, classD);
+
+    // New classloaders should fail during the pause time
+    var ex = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(cx2Url.toString()));
+    assertTrue(ex.getMessage()
+        .startsWith("Error getting classloader for context: Not creating classloader for context")
+        && ex.getMessage().contains("paused."));
+
+    // Updated context definitions should continue to download changes, but not create
+    // new classloaders. Update the definition, wait a 2 x the monitor interval, then
+    // try to get the updated classloader. It should fail.
+    // Update the contents of the context definition json file
+    var updateDef1 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarDOrigLocation);
+    updateContextDefinitionFile(fs, cx1, updateDef1.toJson());
+
+    // wait 2x the monitor interval
+    Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
+    var ex2 = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(cx1Url.toString()));
+    assertTrue(ex2.getMessage()
+        .startsWith("Error getting classloader for context: Not creating classloader for context")
+        && ex2.getMessage().contains("paused."));
+
+    Thread.sleep(pauseMinutes * 60 * 1000 * 2);
+
+    // Test that the update to cx1 works now
+    ClassLoader cl3 = FACTORY.getClassLoader(cx1Url.toString());
+    assertNotEquals(cl2, cl3);
+    testClassFailsToLoad(cl3, classA);
+    testClassFailsToLoad(cl3, classB);
+    testClassFailsToLoad(cl3, classC);
+    testClassLoads(cl3, classD);
+
+    // Test that cx2 works
+    ClassLoader cl4 = FACTORY.getClassLoader(cx2Url.toString());
+    testClassFailsToLoad(cl4, classA);
+    testClassLoads(cl4, classB);
+    testClassFailsToLoad(cl4, classC);
+    testClassFailsToLoad(cl4, classD);
+
+    var def3 = ContextDefinition.create(MONITOR_INTERVAL_SECS, jarCOrigLocation);
+    final var cx3 = createContextDefinitionFile(fs, "TestPauseContext3.json", def3.toJson());
+    final URL cx3Url = new URL(fs.getUri().toString() + cx3.toUri().toString());
+
+    LocalCachingContextClassLoaderFactory.pauseCreation(Duration.ofMinutes(pauseMinutes));
+
+    var ex3 = assertThrows(ContextClassLoaderException.class,
+        () -> FACTORY.getClassLoader(cx3Url.toString()));
+    assertTrue(ex3.getMessage()
+        .startsWith("Error getting classloader for context: Not creating classloader for context")
+        && ex3.getMessage().contains("paused."));
+
+    Thread.sleep(pauseMinutes * 60 * 1000 * 2);
+
+    ClassLoader cl5 = FACTORY.getClassLoader(cx3Url.toString());
+    testClassFailsToLoad(cl5, classA);
+    testClassFailsToLoad(cl5, classB);
+    testClassLoads(cl5, classC);
+    testClassFailsToLoad(cl5, classD);
+
+  }
+
 }

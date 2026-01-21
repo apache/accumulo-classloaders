@@ -30,6 +30,21 @@ public interface ContextClassLoadersMXBean {
     return new ObjectName("org.apache.accumulo.classloader:type=ContextClassLoaders");
   }
 
+  /**
+   * Returns a map containing the list of locally cached files for each context that has an active
+   * classloader in the JVM.
+   *
+   * @return map of context name to list of local file references
+   */
   Map<String,List<String>> getReferencedFiles();
+
+  /**
+   * Instruct the classloader to pause creation of new classloaders for some amount of time. Pausing
+   * the creation of new classloaders should provide a stable view of the referenced files when
+   * calling {@code #getReferencedFiles()} within the pause time.
+   *
+   * @param minutes pause time
+   */
+  void pauseClassLoaderCreation(int minutes);
 
 }
