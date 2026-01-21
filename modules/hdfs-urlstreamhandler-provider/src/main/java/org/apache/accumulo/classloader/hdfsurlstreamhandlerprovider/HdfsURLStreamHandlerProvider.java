@@ -53,8 +53,6 @@ public class HdfsURLStreamHandlerProvider extends URLStreamHandlerProvider {
 
     public HdfsURLConnection(URL url) {
       super(requireNonNull(url, "null url argument"));
-      Preconditions.checkArgument("hdfs".equals(url.getProtocol()),
-          "HdfsUrlConnection only supports hdfs: URLs");
     }
 
     @Override
