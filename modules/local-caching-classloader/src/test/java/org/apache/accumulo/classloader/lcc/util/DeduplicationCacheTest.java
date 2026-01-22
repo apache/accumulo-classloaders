@@ -71,6 +71,7 @@ public class DeduplicationCacheTest {
     // wait for it to be garbage collected (checking the cache triggers cleanup)
     while (cache.anyMatch("TEST"::equals)) {
       System.gc();
+      Thread.sleep(50);
     }
     assertEquals(RemovalCause.COLLECTED, removalCauseQueue.take());
     assertTrue(removalCauseQueue.isEmpty());
