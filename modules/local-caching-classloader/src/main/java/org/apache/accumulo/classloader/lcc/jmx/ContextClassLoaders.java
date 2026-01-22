@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc.jmx;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -28,6 +29,11 @@ public class ContextClassLoaders implements ContextClassLoadersMXBean {
   @Override
   public Map<String,List<String>> getReferencedFiles() {
     return LocalCachingContextClassLoaderFactory.getReferencedFiles();
+  }
+
+  @Override
+  public void pauseClassLoaderCreation(int minutes) {
+    LocalCachingContextClassLoaderFactory.pauseCreation(Duration.ofMinutes(minutes));
   }
 
 }
