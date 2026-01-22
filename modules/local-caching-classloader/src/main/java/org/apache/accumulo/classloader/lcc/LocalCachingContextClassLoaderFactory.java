@@ -357,7 +357,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     requireNonNull(duration, "Pause duration cannot be null");
     Preconditions.checkArgument(duration.toMinutes() > 0,
         "Pause duration must be greater than zero.");
-    Preconditions.checkState(!pauseTimer.isRunning() && pauseTime == null,
+    Preconditions.checkState(canCreateClassloader(),
         "Pause time already set, cannot set again until it expires in %s minutes",
         getRemainingPauseMinutes());
     pauseTime = duration;
