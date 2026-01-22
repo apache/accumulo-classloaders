@@ -50,9 +50,10 @@ import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * A simple storage service backed by a local file system for storing downloaded
@@ -112,9 +113,10 @@ public final class LocalStore {
   // extension, and will instead just append the checksum to the original file name
   private static Pattern fileNamesWithExtensionPattern = Pattern.compile("^(.*[^.].*)[.]([^.]+)$");
 
-  public static String localResourceName(String remoteFileName, String checksum) {
-    requireNonNull(remoteFileName);
-    requireNonNull(checksum);
+  public static String localResourceName(Resource r) {
+    requireNonNull(r);
+    String remoteFileName = r.getFileName();
+    String checksum = r.getChecksum();
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
     if (matcher.matches()) {
       return String.format("%s-%s.%s", matcher.group(1), checksum, matcher.group(2));
@@ -195,8 +197,7 @@ public final class LocalStore {
    */
   private Path storeResource(final Resource resource) throws IOException {
     final URL url = resource.getLocation();
-    final FileResolver source = FileResolver.resolve(url);
-    final String baseName = localResourceName(source.getFileName(), resource.getChecksum());
+    final String baseName = localResourceName(resource);
     final Path destinationPath = resourcesDir.resolve(baseName);
     final Path tempPath = resourcesDir.resolve(tempName(baseName));
     final Path downloadingProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
@@ -232,7 +233,7 @@ public final class LocalStore {
       return null;
     }
 
-    var task = new FutureTask<Void>(() -> downloadFile(source, tempPath, resource), null);
+    var task = new FutureTask<Void>(() -> downloadFile(tempPath, resource), null);
     var t = new Thread(task);
     t.setDaemon(true);
     t.setName("downloading " + url + " to " + tempPath);
@@ -292,11 +293,13 @@ public final class LocalStore {
 
   private static final int DL_BUFF_SIZE = 1024 * 1024;
 
-  private void downloadFile(FileResolver source, Path tempPath, Resource resource) {
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
+  private void downloadFile(Path tempPath, Resource resource) {
     // CREATE_NEW ensures the temporary file name is unique for this attempt
     // SYNC ensures file integrity on each write, in case of system failure. Buffering minimizes
     // system calls te read/write data which minimizes the number of syncs.
-    try (var in = new BufferedInputStream(source.getInputStream(), DL_BUFF_SIZE);
+    try (var in = new BufferedInputStream(resource.getLocation().openStream(), DL_BUFF_SIZE);
         var out = new BufferedOutputStream(Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC),
             DL_BUFF_SIZE)) {
       in.transferTo(out);

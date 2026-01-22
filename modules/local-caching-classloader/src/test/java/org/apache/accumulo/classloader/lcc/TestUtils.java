@@ -30,8 +30,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -173,9 +176,18 @@ public class TestUtils {
     }
   }
 
-  public static String getFileName(URL url) {
-    String path = url.getPath();
-    return path.substring(path.lastIndexOf("/") + 1);
-
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
+  public static long getFileSize(URL url) throws IOException {
+    try (InputStream is = url.openStream()) {
+      return IOUtils.consume(is);
+    }
   }
+
+  public static long getFileSize(Path p) throws IOException {
+    try (InputStream is = Files.newInputStream(p, StandardOpenOption.READ)) {
+      return IOUtils.consume(is);
+    }
+  }
+
 }

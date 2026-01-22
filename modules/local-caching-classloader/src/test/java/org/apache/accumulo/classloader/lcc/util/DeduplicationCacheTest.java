@@ -18,57 +18,63 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import org.junit.jupiter.api.Test;
 
 import com.github.benmanes.caffeine.cache.RemovalCause;
-import com.github.benmanes.caffeine.cache.RemovalListener;
 
 public class DeduplicationCacheTest {
 
   @Test
   public void testCollectionNotification() throws Exception {
 
-    final AtomicBoolean listenerCalled = new AtomicBoolean(false);
+    final var endBackgroundThread = new CountDownLatch(1);
+    final var removalCauseQueue = new LinkedBlockingQueue<RemovalCause>();
 
-    final RemovalListener<String,URLClassLoader> removalListener =
-        (key, value, cause) -> listenerCalled.compareAndSet(false, cause == RemovalCause.COLLECTED);
+    final var cache = new DeduplicationCache<String,Object,Object>((k, p) -> new Object(),
+        Duration.ofSeconds(1), (key, value, cause) -> removalCauseQueue.add(cause));
 
-    final DeduplicationCache<String,URL[],URLClassLoader> cache = new DeduplicationCache<>(
-        LccUtils::createClassLoader, Duration.ofSeconds(5), removalListener);
-
-    final URL jarAOrigLocation =
-        DeduplicationCacheTest.class.getResource("/ClassLoaderTestA/TestA.jar");
-    assertNotNull(jarAOrigLocation);
-
-    Thread t = new Thread(() -> cache.computeIfAbsent("TEST", () -> new URL[] {jarAOrigLocation}));
+    var createdCacheEntry = new CountDownLatch(1);
+    Thread t = new Thread(() -> {
+      var value = cache.computeIfAbsent("TEST", () -> new Object());
+      createdCacheEntry.countDown();
+      try {
+        // hold a strong reference in the background thread long enough to check the weak cache
+        endBackgroundThread.await();
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
+      }
+      assertNotNull(value);
+    });
     t.start();
+    createdCacheEntry.await();
+
+    assertTrue(cache.anyMatch("TEST"::equals));
+
+    // wait for expiration from strong cache
+    assertEquals(RemovalCause.EXPIRED, removalCauseQueue.take());
+    assertTrue(removalCauseQueue.isEmpty());
+
+    // should still exist in the weak values cache
+    assertTrue(cache.anyMatch("TEST"::equals));
+    endBackgroundThread.countDown();
+
     t.join();
 
-    boolean exists = cache.anyMatch("TEST"::equals);
-    assertTrue(exists);
-
-    // sleep twice as long as the access time duration in the strong reference cache
-    Thread.sleep(10_000);
-    exists = cache.anyMatch("TEST"::equals);
-    assertTrue(exists); // This is true because it's coming from the weak reference cache
-
-    // sleep twice as long as the access time duration in the strong reference cache
-    Thread.sleep(10_000);
-    System.gc();
-
-    exists = cache.anyMatch("TEST"::equals);
-    assertFalse(exists);
-    assertTrue(listenerCalled.get());
-
+    // wait for it to be garbage collected (checking the cache triggers cleanup)
+    while (cache.anyMatch("TEST"::equals)) {
+      System.gc();
+      Thread.sleep(50);
+    }
+    assertEquals(RemovalCause.COLLECTED, removalCauseQueue.take());
+    assertTrue(removalCauseQueue.isEmpty());
   }
 
 }

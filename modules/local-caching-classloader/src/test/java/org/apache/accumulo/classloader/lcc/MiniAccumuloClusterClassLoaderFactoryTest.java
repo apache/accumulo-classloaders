@@ -60,7 +60,6 @@ import javax.management.remote.JMXServiceURL;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.client.Accumulo;
 import org.apache.accumulo.core.client.AccumuloClient;
@@ -167,8 +166,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     assertTrue(Files.exists(testContextDefFile.toPath()));
 
     Resource jarAResource = testContextDef.getResources().iterator().next();
-    String jarALocalFileName = LocalStore.localResourceName(
-        FileResolver.resolve(jarAResource.getLocation()).getFileName(), jarAResource.getChecksum());
+    String jarALocalFileName = LocalStore.localResourceName(jarAResource);
 
     final String[] names = this.getUniqueNames(1);
     try (AccumuloClient client =
@@ -254,9 +252,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(testContextDefFile.toPath()));
 
       Resource jarBResource = testContextDefUpdate.getResources().iterator().next();
-      String jarBLocalFileName = LocalStore.localResourceName(
-          FileResolver.resolve(jarBResource.getLocation()).getFileName(),
-          jarBResource.getChecksum());
+      String jarBLocalFileName = LocalStore.localResourceName(jarBResource);
 
       // Wait 2x the monitor interval
       Thread.sleep(2 * MONITOR_INTERVAL_SECS * 1000);

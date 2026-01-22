@@ -36,11 +36,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 
-import org.apache.accumulo.classloader.lcc.resolvers.FileResolver;
 import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.start.spi.KeywordExecutable;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FsUrlStreamHandlerFactory;
 
 import com.beust.jcommander.Parameter;
 import com.google.auto.service.AutoService;
@@ -48,6 +45,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @AutoService(KeywordExecutable.class)
 public class ContextDefinition implements KeywordExecutable {
@@ -66,12 +65,13 @@ public class ContextDefinition implements KeywordExecutable {
   private static final Gson GSON =
       new GsonBuilder().disableJdkUnsafe().setPrettyPrinting().create();
 
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
   public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
       throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
-      FileResolver resolver = FileResolver.resolve(u);
-      try (InputStream is = resolver.getInputStream()) {
+      try (InputStream is = u.openStream()) {
         String checksum = DIGESTER.digestAsHex(is);
         resources.add(new Resource(u, checksum));
       }
@@ -79,9 +79,10 @@ public class ContextDefinition implements KeywordExecutable {
     return new ContextDefinition(monitorIntervalSecs, resources);
   }
 
+  @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
+      justification = "user-supplied URL is the intended functionality")
   public static ContextDefinition fromRemoteURL(final URL url) throws IOException {
-    final FileResolver resolver = FileResolver.resolve(url);
-    try (InputStream is = resolver.getInputStream()) {
+    try (InputStream is = url.openStream()) {
       var def = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextDefinition.class);
       if (def == null) {
         throw new EOFException("InputStream does not contain a valid ContextDefinition at " + url);
@@ -160,8 +161,6 @@ public class ContextDefinition implements KeywordExecutable {
 
   @Override
   public void execute(String[] args) throws Exception {
-    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory(new Configuration()));
-
     Opts opts = new Opts();
     opts.parseArgs(ContextDefinition.class.getName(), args);
     URL[] urls = new URL[opts.files.size()];
