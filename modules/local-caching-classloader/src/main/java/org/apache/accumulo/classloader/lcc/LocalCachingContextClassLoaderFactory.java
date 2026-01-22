@@ -249,6 +249,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     ContextDefinition currentDef =
         contextDefs.compute(contextLocation, (contextLocationKey, previousDefinition) -> {
           if (previousDefinition == null) {
+            // context has been removed from the map, no need to check for update
+            LOG.debug(
+                "ContextDefinition for context {} not present, no longer monitoring for changes",
+                contextLocation);
             return null;
           }
           // check for any classloaders still in the cache that were created for a context
@@ -262,9 +266,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           return previousDefinition;
         });
     if (currentDef == null) {
-      // context has been removed from the map, no need to check for update
-      LOG.debug("ContextDefinition for context {} not present, no longer monitoring for changes",
-          contextLocation);
       return;
     }
     long nextInterval = interval;
