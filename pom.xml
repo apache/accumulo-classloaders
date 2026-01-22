@@ -77,6 +77,7 @@
     <module>modules/example-iterators-b</module>
     <module>modules/vfs-class-loader</module>
     <module>modules/local-caching-classloader</module>
+    <module>modules/hdfs-urlstreamhandler-provider</module>
   </modules>
   <scm>
     <connection>scm:git:https://gitbox.apache.org/repos/asf/accumulo-classloaders.git</connection>
@@ -146,6 +147,11 @@ under the License.
         <version>2.10.0</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.accumulo</groupId>
+        <artifactId>hdfs-urlstreamhandler-provider</artifactId>
+        <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents.client5</groupId>
@@ -367,16 +373,14 @@ under the License.
             </goals>
             <configuration>
               <failOnWarning>true</failOnWarning>
-              <ignoredUsedUndeclaredDependencies>
+              <ignoredUsedUndeclaredDependencies combine.children="append">
                 <!-- auto-service-annotations is transitive via auto-service -->
                 <undeclared>com.google.auto.service:auto-service-annotations:jar:*</undeclared>
               </ignoredUsedUndeclaredDependencies>
-              <ignoredUnusedDeclaredDependencies>
+              <ignoredUnusedDeclaredDependencies combine.children="append">
                 <!-- auto-service used by the compiler for annotation processing, not by code -->
                 <unused>com.google.auto.service:auto-service:jar:*</unused>
                 <!-- ignore false positive runtime dependencies -->
-                <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
-                <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
                 <unused>org.apache.logging.log4j:log4j-slf4j2-impl:*</unused>
                 <!-- spotbugs annotations may or may not be used in each module -->
                 <unused>com.github.spotbugs:spotbugs-annotations:jar:*</unused>

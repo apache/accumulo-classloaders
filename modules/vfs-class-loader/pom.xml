@@ -156,6 +156,25 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>analyze</id>
+            <goals>
+              <goal>analyze-only</goal>
+            </goals>
+            <configuration>
+              <ignoredUnusedDeclaredDependencies combine.children="append">
+                <!-- ignore false positive runtime dependencies -->
+                <unused>org.apache.commons:commons-vfs2-hdfs:*</unused>
+                <unused>org.apache.httpcomponents.client5:httpclient5:*</unused>
+              </ignoredUnusedDeclaredDependencies>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>

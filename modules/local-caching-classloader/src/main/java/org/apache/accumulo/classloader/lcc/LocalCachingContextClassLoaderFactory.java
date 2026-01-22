@@ -71,8 +71,8 @@ import com.google.common.base.Stopwatch;
  * discontinue until the next use of that context. Each resource is defined by a URL to the file and
  * an expected SHA-256 checksum.
  * <p>
- * The URLs supplied for the context definition file and for the resources can use one of the
- * following URL schemes: file, http, https, or hdfs.
+ * The URLs supplied for the context definition file and for the resources may use any URL type with
+ * a registered provider in your application, such as: file, http, https, or hdfs.
  * <p>
  * As this class processes the ContextDefinition, it fetches the contents of the resource from the
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
@@ -261,6 +261,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     ContextDefinition currentDef =
         contextDefs.compute(contextLocation, (contextLocationKey, previousDefinition) -> {
           if (previousDefinition == null) {
+            // context has been removed from the map, no need to check for update
+            LOG.debug(
+                "ContextDefinition for context {} not present, no longer monitoring for changes",
+                contextLocation);
             return null;
           }
           // check for any classloaders still in the cache that were created for a context
@@ -274,9 +278,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           return previousDefinition;
         });
     if (currentDef == null) {
-      // context has been removed from the map, no need to check for update
-      LOG.debug("ContextDefinition for context {} not present, no longer monitoring for changes",
-          contextLocation);
       return;
     }
     long nextInterval = interval;

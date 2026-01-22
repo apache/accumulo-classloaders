@@ -47,8 +47,12 @@ This context definition file must then be stored somewhere where this factory
 can download it, and use the URL to that context definition file as the
 `context` parameter for this factory's `getClassLoader(String context)` method.
 
-This factory can handle context and resource URLs that use the `file`, `hdfs`,
-`http`, or `https` URL scheme.
+This factory can handle context and resource URLs of any type that are
+supported by your application via a registered [URLStreamHandlerProvider][1],
+such as the built-in `file:` and `http:` types. A provider that handles `hdfs:`
+URL types must be provided by the user. This may be provided by the Apache
+Hadoop project, or by another library. A reference implementation is available
+[elsewhere in this project][2].
 
 Here is an example context definition file:
 
@@ -210,6 +214,9 @@ To use this with Accumulo:
 1. Set the following Accumulo properties:
    * `general.context.class.loader.factory=org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory`
    * `general.custom.classloader.lcc.cache.dir=file://path/to/some/directory`
-2. Set the following table property:
+2. Set the following table property to link to a context definition file. For example:
    * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/definition.json`
 
+
+[1]: https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/net/spi/URLStreamHandlerProvider.html
+[2]: https://github.com/apache/accumulo-classloaders/tree/main/modules/hdfs-urlstreamhandler-provider
