@@ -52,7 +52,6 @@ import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
-import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
@@ -90,11 +89,10 @@ import com.google.common.base.Stopwatch;
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  public static final String CACHE_DIR_PROPERTY =
-      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.cache.dir";
+  public static final String CACHE_DIR_PROPERTY = "general.custom.classloader.lcc.cache.dir";
 
   public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
-      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
+      "general.custom.classloader.lcc.update.grace.minutes";
 
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);

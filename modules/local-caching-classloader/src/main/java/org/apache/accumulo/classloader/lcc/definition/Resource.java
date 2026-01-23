@@ -22,20 +22,32 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.util.Objects;
 
+import org.apache.commons.codec.digest.DigestUtils;
+
 public class Resource {
 
   private URL location;
+  private String algorithm;
   private String checksum;
 
   public Resource() {}
 
-  public Resource(URL location, String checksum) {
+  public Resource(URL location, String algorithm, String checksum) {
     this.location = location;
+    this.algorithm = DigestUtils.getDigest(algorithm).getAlgorithm(); // normalize name
     this.checksum = checksum;
   }
 
   public URL getLocation() {
     return location;
+  }
+
+  public String getAlgorithm() {
+    return algorithm;
+  }
+
+  public String getChecksum() {
+    return checksum;
   }
 
   public String getFileName() {
@@ -48,10 +60,6 @@ public class Resource {
       return "unknown";
     }
     return name;
-  }
-
-  public String getChecksum() {
-    return checksum;
   }
 
   @Override

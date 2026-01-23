@@ -21,6 +21,7 @@ package org.apache.accumulo.classloader.lcc.util;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.commons.codec.digest.DigestUtils;
@@ -32,7 +33,12 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class LccUtils {
   private static final Logger LOG = LoggerFactory.getLogger(LccUtils.class);
 
-  public static final DigestUtils DIGESTER = new DigestUtils(DigestUtils.getSha256Digest());
+  private static final ConcurrentHashMap<String,DigestUtils> DIGESTERS = new ConcurrentHashMap<>();
+
+  // keep at most one DigestUtils instance for each algorithm
+  public static DigestUtils getDigester(String algorithm) {
+    return DIGESTERS.computeIfAbsent(algorithm, DigestUtils::new);
+  }
 
   @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
       justification = "doPrivileged is deprecated without replacement and removed in newer Java")

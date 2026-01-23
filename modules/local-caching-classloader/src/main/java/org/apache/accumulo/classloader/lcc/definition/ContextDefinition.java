@@ -21,8 +21,9 @@ package org.apache.accumulo.classloader.lcc.definition;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
-import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.getDigester;
 
+import java.io.BufferedInputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,12 +35,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import org.apache.accumulo.core.cli.Help;
 import org.apache.accumulo.start.spi.KeywordExecutable;
 
+import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
 import com.google.auto.service.AutoService;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Suppliers;
@@ -51,14 +54,55 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 @AutoService(KeywordExecutable.class)
 public class ContextDefinition implements KeywordExecutable {
 
-  static class Opts extends Help {
-    @Parameter(names = {"-i", "--interval"}, required = true,
-        description = "monitor interval (in seconds)", arity = 1, order = 1)
-    int monitorInterval;
+  static class Opts {
+    @Parameter(names = {"-i", "--interval"}, required = false,
+        description = "monitor interval (in seconds, default: 300)", arity = 1, order = 1)
+    int monitorInterval = 300; // 5 minutes
+
+    @Parameter(names = {"-a", "--algorithm"}, required = false,
+        description = "checksum algorithm to use (default: SHA-512)", arity = 1, order = 2)
+    String algorithm = "SHA-512";
 
     @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
-        arity = -1, order = 2)
+        arity = -1, order = 3)
     public List<String> files = new ArrayList<>();
+
+    @Parameter(names = {"-h", "-?", "--help", "-help"}, help = true)
+    public boolean help = false;
+
+    void parseArgs(Consumer<JCommander> jcConsumer, String programName, String[] args,
+        Object... others) {
+      JCommander commander = new JCommander();
+      jcConsumer.accept(commander);
+      commander.addObject(this);
+      for (Object other : others) {
+        commander.addObject(other);
+      }
+      commander.setProgramName(programName);
+      try {
+        commander.parse(args);
+      } catch (ParameterException ex) {
+        commander.usage();
+        exitWithError(ex.getMessage(), 1);
+      }
+      if (help) {
+        commander.usage();
+        exit(0);
+      }
+    }
+
+    void parseArgs(String programName, String[] args, Object... others) {
+      parseArgs(jCommander -> {}, programName, args, others);
+    }
+
+    void exit(int status) {
+      System.exit(status);
+    }
+
+    void exitWithError(String message, int status) {
+      System.err.println(message);
+      exit(status);
+    }
   }
 
   // pretty-print uses Unix newline
@@ -67,13 +111,13 @@ public class ContextDefinition implements KeywordExecutable {
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
-  public static ContextDefinition create(int monitorIntervalSecs, URL... sources)
+  public static ContextDefinition create(int monitorIntervalSecs, String algorithm, URL... sources)
       throws IOException {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
-      try (InputStream is = u.openStream()) {
-        String checksum = DIGESTER.digestAsHex(is);
-        resources.add(new Resource(u, checksum));
+      try (InputStream is = new BufferedInputStream(u.openStream())) {
+        String checksum = getDigester(algorithm).digestAsHex(is);
+        resources.add(new Resource(u, algorithm, checksum));
       }
     }
     return new ContextDefinition(monitorIntervalSecs, resources);
@@ -93,7 +137,7 @@ public class ContextDefinition implements KeywordExecutable {
 
   // transient fields that don't go in the json
   private final transient Supplier<String> checksum =
-      Suppliers.memoize(() -> DIGESTER.digestAsHex(toJson()));
+      Suppliers.memoize(() -> getDigester("SHA-512").digestAsHex(toJson()));
 
   // serialized fields for json
   // use a LinkedHashSet to preserve the order specified in the context file
@@ -168,7 +212,7 @@ public class ContextDefinition implements KeywordExecutable {
     for (String f : opts.files) {
       urls[count++] = new URL(f);
     }
-    ContextDefinition def = create(opts.monitorInterval, urls);
+    ContextDefinition def = create(opts.monitorInterval, opts.algorithm, urls);
     System.out.print(def.toJson());
   }
 }

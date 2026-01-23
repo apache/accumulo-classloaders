@@ -25,7 +25,7 @@ import static java.nio.file.StandardOpenOption.SYNC;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
-import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.getDigester;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -310,9 +310,10 @@ public final class LocalStore {
   }
 
   private void verifyDownload(Resource resource, Path downloadPath, Closeable cleanUpAction) {
+    final String algorithm = resource.getAlgorithm();
     final String checksum;
     try {
-      checksum = DIGESTER.digestAsHex(downloadPath);
+      checksum = getDigester(algorithm).digestAsHex(downloadPath);
     } catch (IOException e) {
       throw new UncheckedIOException("Unable to perform checksum verification on " + downloadPath
           + " for resource " + resource.getLocation(), e);

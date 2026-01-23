@@ -91,12 +91,12 @@ public class LocalStoreTest {
 
     // Create ContextDefinition with all three resources
     final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources
-        .add(new Resource(jarAOrigLocation, TestUtils.computeResourceChecksum(jarAOrigLocation)));
-    resources
-        .add(new Resource(jarBNewLocation, TestUtils.computeResourceChecksum(jarBOrigLocation)));
-    resources
-        .add(new Resource(jarCNewLocation, TestUtils.computeResourceChecksum(jarCOrigLocation)));
+    resources.add(new Resource(jarAOrigLocation, "SHA-256",
+        TestUtils.computeResourceChecksum("SHA-256", jarAOrigLocation)));
+    resources.add(new Resource(jarBNewLocation, "SHA-512",
+        TestUtils.computeResourceChecksum("SHA-512", jarBOrigLocation)));
+    resources.add(new Resource(jarCNewLocation, "SHA-1",
+        TestUtils.computeResourceChecksum("SHA-1", jarCOrigLocation)));
 
     def = new ContextDefinition(MONITOR_INTERVAL_SECS, resources);
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
@@ -237,8 +237,8 @@ public class LocalStoreTest {
     // Add D
     final URL jarDOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
-    updatedResources
-        .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
+    updatedResources.add(new Resource(jarDOrigLocation, "SHA-512",
+        TestUtils.computeResourceChecksum("SHA-512", jarDOrigLocation)));
 
     var updatedDef = new ContextDefinition(MONITOR_INTERVAL_SECS, updatedResources);
     urls = localStore.storeContextResources(updatedDef);
