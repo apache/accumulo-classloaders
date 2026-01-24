@@ -20,9 +20,9 @@ package org.apache.accumulo.classloader.lcc.definition;
 
 import java.net.URL;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
-
-import org.apache.commons.codec.digest.DigestUtils;
 
 public class Resource {
 
@@ -34,7 +34,15 @@ public class Resource {
 
   public Resource(URL location, String algorithm, String checksum) {
     this.location = location;
-    this.algorithm = DigestUtils.getDigest(algorithm).getAlgorithm(); // normalize name
+    try {
+      // try to normalize the algorithm name by finding the provider, then getting the MessageDigest
+      // service for that algorithm, and asking that service for the canonical algorithm name
+      this.algorithm = MessageDigest.getInstance(algorithm).getProvider()
+          .getService("MessageDigest", algorithm).getAlgorithm();
+    } catch (NoSuchAlgorithmException e) {
+      // just keep the provided name if we can't find a provider for that algorithm
+      this.algorithm = algorithm;
+    }
     this.checksum = checksum;
   }
 

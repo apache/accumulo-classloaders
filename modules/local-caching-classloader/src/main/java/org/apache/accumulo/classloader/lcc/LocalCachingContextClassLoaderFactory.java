@@ -67,8 +67,8 @@ import com.google.common.base.Stopwatch;
  * {@link ContextDefinition} file. The file contains an interval at which this class should monitor
  * the file for changes and a list of {@link Resource} objects. If the monitoring fails for a period
  * configurable with the {@link #UPDATE_FAILURE_GRACE_PERIOD_MINS} property, then monitoring will
- * discontinue until the next use of that context. Each resource is defined by a URL to the file and
- * an expected SHA-256 checksum.
+ * discontinue until the next use of that context. Each resource is defined by a URL to the file, a
+ * checksum algorithm, and a checksum.
  * <p>
  * The URLs supplied for the context definition file and for the resources may use any URL type with
  * a registered provider in your application, such as: file, http, https, or hdfs.
@@ -213,8 +213,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader = classloaders.computeIfAbsent(
-        newCacheKey(contextLocation, computedDefinition.getChecksum()), (Supplier<URL[]>) () -> {
+    final URLClassLoader classloader = classloaders
+        .computeIfAbsent(newCacheKey(contextLocation, computedDefinition), (Supplier<URL[]>) () -> {
           try {
             return localStore.get().storeContextResources(computedDefinition);
           } catch (IOException e) {
@@ -231,9 +231,11 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return ContextDefinition.fromRemoteURL(url);
   }
 
-  private static String newCacheKey(String contextLocation, String contextChecksum) {
+  private static String newCacheKey(String contextLocation, ContextDefinition contextDefinition) {
     // the checksum can't contain '-', so everything before the last one is the location
-    return contextLocation + "-" + contextChecksum;
+    // use a different character to separate the algorithm from the checksum
+    return contextLocation + "-" + contextDefinition.getChecksumAlgorithm() + ":"
+        + contextDefinition.getChecksum();
   }
 
   private static boolean cacheKeyMatchesContextLocation(String cacheKey, String contextLocation) {

@@ -289,7 +289,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testInitialBadResourceURL() throws Exception {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources.add(new Resource(jarAOrigLocation, "MD5", "1234"));
+    resources.add(new Resource(jarAOrigLocation, "fake", "1234"));
 
     // remove the file:// prefix from the URL
     String goodJson = new ContextDefinition(MONITOR_INTERVAL_SECS, resources).toJson();
@@ -313,7 +313,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @Test
   public void testInitialBadResourceChecksum() throws Exception {
-    Resource r = new Resource(jarAOrigLocation, "MD5", "1234");
+    Resource r = new Resource(jarAOrigLocation, "fake", "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
@@ -490,7 +490,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classC);
     testClassFailsToLoad(cl, classD);
 
-    Resource r = new Resource(jarAOrigLocation, "MD5", "1234");
+    Resource r = new Resource(jarAOrigLocation, "fake", "1234");
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
@@ -527,7 +527,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     // remove the file:// prefix from the URL
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources.add(new Resource(jarAOrigLocation, "MD5", "1234"));
+    resources.add(new Resource(jarAOrigLocation, "fake", "1234"));
     String goodJson = new ContextDefinition(MONITOR_INTERVAL_SECS, resources).toJson();
     String badJson =
         goodJson.replace(jarAOrigLocation.toString(), jarAOrigLocation.toString().substring(6));

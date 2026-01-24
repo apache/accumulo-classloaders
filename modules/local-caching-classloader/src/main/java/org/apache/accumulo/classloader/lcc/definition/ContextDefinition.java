@@ -55,13 +55,13 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class ContextDefinition implements KeywordExecutable {
 
   static class Opts {
-    @Parameter(names = {"-i", "--interval"}, required = false,
-        description = "monitor interval (in seconds, default: 300)", arity = 1, order = 1)
-    int monitorInterval = 300; // 5 minutes
+    @Parameter(names = {"-i", "--interval"}, required = true,
+        description = "monitor interval (in seconds)", arity = 1, order = 1)
+    int monitorInterval;
 
     @Parameter(names = {"-a", "--algorithm"}, required = false,
-        description = "checksum algorithm to use (default: SHA-512)", arity = 1, order = 2)
-    String algorithm = "SHA-512";
+        description = "checksum algorithm to use (default: " + SHA_512 + ")", arity = 1, order = 2)
+    String algorithm = SHA_512;
 
     @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
         arity = -1, order = 3)
@@ -135,9 +135,11 @@ public class ContextDefinition implements KeywordExecutable {
     }
   }
 
+  private static final String SHA_512 = "SHA-512";
+
   // transient fields that don't go in the json
   private final transient Supplier<String> checksum =
-      Suppliers.memoize(() -> getDigester("SHA-512").digestAsHex(toJson()));
+      Suppliers.memoize(() -> getDigester(getChecksumAlgorithm()).digestAsHex(toJson()));
 
   // serialized fields for json
   // use a LinkedHashSet to preserve the order specified in the context file
@@ -180,6 +182,10 @@ public class ContextDefinition implements KeywordExecutable {
     ContextDefinition other = (ContextDefinition) obj;
     return monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
+  }
+
+  public String getChecksumAlgorithm() {
+    return SHA_512;
   }
 
   public String getChecksum() {

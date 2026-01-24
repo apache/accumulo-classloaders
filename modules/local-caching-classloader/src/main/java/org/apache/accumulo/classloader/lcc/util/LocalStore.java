@@ -116,7 +116,7 @@ public final class LocalStore {
   public static String localResourceName(Resource r) {
     requireNonNull(r);
     String remoteFileName = r.getFileName();
-    String checksum = r.getChecksum();
+    String checksum = checksumForFileName(r.getAlgorithm(), r.getChecksum());
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
     if (matcher.matches()) {
       return String.format("%s-%s.%s", matcher.group(1), checksum, matcher.group(2));
@@ -128,6 +128,10 @@ public final class LocalStore {
     return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
+  private static String checksumForFileName(String algorithm, String checksum) {
+    return algorithm.replace('/', '_') + "-" + checksum;
+  }
+
   /**
    * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
    * resources directory.
@@ -136,7 +140,8 @@ public final class LocalStore {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
     final Set<Path> localFiles = new LinkedHashSet<>();
-    final String destinationName = contextDefinition.getChecksum() + ".json";
+    final String destinationName = checksumForFileName(contextDefinition.getChecksumAlgorithm(),
+        contextDefinition.getChecksum()) + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;

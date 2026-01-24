@@ -62,15 +62,23 @@ Here is an example context definition file:
   "resources": [
     {
       "location": "file:/home/user/ClassLoaderTestA/TestA.jar",
-      "checksum": "a10883244d70d971ec25cbfa69b6f08f"
+      "algorithm": "MD5",
+      "checksum": "ae5e8248a9243751d60dbcaaedeb93ba"
     },
     {
       "location": "hdfs://localhost:8020/contextB/TestB.jar",
-      "checksum": "a02a3b7026528156fb782dcdecaaa097"
+      "algorithm": "SHA-256",
+      "checksum": "ed95fe130090fd64c2caddc3e37555ada8ba49a91bfd8ec1fd5c989d340ad0e0"
     },
     {
       "location": "http://localhost:80/TestC.jar",
-      "checksum": "f464e66f6d07a41c656e8f4679509215"
+      "algorithm": "SHA3-224",
+      "checksum": "958f12ddc5acf87c2fe0ceed645327bb0c92e268acf915c4a374c14b"
+    },
+    {
+      "location": "https://localhost:80/TestD.jar",
+      "algorithm": "SHA-512/224",
+      "checksum": "f7f982521ceb8ca97662973ada9b92b86de6bbaf233f14fd47efd792"
     }
   ]
 }
@@ -116,8 +124,8 @@ and processes, so be very careful when removing old contents to ensure that
 they are no longer needed. If a resource file is deleted from the local storage
 cache while a `ClassLoader` exists that references it, that `ClassLoader` may,
 and probably will, stop working correctly. Similarly, files that have been
-downloaded should not be modified, because checksums are only verified on first
-download, and any modification will likely cause unexpected behavior.
+downloaded should not be modified, because any modification will likely cause
+unexpected behavior to classloaders still using the file.
 
 * Do **NOT** use a temporary directory for the local storage cache location.
 * The local storage cache location **MUST** use a filesystem that supports
@@ -125,10 +133,11 @@ download, and any modification will likely cause unexpected behavior.
 
 ## Creating a ContextDefinition file
 
-Users may take advantage of the `ContextDefinition.create(int,URL[])` method to
-construct a `ContextDefinition` object, programmatically. This will calculate
-the checksums of the classpath elements. `ContextDefinition.toJson()` can be
-used to serialize the `ContextDefinition` to a `String` to store in a file.
+Users may take advantage of the `ContextDefinition.create(int,String,URL[])`
+method to construct a `ContextDefinition` object, programmatically. This will
+calculate the checksums of the classpath elements. `ContextDefinition.toJson()`
+can be used to serialize the `ContextDefinition` to a `String` to store in a
+file.
 
 Alternatively, if this library's jar is built and placed onto Accumulo's
 `CLASSPATH`, then one can run `bin/accumulo create-context-definition` to
@@ -136,8 +145,9 @@ create the ContextDefinition json file using the command-line. The resulting
 json is printed to stdout and can be redirected to a file. The command takes
 two arguments:
 
-1. the monitor interval, in seconds (e.g. `-i 300`), and
-2. a list of file URLs (e.g. `hdfs://host:port/path/to/one.jar file://host/path/to/two.jar`)
+1. the monitor interval, in seconds (e.g. `-i 300`),
+2. an optional checksum algorithm to use (e.g. `-a 'SHA3-512'`), and
+3. a list of file URLs (e.g. `hdfs://host:port/path/to/one.jar file://host/path/to/two.jar`)
 
 ## Updating a ContextDefinition file
 
