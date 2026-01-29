@@ -150,7 +150,7 @@ public final class LocalStore {
         for (Resource resource : contextDefinition.getResources()) {
           Path path = storeResource(resource);
           if (path == null) {
-            LOG.debug("Skipped resource {} while another process or thread is downloading it",
+            LOG.trace("Skipped resource {} while another process or thread is downloading it",
                 resource.getLocation());
             continue;
           }

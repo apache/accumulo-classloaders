@@ -58,7 +58,7 @@ public class HdfsURLStreamHandlerProvider extends URLStreamHandlerProvider {
     @Override
     public void connect() throws IOException {
       Preconditions.checkState(is == null, "Already connected");
-      LOG.debug("Connecting to {}", url);
+      LOG.trace("Connecting to {}", url);
       final URI uri;
       try {
         uri = url.toURI();

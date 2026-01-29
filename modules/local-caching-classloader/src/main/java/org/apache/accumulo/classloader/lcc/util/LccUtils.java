@@ -20,7 +20,6 @@ package org.apache.accumulo.classloader.lcc.util;
 
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
@@ -45,10 +44,7 @@ public class LccUtils {
   public static URLClassLoader createClassLoader(String name, URL[] urls) {
     final var cl = new URLClassLoader(name, urls,
         LocalCachingContextClassLoaderFactory.class.getClassLoader());
-    if (LOG.isTraceEnabled()) {
-      LOG.trace("New classloader created for {} from URLs: {}", name, Arrays.asList(urls));
-    }
+    LOG.info("New classloader created for {}", name);
     return cl;
   }
-
 }
