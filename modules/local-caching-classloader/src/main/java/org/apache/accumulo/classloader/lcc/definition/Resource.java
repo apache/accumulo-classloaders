@@ -20,22 +20,46 @@ package org.apache.accumulo.classloader.lcc.definition;
 
 import java.net.URL;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
 
 public class Resource {
 
   private URL location;
+  private String algorithm;
   private String checksum;
 
   public Resource() {}
 
-  public Resource(URL location, String checksum) {
+  public Resource(URL location, String algorithm, String checksum) {
     this.location = location;
+    this.algorithm = normalizeAlgorithm(algorithm);
     this.checksum = checksum;
+  }
+
+  protected static String normalizeAlgorithm(String algorithm) {
+    try {
+      // try to normalize the algorithm name by finding the provider, then getting the MessageDigest
+      // service for that algorithm, and asking that service for the canonical algorithm name
+      return MessageDigest.getInstance(algorithm).getProvider()
+          .getService("MessageDigest", algorithm).getAlgorithm();
+    } catch (NoSuchAlgorithmException e) {
+      // just keep the provided name if we can't find a provider for that algorithm
+      return algorithm;
+    }
   }
 
   public URL getLocation() {
     return location;
+  }
+
+  public String getAlgorithm() {
+    return algorithm;
+  }
+
+  public String getChecksum() {
+    return checksum;
   }
 
   public String getFileName() {
@@ -48,10 +72,6 @@ public class Resource {
       return "unknown";
     }
     return name;
-  }
-
-  public String getChecksum() {
-    return checksum;
   }
 
   @Override

@@ -158,8 +158,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
-    final ContextDefinition testContextDef =
-        ContextDefinition.create(MONITOR_INTERVAL_SECS, jarAOrigLocation);
+    final var testContextDef =
+        ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
     final String testContextDefJson = testContextDef.toJson();
     final File testContextDefFile = jsonDirPath.resolve("testContextDefinition.json").toFile();
     Files.writeString(testContextDefFile.toPath(), testContextDefJson, StandardOpenOption.CREATE);
@@ -245,7 +245,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
       // Update the context definition to point to jar B
       final ContextDefinition testContextDefUpdate =
-          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarBOrigLocation);
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarBOrigLocation);
       final String testContextDefUpdateJson = testContextDefUpdate.toJson();
       Files.writeString(testContextDefFile.toPath(), testContextDefUpdateJson,
           StandardOpenOption.TRUNCATE_EXISTING);
@@ -281,7 +281,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(jarACopy));
 
       final ContextDefinition testContextDefUpdate2 =
-          ContextDefinition.create(MONITOR_INTERVAL_SECS, jarACopy.toUri().toURL());
+          ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 
