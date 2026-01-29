@@ -158,8 +158,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     Files.createDirectory(jsonDirPath, PERMISSIONS);
 
     // Create a context definition that only references jar A
-    final ContextDefinition testContextDef =
-        ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var testContextDef =
+        ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
     final String testContextDefJson = testContextDef.toJson();
     final File testContextDefFile = jsonDirPath.resolve("testContextDefinition.json").toFile();
     Files.writeString(testContextDefFile.toPath(), testContextDefJson, StandardOpenOption.CREATE);

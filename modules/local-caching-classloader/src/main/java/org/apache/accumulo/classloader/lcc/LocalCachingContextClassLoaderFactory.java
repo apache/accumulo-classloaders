@@ -232,17 +232,15 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
   }
 
   private static String newCacheKey(String contextLocation, ContextDefinition contextDefinition) {
-    // the checksum can't contain '-', so everything before the last one is the location
-    // use a different character to separate the algorithm from the checksum
-    return contextLocation + "-" + contextDefinition.getChecksumAlgorithm() + ":"
+    // the location is between the first left parenthesis and the last right parenthesis
+    return contextDefinition.getChecksumAlgorithm() + " (" + contextLocation + ") = "
         + contextDefinition.getChecksum();
   }
 
   private static boolean cacheKeyMatchesContextLocation(String cacheKey, String contextLocation) {
-    // the checksum can't contain '-', so everything before the last one is the location
-    // we can't just use startsWith(contextLocation) because there may be other contextLocations
-    // that contain this contextLocation as a prefix, so we do an exact match on the location part
-    return cacheKey.substring(0, cacheKey.lastIndexOf('-')).equals(contextLocation);
+    // extract the location from the parentheses in the cacheKey
+    return cacheKey.substring(cacheKey.indexOf('(') + 1, cacheKey.lastIndexOf(')'))
+        .equals(contextLocation);
   }
 
   private void checkMonitoredLocation(String contextLocation, long interval) {

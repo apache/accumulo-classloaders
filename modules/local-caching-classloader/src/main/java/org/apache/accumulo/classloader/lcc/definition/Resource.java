@@ -34,16 +34,20 @@ public class Resource {
 
   public Resource(URL location, String algorithm, String checksum) {
     this.location = location;
+    this.algorithm = normalizeAlgorithm(algorithm);
+    this.checksum = checksum;
+  }
+
+  protected static String normalizeAlgorithm(String algorithm) {
     try {
       // try to normalize the algorithm name by finding the provider, then getting the MessageDigest
       // service for that algorithm, and asking that service for the canonical algorithm name
-      this.algorithm = MessageDigest.getInstance(algorithm).getProvider()
+      return MessageDigest.getInstance(algorithm).getProvider()
           .getService("MessageDigest", algorithm).getAlgorithm();
     } catch (NoSuchAlgorithmException e) {
       // just keep the provided name if we can't find a provider for that algorithm
-      this.algorithm = algorithm;
+      return algorithm;
     }
-    this.checksum = checksum;
   }
 
   public URL getLocation() {

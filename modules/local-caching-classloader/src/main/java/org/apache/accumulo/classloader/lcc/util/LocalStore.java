@@ -128,7 +128,7 @@ public final class LocalStore {
     return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
-  private static String checksumForFileName(String algorithm, String checksum) {
+  static String checksumForFileName(String algorithm, String checksum) {
     return algorithm.replace('/', '_') + "-" + checksum;
   }
 
