@@ -20,6 +20,7 @@ package org.apache.accumulo.classloader.lcc.util;
 
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.localResourceName;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -91,12 +92,12 @@ public class LocalStoreTest {
 
     // Create ContextDefinition with all three resources
     final LinkedHashSet<Resource> resources = new LinkedHashSet<>();
-    resources
-        .add(new Resource(jarAOrigLocation, TestUtils.computeResourceChecksum(jarAOrigLocation)));
-    resources
-        .add(new Resource(jarBNewLocation, TestUtils.computeResourceChecksum(jarBOrigLocation)));
-    resources
-        .add(new Resource(jarCNewLocation, TestUtils.computeResourceChecksum(jarCOrigLocation)));
+    resources.add(new Resource(jarAOrigLocation, "SHA-256",
+        TestUtils.computeResourceChecksum("SHA-256", jarAOrigLocation)));
+    resources.add(new Resource(jarBNewLocation, "SHA-512",
+        TestUtils.computeResourceChecksum("SHA-512", jarBOrigLocation)));
+    resources.add(new Resource(jarCNewLocation, "SHA-1",
+        TestUtils.computeResourceChecksum("SHA-1", jarCOrigLocation)));
 
     def = new ContextDefinition(MONITOR_INTERVAL_SECS, resources);
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
@@ -151,11 +152,16 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir));
   }
 
-  private static Resource rsrc(String filename, String checksum) {
+  private static Resource rsrc(String filename, String algorithm, String checksum) {
     return new Resource() {
       @Override
       public String getFileName() {
         return filename;
+      }
+
+      @Override
+      public String getAlgorithm() {
+        return normalizeAlgorithm(algorithm);
       }
 
       @Override
@@ -167,31 +173,42 @@ public class LocalStoreTest {
 
   @Test
   public void testLocalFileName() {
+    // regular jar, test various algorithm name normalizations
+    assertEquals("f0-MD5-chk0.jar", localResourceName(rsrc("f0.jar", "md5", "chk0")));
+    assertEquals("f0-MD5-chk0.jar", localResourceName(rsrc("f0.jar", "MD5", "chk0")));
+    assertEquals("f0-SHA-1-chk0.jar", localResourceName(rsrc("f0.jar", "sha1", "chk0")));
+    assertEquals("f0-SHA-1-chk0.jar", localResourceName(rsrc("f0.jar", "Sha-1", "chk0")));
+    assertEquals("f0-SHA-1-chk0.jar", localResourceName(rsrc("f0.jar", "SHA-1", "chk0")));
+    assertEquals("f0-SHA-512-chk0.jar", localResourceName(rsrc("f0.jar", "sha512", "chk0")));
+    assertEquals("f0-SHA-512_224-chk0.jar",
+        localResourceName(rsrc("f0.jar", "sha512/224", "chk0")));
+    assertEquals("f0-SHA3-224-chk0.jar", localResourceName(rsrc("f0.jar", "sha3-224", "chk0")));
+
     // regular war
-    assertEquals("f1-chk1.war", LocalStore.localResourceName(rsrc("f1.war", "chk1")));
+    assertEquals("f1-mock-chk1.war", localResourceName(rsrc("f1.war", "mock", "chk1")));
     // dotfile war
-    assertEquals(".f1-chk1.war", LocalStore.localResourceName(rsrc(".f1.war", "chk1")));
+    assertEquals(".f1-mock-chk1.war", localResourceName(rsrc(".f1.war", "mock", "chk1")));
     // regular jar (has multiple dots)
-    assertEquals("f2-1.0-chk2.jar", LocalStore.localResourceName(rsrc("f2-1.0.jar", "chk2")));
+    assertEquals("f2-1.0-mock-chk2.jar", localResourceName(rsrc("f2-1.0.jar", "mock", "chk2")));
     // dotfile jar (has multiple dots)
-    assertEquals(".f2-1.0-chk2.jar", LocalStore.localResourceName(rsrc(".f2-1.0.jar", "chk2")));
+    assertEquals(".f2-1.0-mock-chk2.jar", localResourceName(rsrc(".f2-1.0.jar", "mock", "chk2")));
     // regular file with no suffix
-    assertEquals("f3-chk3", LocalStore.localResourceName(rsrc("f3", "chk3")));
+    assertEquals("f3-mock-chk3", localResourceName(rsrc("f3", "mock", "chk3")));
 
     // weird files with trailing dots and no file suffix
-    assertEquals("f4.-chk4", LocalStore.localResourceName(rsrc("f4.", "chk4")));
-    assertEquals("f4..-chk4", LocalStore.localResourceName(rsrc("f4..", "chk4")));
-    assertEquals("f4...-chk4", LocalStore.localResourceName(rsrc("f4...", "chk4")));
+    assertEquals("f4.-mock-chk4", localResourceName(rsrc("f4.", "mock", "chk4")));
+    assertEquals("f4..-mock-chk4", localResourceName(rsrc("f4..", "mock", "chk4")));
+    assertEquals("f4...-mock-chk4", localResourceName(rsrc("f4...", "mock", "chk4")));
     // weird dotfiles that don't really have a suffix
-    assertEquals(".f5-chk5", LocalStore.localResourceName(rsrc(".f5", "chk5")));
-    assertEquals("..f5-chk5", LocalStore.localResourceName(rsrc("..f5", "chk5")));
+    assertEquals(".f5-mock-chk5", localResourceName(rsrc(".f5", "mock", "chk5")));
+    assertEquals("..f5-mock-chk5", localResourceName(rsrc("..f5", "mock", "chk5")));
     // weird files with weird dots, but do have a valid suffix
-    assertEquals("f6.-chk6.jar", LocalStore.localResourceName(rsrc("f6..jar", "chk6")));
-    assertEquals("f6..-chk6.jar", LocalStore.localResourceName(rsrc("f6...jar", "chk6")));
-    assertEquals(".f6-chk6.jar", LocalStore.localResourceName(rsrc(".f6.jar", "chk6")));
-    assertEquals("..f6-chk6.jar", LocalStore.localResourceName(rsrc("..f6.jar", "chk6")));
-    assertEquals(".f6.-chk6.jar", LocalStore.localResourceName(rsrc(".f6..jar", "chk6")));
-    assertEquals("..f6.-chk6.jar", LocalStore.localResourceName(rsrc("..f6..jar", "chk6")));
+    assertEquals("f6.-mock-chk6.jar", localResourceName(rsrc("f6..jar", "mock", "chk6")));
+    assertEquals("f6..-mock-chk6.jar", localResourceName(rsrc("f6...jar", "mock", "chk6")));
+    assertEquals(".f6-mock-chk6.jar", localResourceName(rsrc(".f6.jar", "mock", "chk6")));
+    assertEquals("..f6-mock-chk6.jar", localResourceName(rsrc("..f6.jar", "mock", "chk6")));
+    assertEquals(".f6.-mock-chk6.jar", localResourceName(rsrc(".f6..jar", "mock", "chk6")));
+    assertEquals("..f6.-mock-chk6.jar", localResourceName(rsrc("..f6..jar", "mock", "chk6")));
   }
 
   @Test
@@ -201,10 +218,10 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(def.getChecksum() + ".json")));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(
+        LocalStore.checksumForFileName(def.getChecksumAlgorithm(), def.getChecksum()) + ".json")));
     for (Resource r : def.getResources()) {
-      assertTrue(
-          Files.exists(baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(r))));
+      assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
     }
   }
 
@@ -237,25 +254,25 @@ public class LocalStoreTest {
     // Add D
     final URL jarDOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestD/TestD.jar");
     assertNotNull(jarDOrigLocation);
-    updatedResources
-        .add(new Resource(jarDOrigLocation, TestUtils.computeResourceChecksum(jarDOrigLocation)));
+    updatedResources.add(new Resource(jarDOrigLocation, "SHA-512",
+        TestUtils.computeResourceChecksum("SHA-512", jarDOrigLocation)));
 
     var updatedDef = new ContextDefinition(MONITOR_INTERVAL_SECS, updatedResources);
     urls = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
-    assertTrue(
-        Files.exists(baseCacheDir.resolve("contexts").resolve(updatedDef.getChecksum() + ".json")));
+    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(
+        LocalStore.checksumForFileName(updatedDef.getChecksumAlgorithm(), updatedDef.getChecksum())
+            + ".json")));
     for (Resource r : updatedDef.getResources()) {
       assertFalse(r.getFileName().contains("C"));
-      assertTrue(
-          Files.exists(baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(r))));
+      assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
     }
 
     assertTrue(removedResource.getFileName().contains("C"),
         "cache location should still contain 'C'");
-    assertTrue(Files.exists(
-        baseCacheDir.resolve("resources").resolve(LocalStore.localResourceName(removedResource))));
+    assertTrue(Files
+        .exists(baseCacheDir.resolve("resources").resolve(localResourceName(removedResource))));
 
     final var updatedContextClassLoader = LccUtils.createClassLoader("url", urls);
 

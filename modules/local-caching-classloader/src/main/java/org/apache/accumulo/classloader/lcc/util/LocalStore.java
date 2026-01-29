@@ -25,7 +25,7 @@ import static java.nio.file.StandardOpenOption.SYNC;
 import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
 import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
-import static org.apache.accumulo.classloader.lcc.util.LccUtils.DIGESTER;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.getDigester;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -116,7 +116,7 @@ public final class LocalStore {
   public static String localResourceName(Resource r) {
     requireNonNull(r);
     String remoteFileName = r.getFileName();
-    String checksum = r.getChecksum();
+    String checksum = checksumForFileName(r.getAlgorithm(), r.getChecksum());
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
     if (matcher.matches()) {
       return String.format("%s-%s.%s", matcher.group(1), checksum, matcher.group(2));
@@ -128,6 +128,10 @@ public final class LocalStore {
     return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
   }
 
+  static String checksumForFileName(String algorithm, String checksum) {
+    return algorithm.replace('/', '_') + "-" + checksum;
+  }
+
   /**
    * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
    * resources directory.
@@ -136,7 +140,8 @@ public final class LocalStore {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
     final Set<Path> localFiles = new LinkedHashSet<>();
-    final String destinationName = contextDefinition.getChecksum() + ".json";
+    final String destinationName = checksumForFileName(contextDefinition.getChecksumAlgorithm(),
+        contextDefinition.getChecksum()) + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;
@@ -310,9 +315,10 @@ public final class LocalStore {
   }
 
   private void verifyDownload(Resource resource, Path downloadPath, Closeable cleanUpAction) {
+    final String algorithm = resource.getAlgorithm();
     final String checksum;
     try {
-      checksum = DIGESTER.digestAsHex(downloadPath);
+      checksum = getDigester(algorithm).digestAsHex(downloadPath);
     } catch (IOException e) {
       throw new UncheckedIOException("Unable to perform checksum verification on " + downloadPath
           + " for resource " + resource.getLocation(), e);

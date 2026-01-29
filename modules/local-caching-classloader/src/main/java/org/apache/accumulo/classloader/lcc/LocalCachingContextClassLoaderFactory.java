@@ -52,7 +52,6 @@ import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
-import org.apache.accumulo.core.conf.Property;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
 import org.slf4j.Logger;
@@ -68,8 +67,8 @@ import com.google.common.base.Stopwatch;
  * {@link ContextDefinition} file. The file contains an interval at which this class should monitor
  * the file for changes and a list of {@link Resource} objects. If the monitoring fails for a period
  * configurable with the {@link #UPDATE_FAILURE_GRACE_PERIOD_MINS} property, then monitoring will
- * discontinue until the next use of that context. Each resource is defined by a URL to the file and
- * an expected SHA-256 checksum.
+ * discontinue until the next use of that context. Each resource is defined by a URL to the file, a
+ * checksum algorithm, and a checksum.
  * <p>
  * The URLs supplied for the context definition file and for the resources may use any URL type with
  * a registered provider in your application, such as: file, http, https, or hdfs.
@@ -90,11 +89,10 @@ import com.google.common.base.Stopwatch;
  */
 public class LocalCachingContextClassLoaderFactory implements ContextClassLoaderFactory {
 
-  public static final String CACHE_DIR_PROPERTY =
-      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.cache.dir";
+  public static final String CACHE_DIR_PROPERTY = "general.custom.classloader.lcc.cache.dir";
 
   public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
-      Property.GENERAL_ARBITRARY_PROP_PREFIX.getKey() + "classloader.lcc.update.grace.minutes";
+      "general.custom.classloader.lcc.update.grace.minutes";
 
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
@@ -215,8 +213,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader = classloaders.computeIfAbsent(
-        newCacheKey(contextLocation, computedDefinition.getChecksum()), (Supplier<URL[]>) () -> {
+    final URLClassLoader classloader = classloaders
+        .computeIfAbsent(newCacheKey(contextLocation, computedDefinition), (Supplier<URL[]>) () -> {
           try {
             return localStore.get().storeContextResources(computedDefinition);
           } catch (IOException e) {
@@ -233,16 +231,16 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return ContextDefinition.fromRemoteURL(url);
   }
 
-  private static String newCacheKey(String contextLocation, String contextChecksum) {
-    // the checksum can't contain '-', so everything before the last one is the location
-    return contextLocation + "-" + contextChecksum;
+  private static String newCacheKey(String contextLocation, ContextDefinition contextDefinition) {
+    // the location is between the first left parenthesis and the last right parenthesis
+    return contextDefinition.getChecksumAlgorithm() + " (" + contextLocation + ") = "
+        + contextDefinition.getChecksum();
   }
 
   private static boolean cacheKeyMatchesContextLocation(String cacheKey, String contextLocation) {
-    // the checksum can't contain '-', so everything before the last one is the location
-    // we can't just use startsWith(contextLocation) because there may be other contextLocations
-    // that contain this contextLocation as a prefix, so we do an exact match on the location part
-    return cacheKey.substring(0, cacheKey.lastIndexOf('-')).equals(contextLocation);
+    // extract the location from the parentheses in the cacheKey
+    return cacheKey.substring(cacheKey.indexOf('(') + 1, cacheKey.lastIndexOf(')'))
+        .equals(contextLocation);
   }
 
   private void checkMonitoredLocation(String contextLocation, long interval) {

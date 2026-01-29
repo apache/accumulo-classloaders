@@ -472,93 +472,6 @@ under the License.
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <configuration>
-          <checkstyleRules>
-            <module name="Checker">
-              <property name="charset" value="UTF-8" />
-              <property name="severity" value="warning" />
-              <!-- Checks for whitespace                               -->
-              <!-- See https://checkstyle.sourceforge.io/config_whitespace.html -->
-              <module name="FileTabCharacter" />
-              <module name="TreeWalker">
-                <module name="OneTopLevelClass" />
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="\s+$" />
-                  <property name="message" value="Line has trailing whitespace." />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="[@]Deprecated([^)]*forRemoval[^)]*)" />
-                  <property name="message" value="forRemoval should not be used." />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="[@]see\s+[{][@]link" />
-                  <property name="message" value="Javadoc @see does not need @link: pick one or the other." />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="jline[.]internal[.]Preconditions" />
-                  <property name="message" value="Please use Guava Preconditions not JLine" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="org[.]apache[.]commons[.]math[.]" />
-                  <property name="message" value="Use commons-math3 (org.apache.commons.math3.*)" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assertions;" />
-                  <property name="message" value="Use static imports for Assertions.* methods for consistency" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assumptions;" />
-                  <property name="message" value="Use static imports for Assumptions.* methods for consistency" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="import java[.]nio[.]charset[.]StandardCharsets;" />
-                  <property name="message" value="Use static imports for StandardCharsets.* constants for consistency" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <!-- double escape quotes because checkstyle passes these through another xml parser -->
-                  <property name="format" value="&amp;quot; [+] &amp;quot;" />
-                  <property name="message" value="Unnecessary concatenation of string literals" />
-                </module>
-                <module name="RegexpSinglelineJava">
-                  <property name="format" value="com[.]google[.]common[.]cache[.]" />
-                  <property name="message" value="Please use Caffeine Cache, not Guava" />
-                </module>
-                <module name="OuterTypeFilename" />
-                <module name="AvoidStarImport" />
-                <module name="NoLineWrap" />
-                <module name="LeftCurly" />
-                <module name="RightCurly">
-                  <property name="tokens" value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, LITERAL_DO, STATIC_INIT, INSTANCE_INIT" />
-                </module>
-                <module name="SeparatorWrap">
-                  <property name="tokens" value="DOT" />
-                  <property name="option" value="nl" />
-                </module>
-                <module name="SeparatorWrap">
-                  <property name="tokens" value="COMMA" />
-                  <property name="option" value="EOL" />
-                </module>
-                <module name="PackageName">
-                  <property name="format" value="^[a-z]+(\.[a-z][a-zA-Z0-9]*)*$" />
-                </module>
-                <module name="MethodTypeParameterName">
-                  <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)" />
-                </module>
-                <module name="NonEmptyAtclauseDescription" />
-                <module name="JavadocMethod">
-                  <property name="allowMissingParamTags" value="true" />
-                  <property name="allowMissingReturnTag" value="true" />
-                  <property name="allowedAnnotations" value="Override,Test,BeforeClass,AfterClass,Before,After,BeforeAll,AfterAll,BeforeEach,AfterEach" />
-                </module>
-                <module name="MissingOverrideCheck" />
-                <!--Require braces for all control statements -->
-                <module name="NeedBraces" />
-              </module>
-            </module>
-          </checkstyleRules>
-          <violationSeverity>warning</violationSeverity>
-          <includeTestSourceDirectory>true</includeTestSourceDirectory>
-        </configuration>
         <dependencies>
           <dependency>
             <groupId>com.puppycrawl.tools</groupId>
@@ -572,6 +485,115 @@ under the License.
             <goals>
               <goal>check</goal>
             </goals>
+            <configuration>
+              <checkstyleRules>
+                <module name="Checker">
+                  <property name="charset" value="UTF-8" />
+                  <property name="severity" value="warning" />
+                  <!-- Checks for whitespace                               -->
+                  <!-- See https://checkstyle.sourceforge.io/config_whitespace.html -->
+                  <module name="FileTabCharacter" />
+                  <module name="TreeWalker">
+                    <module name="OneTopLevelClass" />
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="\s+$" />
+                      <property name="message" value="Line has trailing whitespace." />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="[@]Deprecated([^)]*forRemoval[^)]*)" />
+                      <property name="message" value="forRemoval should not be used." />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="[@]see\s+[{][@]link" />
+                      <property name="message" value="Javadoc @see does not need @link: pick one or the other." />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="jline[.]internal[.]Preconditions" />
+                      <property name="message" value="Please use Guava Preconditions not JLine" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="org[.]apache[.]commons[.]math[.]" />
+                      <property name="message" value="Use commons-math3 (org.apache.commons.math3.*)" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assertions;" />
+                      <property name="message" value="Use static imports for Assertions.* methods for consistency" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="org[.]junit[.]jupiter[.]api[.]Assumptions;" />
+                      <property name="message" value="Use static imports for Assumptions.* methods for consistency" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="import java[.]nio[.]charset[.]StandardCharsets;" />
+                      <property name="message" value="Use static imports for StandardCharsets.* constants for consistency" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <!-- double escape quotes because checkstyle passes these through another xml parser -->
+                      <property name="format" value="&amp;quot; [+] &amp;quot;" />
+                      <property name="message" value="Unnecessary concatenation of string literals" />
+                    </module>
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="com[.]google[.]common[.]cache[.]" />
+                      <property name="message" value="Please use Caffeine Cache, not Guava" />
+                    </module>
+                    <module name="OuterTypeFilename" />
+                    <module name="AvoidStarImport" />
+                    <module name="NoLineWrap" />
+                    <module name="LeftCurly" />
+                    <module name="RightCurly">
+                      <property name="tokens" value="LITERAL_TRY, LITERAL_CATCH, LITERAL_FINALLY, LITERAL_IF, LITERAL_ELSE, CLASS_DEF, METHOD_DEF, CTOR_DEF, LITERAL_FOR, LITERAL_WHILE, LITERAL_DO, STATIC_INIT, INSTANCE_INIT" />
+                    </module>
+                    <module name="SeparatorWrap">
+                      <property name="tokens" value="DOT" />
+                      <property name="option" value="nl" />
+                    </module>
+                    <module name="SeparatorWrap">
+                      <property name="tokens" value="COMMA" />
+                      <property name="option" value="EOL" />
+                    </module>
+                    <module name="PackageName">
+                      <property name="format" value="^[a-z]+([.][a-z][a-zA-Z0-9]*)*$" />
+                    </module>
+                    <module name="MethodTypeParameterName">
+                      <property name="format" value="(^[A-Z][0-9]?)$|([A-Z][a-zA-Z0-9]*[T]$)" />
+                    </module>
+                    <module name="NonEmptyAtclauseDescription" />
+                    <module name="JavadocMethod">
+                      <property name="allowMissingParamTags" value="true" />
+                      <property name="allowMissingReturnTag" value="true" />
+                      <property name="allowedAnnotations" value="Override,Test,BeforeClass,AfterClass,Before,After,BeforeAll,AfterAll,BeforeEach,AfterEach" />
+                    </module>
+                    <module name="MissingOverrideCheck" />
+                    <!--Require braces for all control statements -->
+                    <module name="NeedBraces" />
+                  </module>
+                </module>
+              </checkstyleRules>
+              <violationSeverity>warning</violationSeverity>
+              <includeTestSourceDirectory>true</includeTestSourceDirectory>
+            </configuration>
+          </execution>
+          <execution>
+            <id>check-public-api</id>
+            <goals>
+              <goal>check</goal>
+            </goals>
+            <configuration>
+              <checkstyleRules>
+                <module name="Checker">
+                  <property name="charset" value="UTF-8" />
+                  <property name="severity" value="warning" />
+                  <module name="TreeWalker">
+                    <module name="RegexpSinglelineJava">
+                      <property name="format" value="import\s+org[.]apache[.]accumulo[.](?!(core[.](client|data|iterators|security|spi)|minicluster|hadoop|classloader|start[.]spi[.]KeywordExecutable)[.;]).*" />
+                      <property name="message" value="Found reference to non-public Accumulo API" />
+                    </module>
+                  </module>
+                </module>
+              </checkstyleRules>
+              <violationSeverity>warning</violationSeverity>
+              <includeTestSourceDirectory>false</includeTestSourceDirectory>
+            </configuration>
           </execution>
         </executions>
       </plugin>
