@@ -131,6 +131,17 @@ unexpected behavior to classloaders still using the file.
 * The local storage cache location **MUST** use a filesystem that supports
   atomic moves.
 
+The Accumulo property `general.custom.classloader.lcc.allowed.urls.pattern` is
+another required parameter, and is used to limit the allowed URLs that can be
+fetched when downloading context definitions or context resources. Since the
+process using this factory will be using its own permissions to fetch
+resources, and placing a copy of those resources in a local directory where
+others may access them, this property allows a system administrator to mitigate
+file disclosure security vulnerabilities by preventing it from accessing URLs
+that it should not copy locally (e.g. `file:/path/to/accumulo.properties` or
+`hdfs://host/path/to/accumulo/rfile.rf`). An example value might look like:
+`https://example.com/path/to/contexts/.*`.
+
 ## Creating a ContextDefinition file
 
 Users may take advantage of the `ContextDefinition.create(int,String,URL[])`

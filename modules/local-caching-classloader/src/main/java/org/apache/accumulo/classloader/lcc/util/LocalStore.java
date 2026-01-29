@@ -46,6 +46,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -91,10 +92,13 @@ public final class LocalStore {
 
   private final Path contextsDir;
   private final Path resourcesDir;
+  private final BiConsumer<String,URL> allowedUrlChecker;
 
-  public LocalStore(final Path baseDir) throws IOException {
+  public LocalStore(final Path baseDir, final BiConsumer<String,URL> allowedUrlChecker)
+      throws IOException {
     this.contextsDir = requireNonNull(baseDir).toAbsolutePath().resolve("contexts");
     this.resourcesDir = baseDir.resolve("resources");
+    this.allowedUrlChecker = requireNonNull(allowedUrlChecker);
     Files.createDirectories(contextsDir);
     Files.createDirectories(resourcesDir);
   }
@@ -301,10 +305,13 @@ public final class LocalStore {
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
   private void downloadFile(Path tempPath, Resource resource) {
+    URL url = resource.getLocation();
+    allowedUrlChecker.accept("Resource", url);
+
     // CREATE_NEW ensures the temporary file name is unique for this attempt
     // SYNC ensures file integrity on each write, in case of system failure. Buffering minimizes
     // system calls te read/write data which minimizes the number of syncs.
-    try (var in = new BufferedInputStream(resource.getLocation().openStream(), DL_BUFF_SIZE);
+    try (var in = new BufferedInputStream(url.openStream(), DL_BUFF_SIZE);
         var out = new BufferedOutputStream(Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC),
             DL_BUFF_SIZE)) {
       in.transferTo(out);

@@ -34,6 +34,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
+import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils;
@@ -53,6 +54,9 @@ public class LocalStoreTest {
 
   @TempDir
   private static Path tempDir;
+
+  // a mock URL checker that allows all for test
+  private static final BiConsumer<String,URL> ALLOW_ALL_URLS = (type, url) -> {};
 
   private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
@@ -128,13 +132,16 @@ public class LocalStoreTest {
 
   @Test
   public void testPropertyNotSet() {
-    assertThrows(NullPointerException.class, () -> new LocalStore(null));
+    // test baseDir not set
+    assertThrows(NullPointerException.class, () -> new LocalStore(null, ALLOW_ALL_URLS));
+    // test URL checker not set
+    assertThrows(NullPointerException.class, () -> new LocalStore(baseCacheDir, null));
   }
 
   @Test
   public void testCreateBaseDirs() throws Exception {
     assertFalse(Files.exists(baseCacheDir));
-    var localStore = new LocalStore(baseCacheDir);
+    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve("contexts")));
     assertTrue(Files.exists(baseCacheDir.resolve("resources")));
@@ -145,10 +152,10 @@ public class LocalStoreTest {
   @Test
   public void testCreateBaseDirsMultipleTimes() throws Exception {
     assertFalse(Files.exists(baseCacheDir));
-    assertNotNull(new LocalStore(baseCacheDir));
-    assertNotNull(new LocalStore(baseCacheDir));
-    assertNotNull(new LocalStore(baseCacheDir));
-    assertNotNull(new LocalStore(baseCacheDir));
+    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
+    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
+    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
+    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
     assertTrue(Files.exists(baseCacheDir));
   }
 
@@ -213,7 +220,7 @@ public class LocalStoreTest {
 
   @Test
   public void testStoreContextResources() throws Exception {
-    var localStore = new LocalStore(baseCacheDir);
+    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     localStore.storeContextResources(def);
 
     // Confirm the 3 jars are cached locally
@@ -227,7 +234,7 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoader() throws Exception {
-    var urls = new LocalStore(baseCacheDir).storeContextResources(def);
+    var urls = new LocalStore(baseCacheDir, ALLOW_ALL_URLS).storeContextResources(def);
     var contextClassLoader = LccUtils.createClassLoader("url", urls);
 
     testClassLoads(contextClassLoader, classA);
@@ -237,7 +244,7 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoaderUpdate() throws Exception {
-    var localStore = new LocalStore(baseCacheDir);
+    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     var urls = localStore.storeContextResources(def);
     final var contextClassLoader = LccUtils.createClassLoader("url", urls);
 

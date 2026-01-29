@@ -22,6 +22,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_READ;
 import static java.nio.file.attribute.PosixFilePermission.OWNER_WRITE;
+import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.ALLOWED_URLS_PATTERN;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.CACHE_DIR_PROPERTY;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.UPDATE_FAILURE_GRACE_PERIOD_MINS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -112,6 +113,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       cfg.setProperty(Property.GENERAL_CONTEXT_CLASSLOADER_FACTORY.getKey(),
           LocalCachingContextClassLoaderFactory.class.getName());
       cfg.setProperty(CACHE_DIR_PROPERTY, tempDir.resolve("base").toUri().toString());
+      cfg.setProperty(ALLOWED_URLS_PATTERN, ".*");
       cfg.setProperty(UPDATE_FAILURE_GRACE_PERIOD_MINS, "1");
     }
   }
