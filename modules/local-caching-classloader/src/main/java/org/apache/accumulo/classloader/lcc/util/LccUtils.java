@@ -20,7 +20,6 @@ package org.apache.accumulo.classloader.lcc.util;
 
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.Arrays;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.commons.codec.digest.DigestUtils;
