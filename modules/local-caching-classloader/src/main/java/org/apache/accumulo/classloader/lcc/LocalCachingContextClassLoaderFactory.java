@@ -165,6 +165,14 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           "%s location (%s) not allowed by pattern (%s)", locationType, url.toExternalForm(),
           p.pattern());
     };
+    try {
+      // get from the config, allowing it to be cached and ready for first use if it's set, and
+      // giving us an opportunity to warn the user to set it
+      allowedUrlsPattern.get();
+    } catch (NullPointerException npe) {
+      LOG.warn("Property {} is not set. No ClassLoader instances will be created until it is set.",
+          ALLOWED_URLS_PATTERN);
+    }
     final Path baseCacheDir;
     if (value.startsWith("file:")) {
       try {
