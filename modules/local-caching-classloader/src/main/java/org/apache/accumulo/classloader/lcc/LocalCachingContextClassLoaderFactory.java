@@ -166,12 +166,13 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           p.pattern());
     };
     try {
-      // get from the config, allowing it to be cached and ready for first use if it's set, and
-      // giving us an opportunity to warn the user to set it
+      // check the allowed URLs pattern, getting it ready for first use, and warning if it is bad
       allowedUrlsPattern.get();
-    } catch (NullPointerException npe) {
-      LOG.warn("Property {} is not set. No ClassLoader instances will be created until it is set.",
-          ALLOWED_URLS_PATTERN);
+    } catch (RuntimeException npe) {
+      LOG.warn(
+          "Property {} is not set or contains an invalid pattern ()."
+              + " No ClassLoader instances will be created until it is set.",
+          ALLOWED_URLS_PATTERN, env.getConfiguration().get(ALLOWED_URLS_PATTERN), npe);
     }
     final Path baseCacheDir;
     if (value.startsWith("file:")) {
