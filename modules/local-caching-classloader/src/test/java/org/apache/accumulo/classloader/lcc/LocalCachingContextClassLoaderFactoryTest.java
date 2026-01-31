@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.ALLOWED_URLS_PATTERN;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.CACHE_DIR_PROPERTY;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.UPDATE_FAILURE_GRACE_PERIOD_MINS;
 import static org.apache.accumulo.classloader.lcc.TestUtils.createContextDefinitionFile;
@@ -168,9 +169,51 @@ public class LocalCachingContextClassLoaderFactoryTest {
   public void beforeEach() throws Exception {
     baseCacheDir = tempDir.resolve("base");
     ConfigurationCopy acuConf = new ConfigurationCopy(
-        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm(),
+            UPDATE_FAILURE_GRACE_PERIOD_MINS, "1", ALLOWED_URLS_PATTERN, ".*"));
     FACTORY = new LocalCachingContextClassLoaderFactory();
     FACTORY.init(() -> new ConfigurationImpl(acuConf));
+  }
+
+  @Test
+  public void testAllowedUrls() throws Exception {
+    // use a different factory than other tests; only allow file: URLs
+    ConfigurationCopy acuConf = new ConfigurationCopy(
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm(),
+            ALLOWED_URLS_PATTERN, "file:.*"));
+    var factory = new LocalCachingContextClassLoaderFactory();
+    factory.init(() -> new ConfigurationImpl(acuConf));
+
+    // case 1: all URLs pass (normal case, covered by other tests)
+
+    // case 2: context definition URL fails to match the pattern
+    var ex = assertThrows(ContextClassLoaderException.class,
+        () -> factory.getClassLoader(hdfsAllContext.toExternalForm()));
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+    assertTrue(ex.getCause().getMessage().contains("Context definition location (hdfs:"));
+
+    // case 3a: context definition URL matches, but resource URL should fail to match the pattern,
+    // but it works anyway, because the resources were downloaded already by a different instance
+    // (in this case, by a less restrictive FACTORY instance) and no new connection is made
+    FACTORY.getClassLoader(hdfsAllContext.toExternalForm());
+    factory.getClassLoader(localAllContext.toExternalForm()); // same resources
+
+    // case 3b: context definition URL matches, but resource URL fails to match the pattern
+    // in this case, we use a new context definition, with a resource that doesn't exist locally
+    var newResources = new LinkedHashSet<Resource>();
+    var badUrl = "http://localhost/some/path";
+    newResources.add(new Resource(new URL(badUrl), "MD5", BAD_MD5));
+    var context2 = new ContextDefinition(MONITOR_INTERVAL_SECS, newResources);
+    var disallowedContext = tempDir.resolve("context-with-disallowed-resource-url.json");
+    Files.writeString(disallowedContext, context2.toJson(), StandardOpenOption.CREATE,
+        StandardOpenOption.TRUNCATE_EXISTING);
+    ex = assertThrows(ContextClassLoaderException.class,
+        () -> factory.getClassLoader(disallowedContext.toUri().toURL().toExternalForm()));
+    assertTrue(ex.getCause() instanceof IllegalStateException);
+    assertTrue(ex.getCause().getCause() instanceof ExecutionException);
+    assertTrue(ex.getCause().getCause().getCause() instanceof IllegalArgumentException);
+    assertTrue(ex.getCause().getCause().getCause().getMessage().contains(
+        "Resource location (" + badUrl + ")"), ex.getCause().getCause().getCause()::getMessage);
   }
 
   @Test
@@ -336,7 +379,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
         ex.getCause().getCause().getCause()::getMessage);
     assertTrue(
         ex.getCause().getCause().getCause().getMessage()
-            .endsWith("TestA.jar does not match checksum in context definition 1234"),
+            .endsWith("TestA.jar does not match checksum in context definition " + BAD_MD5),
         ex.getCause().getCause().getCause()::getMessage);
   }
 
@@ -609,17 +652,17 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classC);
     testClassLoads(cl, classD);
 
-    final List<URL> masterList = new ArrayList<>();
-    masterList.add(jarAOrigLocation);
-    masterList.add(jarBOrigLocation);
-    masterList.add(jarCOrigLocation);
-    masterList.add(jarDOrigLocation);
+    final List<URL> allList = new ArrayList<>();
+    allList.add(jarAOrigLocation);
+    allList.add(jarBOrigLocation);
+    allList.add(jarCOrigLocation);
+    allList.add(jarDOrigLocation);
 
-    List<URL> priorList = masterList;
+    List<URL> priorList = allList;
     ClassLoader priorCL = cl;
 
     for (int i = 0; i < 20; i++) {
-      final List<URL> updatedList = new ArrayList<>(masterList);
+      final List<URL> updatedList = new ArrayList<>(allList);
       Collections.shuffle(updatedList);
       final URL removed = updatedList.remove(0);
 
@@ -669,20 +712,12 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
   @Test
   public void testGracePeriod() throws Exception {
-    final LocalCachingContextClassLoaderFactory localFactory =
-        new LocalCachingContextClassLoaderFactory();
-
-    String baseCacheDir = tempDir.resolve("base").toUri().toString();
-    ConfigurationCopy acuConf = new ConfigurationCopy(
-        Map.of(CACHE_DIR_PROPERTY, baseCacheDir, UPDATE_FAILURE_GRACE_PERIOD_MINS, "1"));
-    localFactory.init(() -> new ConfigurationImpl(acuConf));
-
     final var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     final var defFilePath =
         createContextDefinitionFile(fs, "UpdateNonExistentResource.json", def.toJson());
     final URL updateDefUrl = new URL(fs.getUri().toString() + defFilePath.toUri().toString());
 
-    final ClassLoader cl = localFactory.getClassLoader(updateDefUrl.toString());
+    final ClassLoader cl = FACTORY.getClassLoader(updateDefUrl.toString());
 
     testClassLoads(cl, classA);
     testClassFailsToLoad(cl, classB);
@@ -708,7 +743,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
 
-    final ClassLoader cl2 = localFactory.getClassLoader(updateDefUrl.toString());
+    final ClassLoader cl2 = FACTORY.getClassLoader(updateDefUrl.toString());
 
     // validate that the classloader has not updated
     assertEquals(cl, cl2);
@@ -721,7 +756,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     Thread.sleep(120_000);
 
     var ex = assertThrows(ContextClassLoaderException.class,
-        () -> localFactory.getClassLoader(updateDefUrl.toString()));
+        () -> FACTORY.getClassLoader(updateDefUrl.toString()));
     boolean foundExpectedException = false;
     var cause = ex.getCause();
     do {

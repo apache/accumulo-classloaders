@@ -111,8 +111,8 @@ exist in the de-duplicating cache).
 ## Local Storage Cache
 
 The local storage cache location is configured by the user by setting the
-Accumulo property named `general.custom.classloader.lcc.cache.dir` to a
-directory on the local filesystem. This location may be specified as an
+required Accumulo property named `general.custom.classloader.lcc.cache.dir` to
+a directory on the local filesystem. This location may be specified as an
 absolute path or as a URL representing an absolute path with the `file` scheme.
 
 The selected location should be a persistent location with plenty of space to
@@ -130,6 +130,29 @@ unexpected behavior to classloaders still using the file.
 * Do **NOT** use a temporary directory for the local storage cache location.
 * The local storage cache location **MUST** use a filesystem that supports
   atomic moves.
+
+## Security
+
+The Accumulo property `general.custom.classloader.lcc.allowed.urls.pattern` is
+another required parameter. It is used to limit the allowed URLs that can be
+fetched when downloading context definitions or context resources. Since the
+process using this factory will be using its own permissions to fetch
+resources, and placing a copy of those resources in a local directory where
+others may access them, that presents presents a potential file disclosure
+security risk. This property allows a system administrator to mitigate that
+risk by restricting access to only approved URLs. (e.g. to exclude non-approved
+locations like `file:/path/to/accumulo.properties` or
+`hdfs://host/path/to/accumulo/rfile.rf`).
+
+An example value for this property might look like:
+`https://example.com/path/to/contexts/.*` or
+`(file:/etc|hdfs://example[.]com:9000)/path/to/contexts/.*`
+
+Note: this property affects all URLs fetched by this factory, including context
+definition URLs and any resource URLs defined inside any fetched context
+definition. It should be updated by a system maintainer if any new context
+definitions have need to use new locations. It may be updated on a running
+system, and will take effect after approximately a minute.
 
 ## Creating a ContextDefinition file
 
@@ -224,6 +247,7 @@ To use this with Accumulo:
 1. Set the following Accumulo properties:
    * `general.context.class.loader.factory=org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory`
    * `general.custom.classloader.lcc.cache.dir=file://path/to/some/directory`
+   * `general.custom.classloader.lcc.allowed.urls.pattern=someRegexPatternForAllowedUrls`
 2. Set the following table property to link to a context definition file. For example:
    * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/definition.json`
 

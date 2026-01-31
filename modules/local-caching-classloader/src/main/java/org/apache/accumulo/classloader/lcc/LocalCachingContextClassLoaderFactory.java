@@ -37,7 +37,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 import javax.management.InstanceAlreadyExistsException;
 import javax.management.MBeanRegistrationException;
@@ -59,6 +61,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Suppliers;
 
 /**
  * A ContextClassLoaderFactory implementation that creates and maintains a ClassLoader for a context
@@ -77,7 +80,8 @@ import com.google.common.base.Stopwatch;
  * resource URL and caches it in a directory on the local filesystem. This class uses the value of
  * the property {@link #CACHE_DIR_PROPERTY} passed via {@link #init(ContextClassLoaderEnvironment)}
  * as the root directory and creates a sub-directory for context definition files, and another for
- * resource files. All cached files have a name that includes their checksum.
+ * resource files. All cached files have a name that includes their checksum. The required property,
+ * {@link #ALLOWED_URLS_PATTERN}, is used to specify a pattern for allowed URLs to be fetched.
  * <p>
  * An in-progress signal file is used for each resource file while it is being downloaded, to allow
  * multiple processes or threads to try to avoid redundant downloads. Atomic filesystem moves are
@@ -93,6 +97,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   public static final String UPDATE_FAILURE_GRACE_PERIOD_MINS =
       "general.custom.classloader.lcc.update.grace.minutes";
+
+  public static final String ALLOWED_URLS_PATTERN =
+      "general.custom.classloader.lcc.allowed.urls.pattern";
 
   private static final Logger LOG =
       LoggerFactory.getLogger(LocalCachingContextClassLoaderFactory.class);
@@ -113,6 +120,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   private final Map<String,Stopwatch> classloaderFailures = new HashMap<>();
   private volatile Duration updateFailureGracePeriodMins;
+
+  // this is a BiConsumer so we can pass a type in the String
+  private volatile BiConsumer<String,URL> allowedUrlChecker;
 
   /**
    * Schedule a task to execute at {@code interval} seconds to update the LocalCachingContext if the
@@ -144,6 +154,26 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     String graceProp = env.getConfiguration().get(UPDATE_FAILURE_GRACE_PERIOD_MINS);
     long graceMins = graceProp == null ? 0 : Long.parseLong(graceProp);
     updateFailureGracePeriodMins = Duration.ofMinutes(graceMins);
+    // limit the frequency at which we check the config and re-compile the pattern
+    Supplier<Pattern> allowedUrlsPattern = Suppliers.memoizeWithExpiration(
+        () -> Pattern.compile(requireNonNull(env.getConfiguration().get(ALLOWED_URLS_PATTERN),
+            "Property " + ALLOWED_URLS_PATTERN + " not set, no URLs are allowed")),
+        Duration.ofMinutes(1));
+    allowedUrlChecker = (locationType, url) -> {
+      var p = allowedUrlsPattern.get();
+      Preconditions.checkArgument(p.matcher(url.toExternalForm()).matches(),
+          "%s location (%s) not allowed by pattern (%s)", locationType, url.toExternalForm(),
+          p.pattern());
+    };
+    try {
+      // check the allowed URLs pattern, getting it ready for first use, and warning if it is bad
+      allowedUrlsPattern.get();
+    } catch (RuntimeException npe) {
+      LOG.warn(
+          "Property {} is not set or contains an invalid pattern ()."
+              + " No ClassLoader instances will be created until it is set.",
+          ALLOWED_URLS_PATTERN, env.getConfiguration().get(ALLOWED_URLS_PATTERN), npe);
+    }
     final Path baseCacheDir;
     if (value.startsWith("file:")) {
       try {
@@ -159,7 +189,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           "Base directory is neither a file URL nor an absolute file path: " + value);
     }
     try {
-      localStore.set(new LocalStore(baseCacheDir));
+      localStore.set(new LocalStore(baseCacheDir, allowedUrlChecker));
     } catch (IOException e) {
       throw new UncheckedIOException("Unable to create the local storage area at " + baseCacheDir,
           e);
@@ -225,9 +255,10 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     return computedDefinition;
   }
 
-  private static ContextDefinition getDefinition(String contextLocation) throws IOException {
+  private ContextDefinition getDefinition(String contextLocation) throws IOException {
     LOG.trace("Retrieving context definition file from {}", contextLocation);
     URL url = new URL(contextLocation);
+    allowedUrlChecker.accept("Context definition", url);
     return ContextDefinition.fromRemoteURL(url);
   }
 
