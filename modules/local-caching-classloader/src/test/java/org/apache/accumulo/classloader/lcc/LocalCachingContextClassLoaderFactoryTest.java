@@ -48,6 +48,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.lcc.TestUtils.TestClassInfo;
@@ -214,6 +215,25 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertTrue(ex.getCause().getCause().getCause() instanceof IllegalArgumentException);
     assertTrue(ex.getCause().getCause().getCause().getMessage().contains(
         "Resource location (" + badUrl + ")"), ex.getCause().getCause().getCause()::getMessage);
+
+    // case 4: invalid regex for allowed url
+    ConfigurationCopy acuConf2 = new ConfigurationCopy(
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm(),
+            ALLOWED_URLS_PATTERN, "file:[a-z.*"));
+    var factory2 = new LocalCachingContextClassLoaderFactory();
+    factory2.init(() -> new ConfigurationImpl(acuConf2));
+    ex = assertThrows(ContextClassLoaderException.class,
+        () -> factory2.getClassLoader(hdfsAllContext.toExternalForm()));
+    assertEquals(PatternSyntaxException.class, ex.getCause().getClass());
+
+    // case 5: no allowed pattern url is set
+    ConfigurationCopy acuConf3 = new ConfigurationCopy(
+        Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm()));
+    var factory3 = new LocalCachingContextClassLoaderFactory();
+    factory3.init(() -> new ConfigurationImpl(acuConf3));
+    ex = assertThrows(ContextClassLoaderException.class,
+        () -> factory3.getClassLoader(hdfsAllContext.toExternalForm()));
+    assertTrue(ex.getMessage().contains(ALLOWED_URLS_PATTERN + " not set"), ex::getMessage);
   }
 
   @Test
