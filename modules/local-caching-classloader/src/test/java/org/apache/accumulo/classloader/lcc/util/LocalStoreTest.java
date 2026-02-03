@@ -28,11 +28,13 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -232,8 +234,8 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoader() throws Exception {
-    var urls = new LocalStore(baseCacheDir, ALLOW_ALL_URLS).storeContextResources(def);
-    var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
+    var params = new LocalStore(baseCacheDir, ALLOW_ALL_URLS).storeContextResources(def);
+    var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, params);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -243,8 +245,8 @@ public class LocalStoreTest {
   @Test
   public void testClassLoaderUpdate() throws Exception {
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
-    var urls = localStore.storeContextResources(def);
-    final var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
+    var params = localStore.storeContextResources(def);
+    final var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, params);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -263,7 +265,7 @@ public class LocalStoreTest {
         TestUtils.computeResourceChecksum("SHA-512", jarDOrigLocation)));
 
     var updatedDef = new ContextDefinition(MONITOR_INTERVAL_SECS, updatedResources);
-    urls = localStore.storeContextResources(updatedDef);
+    params = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(
@@ -278,7 +280,7 @@ public class LocalStoreTest {
     assertTrue(Files
         .exists(baseCacheDir.resolve("resources").resolve(localResourceName(removedResource))));
 
-    final var updatedContextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
+    final var updatedContextClassLoader = LccUtils.createClassLoader(mockCacheKey, params);
 
     assertNotEquals(contextClassLoader, updatedContextClassLoader);
     testClassLoads(updatedContextClassLoader, classA);
@@ -287,4 +289,38 @@ public class LocalStoreTest {
     testClassLoads(updatedContextClassLoader, classD);
   }
 
+  @Test
+  public void testClassLoaderDirCleanup() throws Exception {
+    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
+    assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+    var params = localStore.storeContextResources(def);
+    assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+
+    final var endBackgroundThread = new CountDownLatch(1);
+    var createdClassLoader = new CountDownLatch(1);
+    Thread t = new Thread(() -> {
+      final var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, params);
+      createdClassLoader.countDown();
+      try {
+        testClassLoads(contextClassLoader, classA);
+        endBackgroundThread.await();
+      } catch (Exception e) {
+        fail(e);
+      }
+      // hold a strong reference in the background thread long enough to prevent cleanup
+      assertNotNull(contextClassLoader);
+    });
+    t.start();
+    createdClassLoader.await();
+
+    assertEquals(1, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+
+    endBackgroundThread.countDown();
+
+    // wait for classloader to be garbage collected and its cleaner to run
+    while (Files.list(localStore.workingDir()).filter(Files::isDirectory).count() != 0) {
+      System.gc();
+      Thread.sleep(50);
+    }
+  }
 }
