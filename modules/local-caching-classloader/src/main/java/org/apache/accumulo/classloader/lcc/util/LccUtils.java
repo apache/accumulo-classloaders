@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
@@ -32,6 +33,7 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
@@ -75,13 +77,26 @@ public class LccUtils {
     URL[] hardLinksAsURLs = new URL[params.paths.size()];
     int i = 0;
     for (Path p : params.paths) {
+      boolean reFetched;
+      Path hardLink = null;
+      do {
+        reFetched = false;
+        try {
+          hardLink = Files.createLink(hardLinkDir.resolve(p.getFileName()), p);
+        } catch (NoSuchFileException e) {
+          LOG.warn(
+              "Missing file {} while creating a hard link in {}; attempting re-download of context resources",
+              p, hardLinkDir, e);
+          params.redownloader.accept(cacheKey.getContextDefinition());
+          reFetched = true;
+        } catch (IOException e) {
+          throw new UncheckedIOException(e);
+        }
+      } while (reFetched);
       try {
-        var hardLink = Files.createLink(hardLinkDir.resolve(p.getFileName()), p);
         hardLinksAsURLs[i++] = hardLink.toUri().toURL();
-      } catch (NoSuchFileException e) {
-        throw new UncheckedIOException("File was found deleted from " + p
-            + " while attempting to create a hard link in " + hardLinkDir, e);
-      } catch (IOException e) {
+      } catch (MalformedURLException e) {
+        // not really possible with file-based URLs
         throw new UncheckedIOException(e);
       }
     }
@@ -109,10 +124,13 @@ public class LccUtils {
   public static class URLClassLoaderParams {
     private final Set<Path> paths;
     private final Function<String,Path> tempDirCreator;
+    private final Consumer<ContextDefinition> redownloader;
 
-    public URLClassLoaderParams(LinkedHashSet<Path> paths, Function<String,Path> tempDirCreator) {
+    public URLClassLoaderParams(LinkedHashSet<Path> paths, Function<String,Path> tempDirCreator,
+        Consumer<ContextDefinition> redownloader) {
       this.paths = Collections.unmodifiableSet(paths);
       this.tempDirCreator = tempDirCreator;
+      this.redownloader = redownloader;
     }
   }
 

@@ -227,13 +227,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     }
     final URLClassLoader classloader =
         classloaders.computeIfAbsent(new ContextCacheKey(contextLocation, computedDefinition),
-            (Supplier<URLClassLoaderParams>) () -> {
-              try {
-                return localStore.get().storeContextResources(computedDefinition);
-              } catch (IOException e) {
-                throw new UncheckedIOException(e);
-              }
-            });
+            (Supplier<URLClassLoaderParams>) () -> localStore.get()
+                .storeContextResources(computedDefinition));
     resultHolder.set(classloader);
     return computedDefinition;
   }

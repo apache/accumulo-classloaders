@@ -156,8 +156,7 @@ public final class LocalStore {
    * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
    * resources directory.
    */
-  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
-      throws IOException {
+  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition) {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
     final LinkedHashSet<Path> localFiles = new LinkedHashSet<>();
@@ -180,11 +179,15 @@ public final class LocalStore {
         successful = localFiles.size() == contextDefinition.getResources().size();
       }
 
-    } catch (IOException | RuntimeException e) {
+    } catch (IOException e) {
+      LOG.error("Error storing resources for context {}", destinationName, e);
+      throw new UncheckedIOException(e);
+    } catch (RuntimeException e) {
       LOG.error("Error storing resources for context {}", destinationName, e);
       throw e;
     }
-    return new URLClassLoaderParams(localFiles, this::createTempDirectory);
+    return new URLClassLoaderParams(localFiles, this::createTempDirectory,
+        this::storeContextResources);
   }
 
   private void storeContextDefinition(final ContextDefinition contextDefinition,
