@@ -71,7 +71,7 @@ public class LccUtils {
   public static URLClassLoader createClassLoader(ContextCacheKey cacheKey,
       URLClassLoaderParams params) {
     Path hardLinkDir = params.tempDirCreator
-        .apply("context-" + checksumForFileName(cacheKey.getContextDefinition()) + "_");
+        .apply("context-" + checksumForFileName(cacheKey.getContextDefinition()));
     URL[] hardLinksAsURLs = new URL[params.paths.size()];
     int i = 0;
     for (Path p : params.paths) {
