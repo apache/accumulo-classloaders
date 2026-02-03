@@ -114,10 +114,16 @@ The local storage cache location is configured by the user by setting the
 required Accumulo property named `general.custom.classloader.lcc.cache.dir` to
 a directory on the local filesystem. This location may be specified as an
 absolute path or as a URL representing an absolute path with the `file` scheme.
+The location, and its directory structure will be created on first use, if it
+does not already exist. This will cause an error if the application does not
+have permission to create the directories.
 
 The selected location should be a persistent location with plenty of space to
 store downloaded resources (usually jar files), and should be writable by all
-the processes which use this factory to share the same resources.
+the processes which use this factory to share the same resources. You may wish
+to pre-create the base directory specified by the property, and the three
+sub-directories, `contexts`, `resources`, and `working`, to set the appropriate
+permissions and ACLs.
 
 Resources downloaded to this cache may be used by multiple contexts, threads,
 and processes, so be very careful when removing old contents to ensure that
@@ -129,7 +135,7 @@ unexpected behavior to classloaders still using the file.
 
 * Do **NOT** use a temporary directory for the local storage cache location.
 * The local storage cache location **MUST** use a filesystem that supports
-  atomic moves.
+  atomic moves and hard links.
 
 ## Security
 
@@ -217,28 +223,56 @@ constructed at that time.
 ## Cleanup
 
 Because the cache directory is shared among multiple processes, and one process
-can't know what the other processes are doing, this class cannot clean up the
-shared cache directory of unused resources. It is left to the user to remove
-unused files from the cache. While the context definition JSON files are always
-safe to delete, it is not recommended to do so for any that are still in use,
-because they can be useful for troubleshooting.
+can't know what the other processes are doing, this class cannot always clean
+up the shared cache directory of unused resources automatically. It is left to
+the user to remove unused files from the cache. The local storage is organized
+into several directories, which are explained here to aid in understanding when
+unused files can be safely removed.
 
-To aid in this task, a JMX MXBean has been created to expose the files that are
-still referenced by the classloaders that have been created by this factory and
-currently still exist in the system. For an example of how to use this MXBean,
-please see the test method
-`MiniAccumuloClusterClassLoaderFactoryTest.getReferencedFiles`. This method
-attaches to the local Accumulo JVM processes to get the set of referenced
-files. It should be safe to delete files that are located in the local cache
-directory (set by property `general.custom.classloader.lcc.cache.dir`) that are
-NOT in the set of referenced files, so long as no new classloaders have been
-created that reference the files being deleted.
+### Contexts
 
-**IMPORTANT**: as mentioned earlier, it is not safe to delete resource files
-that are still referenced by any `ClassLoader` instances. Each `ClassLoader`
-instance assumes that the locally cached resources exist and can be read. They
-will not attempt to download any files.  Downloading files only occurs when
-`ClassLoader` instances are initially created for a context definition.
+The `contexts` directory contents are always safe to delete. These contain only
+copies of the JSON files from which a ClassLoader was constructed. It is never
+used by this factory, and copies are placed here solely to provide more
+information to a user. Because these files are small text files and contain
+useful information, it is generally not recommended to delete these, because it
+may impair troubleshooting.
+
+### Resources
+
+The `resources` directory contains a shared pool of remote resource files that
+have been fetched for all contexts (typically, `.jar` files). The files in this
+directory are generally safe to delete any time. However, some considerations
+should be made:
+
+1. Deleting resources that are still needed will cause them to be downloaded
+   again the next time they are needed, which may cause an increase in network
+   activity.
+2. If any of the removed files had hard-linked "copies" in the `working`
+   directory, the newly downloaded copy will increase the total amount of
+   storage (whereas the original would have shared storage space with the
+   hard-linked "copies").
+
+### Working
+
+The `working` directory contains temporary files for files currently being
+downloaded, and temporary directories containing hard-linked "copies" of files
+from the `resources` directory. These files and directories contain the process
+ID (PID) for the process that created them. Normally, these files are
+automatically cleaned up, but if a process is killed before that can happen,
+they may be left behind. The files with the PID in them can safely be removed,
+so long as the process that created them has been terminated.
+
+This directory also contains files that do not contain a PID. These files end
+with the `.downloading` suffix and exist to signal that a resource file is
+currently being downloaded by a process. These files are very small, containing
+only the PID of the most recent process to attempt downloading the file. They
+are removed when a download completes, or whenever the next time the
+corresponding resource file is used, if it has already been successfully
+downloaded by a previously failed process. Removing them won't break the
+application in any way, but doing so may result in a redundant download, which
+can result in increased network activity or storage space (see the previous
+section for considerations regarding the `resources` directory).
 
 ## Accumulo Configuration
 

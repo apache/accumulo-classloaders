@@ -22,15 +22,12 @@ import static java.util.Objects.requireNonNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.lang.management.ManagementFactory;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -41,18 +38,12 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-import javax.management.InstanceAlreadyExistsException;
-import javax.management.MBeanRegistrationException;
-import javax.management.MBeanServer;
-import javax.management.MalformedObjectNameException;
-import javax.management.NotCompliantMBeanException;
-
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoaders;
-import org.apache.accumulo.classloader.lcc.jmx.ContextClassLoadersMXBean;
+import org.apache.accumulo.classloader.lcc.util.ContextCacheKey;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
+import org.apache.accumulo.classloader.lcc.util.LccUtils.URLClassLoaderParams;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
@@ -113,8 +104,9 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
-  private static final DeduplicationCache<String,URL[],URLClassLoader> classloaders =
-      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
+  private final DeduplicationCache<ContextCacheKey,URLClassLoaderParams,
+      URLClassLoader> classloaders =
+          new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
@@ -194,16 +186,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
       throw new UncheckedIOException("Unable to create the local storage area at " + baseCacheDir,
           e);
     }
-    try {
-      MBeanServer mbs = ManagementFactory.getPlatformMBeanServer();
-      mbs.registerMBean(new ContextClassLoaders(), ContextClassLoadersMXBean.getObjectName());
-    } catch (MalformedObjectNameException | MBeanRegistrationException
-        | NotCompliantMBeanException e) {
-      throw new IllegalStateException("Error registering MBean", e);
-    } catch (InstanceAlreadyExistsException e) {
-      // instance was re-init'd. This is likely to happen during tests
-      // can ignore as no issue here
-    }
   }
 
   @Override
@@ -243,14 +225,15 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader = classloaders
-        .computeIfAbsent(newCacheKey(contextLocation, computedDefinition), (Supplier<URL[]>) () -> {
-          try {
-            return localStore.get().storeContextResources(computedDefinition);
-          } catch (IOException e) {
-            throw new UncheckedIOException(e);
-          }
-        });
+    final URLClassLoader classloader =
+        classloaders.computeIfAbsent(new ContextCacheKey(contextLocation, computedDefinition),
+            (Supplier<URLClassLoaderParams>) () -> {
+              try {
+                return localStore.get().storeContextResources(computedDefinition);
+              } catch (IOException e) {
+                throw new UncheckedIOException(e);
+              }
+            });
     resultHolder.set(classloader);
     return computedDefinition;
   }
@@ -260,18 +243,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     URL url = new URL(contextLocation);
     allowedUrlChecker.accept("Context definition", url);
     return ContextDefinition.fromRemoteURL(url);
-  }
-
-  private static String newCacheKey(String contextLocation, ContextDefinition contextDefinition) {
-    // the location is between the first left parenthesis and the last right parenthesis
-    return contextDefinition.getChecksumAlgorithm() + " (" + contextLocation + ") = "
-        + contextDefinition.getChecksum();
-  }
-
-  private static boolean cacheKeyMatchesContextLocation(String cacheKey, String contextLocation) {
-    // extract the location from the parentheses in the cacheKey
-    return cacheKey.substring(cacheKey.indexOf('(') + 1, cacheKey.lastIndexOf(')'))
-        .equals(contextLocation);
   }
 
   private void checkMonitoredLocation(String contextLocation, long interval) {
@@ -286,8 +257,7 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
           }
           // check for any classloaders still in the cache that were created for a context
           // definition found at this URL
-          if (!classloaders
-              .anyMatch(cacheKey -> cacheKeyMatchesContextLocation(cacheKey, contextLocation))) {
+          if (!classloaders.anyMatch(cacheKey -> cacheKey.getLocation().equals(contextLocation))) {
             LOG.debug("ClassLoader for context {} not present, no longer monitoring for changes",
                 contextLocation);
             return null;
@@ -356,18 +326,6 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
         return v;
       });
     }
-  }
-
-  public static Map<String,List<String>> getReferencedFiles() {
-    final Map<String,List<String>> referencedContexts = new HashMap<>();
-    classloaders.forEach((cacheKey, cl) -> {
-      List<String> files = new ArrayList<>();
-      for (URL u : cl.getURLs()) {
-        files.add(u.toString());
-      }
-      referencedContexts.put(cacheKey, files);
-    });
-    return referencedContexts;
   }
 
 }

@@ -22,9 +22,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 import static java.nio.file.StandardOpenOption.CREATE_NEW;
 import static java.nio.file.StandardOpenOption.SYNC;
-import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
-import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Objects.requireNonNull;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.checksumForFileName;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.getDigester;
 
 import java.io.BufferedInputStream;
@@ -32,7 +31,6 @@ import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileAlreadyExistsException;
@@ -40,8 +38,6 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
-import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +47,7 @@ import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
+import org.apache.accumulo.classloader.lcc.util.LccUtils.URLClassLoaderParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,15 +89,16 @@ public final class LocalStore {
 
   private final Path contextsDir;
   private final Path resourcesDir;
+  private final Path workingDir;
   private final BiConsumer<String,URL> allowedUrlChecker;
 
   public LocalStore(final Path baseDir, final BiConsumer<String,URL> allowedUrlChecker)
       throws IOException {
-    this.contextsDir = requireNonNull(baseDir).toAbsolutePath().resolve("contexts");
-    this.resourcesDir = baseDir.resolve("resources");
+    requireNonNull(baseDir);
     this.allowedUrlChecker = requireNonNull(allowedUrlChecker);
-    Files.createDirectories(contextsDir);
-    Files.createDirectories(resourcesDir);
+    this.contextsDir = Files.createDirectories(baseDir.toAbsolutePath().resolve("contexts"));
+    this.resourcesDir = Files.createDirectories(baseDir.resolve("resources"));
+    this.workingDir = Files.createDirectories(baseDir.resolve("working"));
   }
 
   Path contextsDir() {
@@ -109,6 +107,10 @@ public final class LocalStore {
 
   Path resourcesDir() {
     return resourcesDir;
+  }
+
+  Path workingDir() {
+    return workingDir;
   }
 
   // pattern to match regular files that have at least one non-dot character preceding a dot and a
@@ -120,7 +122,7 @@ public final class LocalStore {
   public static String localResourceName(Resource r) {
     requireNonNull(r);
     String remoteFileName = r.getFileName();
-    String checksum = checksumForFileName(r.getAlgorithm(), r.getChecksum());
+    String checksum = checksumForFileName(r);
     var matcher = fileNamesWithExtensionPattern.matcher(remoteFileName);
     if (matcher.matches()) {
       return String.format("%s-%s.%s", matcher.group(1), checksum, matcher.group(2));
@@ -128,24 +130,38 @@ public final class LocalStore {
     return String.format("%s-%s", remoteFileName, checksum);
   }
 
-  private static String tempName(String baseName) {
-    return "." + requireNonNull(baseName) + "_PID" + PID + "_" + UUID.randomUUID() + ".tmp";
+  // creates a new empty file with a unique name, for use as a temporary file
+  @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
+      justification = "the working directory is intentionally controlled by the user config")
+  private Path createTempFile(String baseName) {
+    try {
+      return Files.createTempFile(workingDir, "PID_" + PID + "_" + baseName + "_", ".tmp");
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
-  static String checksumForFileName(String algorithm, String checksum) {
-    return algorithm.replace('/', '_') + "-" + checksum;
+  // creates a new empty directory with a unique name, for use as a temporary directory
+  @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
+      justification = "the working directory is intentionally controlled by the user config")
+  public Path createTempDirectory(String baseName) {
+    try {
+      return Files.createTempDirectory(workingDir, "PID_" + PID + "_" + baseName + "_");
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   /**
    * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
    * resources directory.
    */
-  public URL[] storeContextResources(final ContextDefinition contextDefinition) throws IOException {
+  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition)
+      throws IOException {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
-    final Set<Path> localFiles = new LinkedHashSet<>();
-    final String destinationName = checksumForFileName(contextDefinition.getChecksumAlgorithm(),
-        contextDefinition.getChecksum()) + ".json";
+    final LinkedHashSet<Path> localFiles = new LinkedHashSet<>();
+    final String destinationName = checksumForFileName(contextDefinition) + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;
@@ -168,14 +184,7 @@ public final class LocalStore {
       LOG.error("Error storing resources for context {}", destinationName, e);
       throw e;
     }
-    return localFiles.stream().map(p -> {
-      try {
-        return p.toUri().toURL();
-      } catch (MalformedURLException e) {
-        // this shouldn't happen since these are local file paths
-        throw new UncheckedIOException(e);
-      }
-    }).toArray(URL[]::new);
+    return new URLClassLoaderParams(localFiles, this::createTempDirectory);
   }
 
   private void storeContextDefinition(final ContextDefinition contextDefinition,
@@ -184,11 +193,9 @@ public final class LocalStore {
     if (Files.exists(destinationPath)) {
       return;
     }
-    Path tempPath = contextsDir.resolve(tempName(destinationName));
-    // the temporary file name should be unique for this attempt, but CREATE_NEW is used here, along
-    // with the subsequent ATOMIC_MOVE, to guarantee we don't collide with any other task saving the
-    // same file
-    Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8), CREATE_NEW);
+    // Avoid colliding with other processes by saving to a unique temp name first
+    Path tempPath = createTempFile(destinationName);
+    Files.write(tempPath, contextDefinition.toJson().getBytes(UTF_8));
     Files.move(tempPath, destinationPath, ATOMIC_MOVE);
   }
 
@@ -208,8 +215,7 @@ public final class LocalStore {
     final URL url = resource.getLocation();
     final String baseName = localResourceName(resource);
     final Path destinationPath = resourcesDir.resolve(baseName);
-    final Path tempPath = resourcesDir.resolve(tempName(baseName));
-    final Path downloadingProgressPath = resourcesDir.resolve("." + baseName + ".downloading");
+    final Path downloadingProgressPath = workingDir.resolve(baseName + ".downloading");
 
     if (Files.exists(destinationPath)) {
       LOG.trace("Resource {} is already cached at {}", url, destinationPath);
@@ -242,6 +248,7 @@ public final class LocalStore {
       return null;
     }
 
+    final Path tempPath = createTempFile(baseName);
     var task = new FutureTask<Void>(() -> downloadFile(tempPath, resource), null);
     var t = new Thread(task);
     t.setDaemon(true);
@@ -253,7 +260,7 @@ public final class LocalStore {
     try {
       while (!task.isDone()) {
         try {
-          Files.write(downloadingProgressPath, PID.getBytes(UTF_8), TRUNCATE_EXISTING);
+          Files.write(downloadingProgressPath, PID.getBytes(UTF_8));
         } catch (IOException e) {
           LOG.warn(
               "Error writing progress file {}. Other processes may attempt to download the same file concurrently.",
@@ -308,12 +315,10 @@ public final class LocalStore {
     URL url = resource.getLocation();
     allowedUrlChecker.accept("Resource", url);
 
-    // CREATE_NEW ensures the temporary file name is unique for this attempt
     // SYNC ensures file integrity on each write, in case of system failure. Buffering minimizes
     // system calls te read/write data which minimizes the number of syncs.
     try (var in = new BufferedInputStream(url.openStream(), DL_BUFF_SIZE);
-        var out = new BufferedOutputStream(Files.newOutputStream(tempPath, CREATE_NEW, WRITE, SYNC),
-            DL_BUFF_SIZE)) {
+        var out = new BufferedOutputStream(Files.newOutputStream(tempPath, SYNC), DL_BUFF_SIZE)) {
       in.transferTo(out);
     } catch (IOException e) {
       throw new UncheckedIOException(e);

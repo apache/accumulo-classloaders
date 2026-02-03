@@ -20,6 +20,7 @@ package org.apache.accumulo.classloader.lcc.util;
 
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
+import static org.apache.accumulo.classloader.lcc.util.LccUtils.checksumForFileName;
 import static org.apache.accumulo.classloader.lcc.util.LocalStore.localResourceName;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,11 +29,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.io.File;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
@@ -59,6 +58,8 @@ public class LocalStoreTest {
   private static final BiConsumer<String,URL> ALLOW_ALL_URLS = (type, url) -> {};
 
   private static final int MONITOR_INTERVAL_SECS = 5;
+  private static final ContextCacheKey mockCacheKey =
+      new ContextCacheKey("loc", new ContextDefinition(1, new LinkedHashSet<>()));
   private static MiniDFSCluster hdfs;
   private static Server jetty;
   private static ContextDefinition def;
@@ -123,11 +124,7 @@ public class LocalStoreTest {
 
   @AfterEach
   public void cleanBaseDir() throws Exception {
-    if (Files.exists(baseCacheDir)) {
-      try (var walker = Files.walk(baseCacheDir)) {
-        walker.map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
-      }
-    }
+    LccUtils.recursiveDelete(baseCacheDir);
   }
 
   @Test
@@ -147,6 +144,7 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir.resolve("resources")));
     assertEquals(baseCacheDir.resolve("contexts"), localStore.contextsDir());
     assertEquals(baseCacheDir.resolve("resources"), localStore.resourcesDir());
+    assertEquals(baseCacheDir.resolve("working"), localStore.workingDir());
   }
 
   @Test
@@ -225,8 +223,8 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(
-        LocalStore.checksumForFileName(def.getChecksumAlgorithm(), def.getChecksum()) + ".json")));
+    assertTrue(
+        Files.exists(baseCacheDir.resolve("contexts").resolve(checksumForFileName(def) + ".json")));
     for (Resource r : def.getResources()) {
       assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
     }
@@ -235,7 +233,7 @@ public class LocalStoreTest {
   @Test
   public void testClassLoader() throws Exception {
     var urls = new LocalStore(baseCacheDir, ALLOW_ALL_URLS).storeContextResources(def);
-    var contextClassLoader = LccUtils.createClassLoader("url", urls);
+    var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -246,7 +244,7 @@ public class LocalStoreTest {
   public void testClassLoaderUpdate() throws Exception {
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     var urls = localStore.storeContextResources(def);
-    final var contextClassLoader = LccUtils.createClassLoader("url", urls);
+    final var contextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
 
     testClassLoads(contextClassLoader, classA);
     testClassLoads(contextClassLoader, classB);
@@ -268,9 +266,8 @@ public class LocalStoreTest {
     urls = localStore.storeContextResources(updatedDef);
 
     // Confirm the 3 jars are cached locally
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts").resolve(
-        LocalStore.checksumForFileName(updatedDef.getChecksumAlgorithm(), updatedDef.getChecksum())
-            + ".json")));
+    assertTrue(Files.exists(
+        baseCacheDir.resolve("contexts").resolve(checksumForFileName(updatedDef) + ".json")));
     for (Resource r : updatedDef.getResources()) {
       assertFalse(r.getFileName().contains("C"));
       assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
@@ -281,7 +278,7 @@ public class LocalStoreTest {
     assertTrue(Files
         .exists(baseCacheDir.resolve("resources").resolve(localResourceName(removedResource))));
 
-    final var updatedContextClassLoader = LccUtils.createClassLoader("url", urls);
+    final var updatedContextClassLoader = LccUtils.createClassLoader(mockCacheKey, urls);
 
     assertNotEquals(contextClassLoader, updatedContextClassLoader);
     testClassLoads(updatedContextClassLoader, classA);
