@@ -32,7 +32,6 @@ import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -186,7 +185,7 @@ public class TestUtils {
   }
 
   public static long getFileSize(Path p) throws IOException {
-    try (InputStream is = Files.newInputStream(p, StandardOpenOption.READ)) {
+    try (InputStream is = Files.newInputStream(p)) {
       return IOUtils.consume(is);
     }
   }

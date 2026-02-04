@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.lcc;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.ALLOWED_URLS_PATTERN;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.CACHE_DIR_PROPERTY;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.UPDATE_FAILURE_GRACE_PERIOD_MINS;
@@ -40,8 +41,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -138,7 +137,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     // Create local context definition in jar C directory
     File localDefFile = jarCParentDirectory.resolve("allContextDefinition.json").toFile();
-    Files.writeString(localDefFile.toPath(), allJarsDefJson, StandardOpenOption.CREATE);
+    Files.writeString(localDefFile.toPath(), allJarsDefJson);
     assertTrue(Files.exists(localDefFile.toPath()));
 
     var hdfsDefFile = new org.apache.hadoop.fs.Path("/allContextDefinition.json");
@@ -206,8 +205,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     newResources.add(new Resource(new URL(badUrl), "MD5", BAD_MD5));
     var context2 = new ContextDefinition(MONITOR_INTERVAL_SECS, newResources);
     var disallowedContext = tempDir.resolve("context-with-disallowed-resource-url.json");
-    Files.writeString(disallowedContext, context2.toJson(), StandardOpenOption.CREATE,
-        StandardOpenOption.TRUNCATE_EXISTING);
+    Files.writeString(disallowedContext, context2.toJson());
     ex = assertThrows(ContextClassLoaderException.class,
         () -> factory.getClassLoader(disallowedContext.toUri().toURL().toExternalForm()));
     assertTrue(ex.getCause() instanceof IllegalStateException);
@@ -325,7 +323,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
-    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
 
     var def = ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
@@ -520,7 +518,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
-    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
     var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
@@ -752,7 +750,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
     assertTrue(!Files.exists(jarACopy));
-    Files.copy(jarAPath, jarACopy, StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
     var def2 = ContextDefinition.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
@@ -810,7 +808,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     assertEquals(2, files.size());
 
     // overwrite one downloaded jar with others content
-    Files.copy(files.get(0), files.get(1), StandardCopyOption.REPLACE_EXISTING);
+    Files.copy(files.get(0), files.get(1), REPLACE_EXISTING);
 
     final var update2 =
         createContextDefinitionFile(fs, "UpdateChangingContextDefinition2.json", def.toJson());

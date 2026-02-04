@@ -110,6 +110,12 @@
       <groupId>org.apache.accumulo</groupId>
       <artifactId>accumulo-test</artifactId>
       <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.apache.accumulo</groupId>
+          <artifactId>accumulo-native</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>

@@ -113,6 +113,7 @@ public class ContextDefinition implements KeywordExecutable {
       justification = "user-supplied URL is the intended functionality")
   public static ContextDefinition create(int monitorIntervalSecs, String algorithm, URL... sources)
       throws IOException {
+    // use a LinkedHashSet to preserve the order of the context resources
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
       try (InputStream is = new BufferedInputStream(u.openStream())) {
