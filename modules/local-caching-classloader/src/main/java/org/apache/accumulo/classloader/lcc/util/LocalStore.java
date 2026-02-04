@@ -43,11 +43,11 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
 import org.apache.accumulo.classloader.lcc.definition.Resource;
-import org.apache.accumulo.classloader.lcc.util.LccUtils.URLClassLoaderParams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,7 +96,7 @@ public final class LocalStore {
       throws IOException {
     requireNonNull(baseDir);
     this.allowedUrlChecker = requireNonNull(allowedUrlChecker);
-    this.contextsDir = Files.createDirectories(baseDir.toAbsolutePath().resolve("contexts"));
+    this.contextsDir = Files.createDirectories(baseDir.resolve("contexts"));
     this.resourcesDir = Files.createDirectories(baseDir.resolve("resources"));
     this.workingDir = Files.createDirectories(baseDir.resolve("working"));
   }
@@ -144,7 +144,7 @@ public final class LocalStore {
   // creates a new empty directory with a unique name, for use as a temporary directory
   @SuppressFBWarnings(value = "PATH_TRAVERSAL_IN",
       justification = "the working directory is intentionally controlled by the user config")
-  public Path createTempDirectory(String baseName) {
+  private Path createTempDirectory(String baseName) {
     try {
       return Files.createTempDirectory(workingDir, "PID_" + PID + "_" + baseName + "_");
     } catch (IOException e) {
@@ -156,7 +156,7 @@ public final class LocalStore {
    * Save the {@link ContextDefinition} to the contexts directory, and all of its resources to the
    * resources directory.
    */
-  public URLClassLoaderParams storeContextResources(final ContextDefinition contextDefinition) {
+  public void storeContextResources(final ContextDefinition contextDefinition) {
     requireNonNull(contextDefinition, "definition must be supplied");
     // use a LinkedHashSet to preserve the order of the context resources
     final LinkedHashSet<Path> localFiles = new LinkedHashSet<>();
@@ -186,8 +186,6 @@ public final class LocalStore {
       LOG.error("Error storing resources for context {}", destinationName, e);
       throw e;
     }
-    return new URLClassLoaderParams(localFiles, this::createTempDirectory,
-        this::storeContextResources);
   }
 
   private void storeContextDefinition(final ContextDefinition contextDefinition,
@@ -352,4 +350,46 @@ public final class LocalStore {
       throw ise;
     }
   }
+
+  Path createWorkingHardLinks(final ContextDefinition contextDefinition, Consumer<Path> forEachLink)
+      throws HardLinkFailedException {
+    Path hardLinkDir = createTempDirectory("context-" + checksumForFileName(contextDefinition));
+    for (Resource r : contextDefinition.getResources()) {
+      String fileName = localResourceName(r);
+      Path p = resourcesDir.resolve(fileName);
+      Path hardLink;
+      try {
+        hardLink = Files.createLink(hardLinkDir.resolve(fileName), p);
+      } catch (NoSuchFileException e) {
+        throw new HardLinkFailedException(hardLinkDir, p, e);
+      } catch (IOException e) {
+        throw new UncheckedIOException(e);
+      }
+      forEachLink.accept(hardLink);
+    }
+    return hardLinkDir;
+  }
+
+  static class HardLinkFailedException extends Exception {
+
+    private static final long serialVersionUID = 1L;
+    private final Path destDir;
+    private Path missingResource;
+
+    public HardLinkFailedException(Path destDir, Path missingResource, NoSuchFileException cause) {
+      super("Creating hard link in directory " + destDir + " failed", cause);
+      this.destDir = destDir;
+      this.missingResource = missingResource;
+    }
+
+    public Path getDestinationDirectory() {
+      return destDir;
+    }
+
+    public Path getMissingResource() {
+      return missingResource;
+    }
+
+  }
+
 }

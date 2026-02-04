@@ -43,7 +43,6 @@ import org.apache.accumulo.classloader.lcc.definition.Resource;
 import org.apache.accumulo.classloader.lcc.util.ContextCacheKey;
 import org.apache.accumulo.classloader.lcc.util.DeduplicationCache;
 import org.apache.accumulo.classloader.lcc.util.LccUtils;
-import org.apache.accumulo.classloader.lcc.util.LccUtils.URLClassLoaderParams;
 import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
@@ -104,9 +103,8 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
 
   // to keep this coherent with the contextDefs, updates to this should be done in the compute
   // method of contextDefs
-  private final DeduplicationCache<ContextCacheKey,URLClassLoaderParams,
-      URLClassLoader> classloaders =
-          new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
+  private final DeduplicationCache<ContextCacheKey,LocalStore,URLClassLoader> classloaders =
+      new DeduplicationCache<>(LccUtils::createClassLoader, Duration.ofHours(24), null);
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
@@ -225,10 +223,12 @@ public class LocalCachingContextClassLoaderFactory implements ContextClassLoader
     } else {
       computedDefinition = previousDefinition;
     }
-    final URLClassLoader classloader =
-        classloaders.computeIfAbsent(new ContextCacheKey(contextLocation, computedDefinition),
-            (Supplier<URLClassLoaderParams>) () -> localStore.get()
-                .storeContextResources(computedDefinition));
+    final URLClassLoader classloader = classloaders.computeIfAbsent(
+        new ContextCacheKey(contextLocation, computedDefinition), (Supplier<LocalStore>) () -> {
+          var s = localStore.get();
+          s.storeContextResources(computedDefinition);
+          return s;
+        });
     resultHolder.set(classloader);
     return computedDefinition;
   }
