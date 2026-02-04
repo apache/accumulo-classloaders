@@ -352,7 +352,9 @@ public final class LocalStore {
       String fileName = localResourceName(r);
       Path p = resourcesDir.resolve(fileName);
       try {
-        Files.createLink(hardLinkDir.resolve(fileName), p);
+        Path hardLink = hardLinkDir.resolve(fileName);
+        LOG.trace("Creating hard link {} for resource {}", hardLink, r.getLocation());
+        Files.createLink(hardLink, p);
       } catch (NoSuchFileException e) {
         throw new HardLinkFailedException(hardLinkDir, p, e);
       } catch (IOException e) {
