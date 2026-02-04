@@ -160,19 +160,19 @@ public final class LocalStore {
     final String destinationName = checksumForFileName(contextDefinition) + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
-      boolean successful = false;
-      while (!successful) {
-        successful = true;
+      boolean waitingOnOtherDownloads;
+      do {
+        waitingOnOtherDownloads = false;
         for (Resource resource : contextDefinition.getResources()) {
           Path path = storeResource(resource);
           if (path == null) {
             LOG.trace("Skipped resource {} while another process or thread is downloading it",
                 resource.getLocation());
-            successful = false;
+            waitingOnOtherDownloads = true;
             continue;
           }
         }
-      }
+      } while (waitingOnOtherDownloads);
     } catch (IOException e) {
       LOG.error("Error storing resources for context {}", destinationName, e);
       throw new UncheckedIOException(e);
