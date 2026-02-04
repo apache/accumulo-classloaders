@@ -214,7 +214,6 @@ public final class LocalStore {
 
     if (Files.exists(destinationPath)) {
       LOG.trace("Resource {} is already cached at {}", url, destinationPath);
-      verifyDownload(resource, destinationPath, null);
       try {
         // clean up any in progress files that may have been left behind by previous failed attempts
         Files.deleteIfExists(downloadingProgressPath);
@@ -348,17 +347,24 @@ public final class LocalStore {
   Path createWorkingHardLinks(final ContextDefinition contextDefinition, Consumer<Path> forEachLink)
       throws HardLinkFailedException {
     Path hardLinkDir = createTempDirectory("context-" + checksumForFileName(contextDefinition));
+    // create all hard links first
     for (Resource r : contextDefinition.getResources()) {
       String fileName = localResourceName(r);
       Path p = resourcesDir.resolve(fileName);
-      Path hardLink;
       try {
-        hardLink = Files.createLink(hardLinkDir.resolve(fileName), p);
+        Files.createLink(hardLinkDir.resolve(fileName), p);
       } catch (NoSuchFileException e) {
         throw new HardLinkFailedException(hardLinkDir, p, e);
       } catch (IOException e) {
         throw new UncheckedIOException(e);
       }
+    }
+    // verify checksums
+    for (Resource r : contextDefinition.getResources()) {
+      String fileName = localResourceName(r);
+      Path hardLink = hardLinkDir.resolve(fileName);
+      LOG.trace("Verifying checksum of hard link {} for resource {}", hardLink, r.getLocation());
+      verifyDownload(r, hardLink, null);
       forEachLink.accept(hardLink);
     }
     return hardLinkDir;

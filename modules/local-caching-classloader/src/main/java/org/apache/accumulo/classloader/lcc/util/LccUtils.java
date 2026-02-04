@@ -71,12 +71,16 @@ public class LccUtils {
     final var hardLinks = new LinkedHashSet<Path>();
     Path hardLinksDir = null;
 
+    var def = cacheKey.getContextDefinition();
+
+    // stage the downloads before attempting hard link creation
+    localStore.storeContextResources(def);
+
     // keep trying to hard-link all the resources if the hard-linking fails
     while (hardLinksDir == null) {
       hardLinks.clear();
       try {
-        hardLinksDir =
-            localStore.createWorkingHardLinks(cacheKey.getContextDefinition(), hardLinks::add);
+        hardLinksDir = localStore.createWorkingHardLinks(def, hardLinks::add);
         LOG.trace("Created hard links at {} for context {}", hardLinksDir, cacheKey);
       } catch (HardLinkFailedException e) {
         var failedHardLinksDir = e.getDestinationDirectory();
@@ -90,7 +94,7 @@ public class LccUtils {
               "Saw exception removing directory {} after hard link creation failure; this should be cleaned up manually",
               failedHardLinksDir, ioe);
         }
-        localStore.storeContextResources(cacheKey.getContextDefinition());
+        localStore.storeContextResources(def);
       }
     }
 
