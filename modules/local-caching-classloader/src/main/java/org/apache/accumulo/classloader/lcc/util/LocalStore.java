@@ -37,7 +37,6 @@ import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
-import java.util.LinkedHashSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -158,27 +157,22 @@ public final class LocalStore {
    */
   public void storeContextResources(final ContextDefinition contextDefinition) {
     requireNonNull(contextDefinition, "definition must be supplied");
-    // use a LinkedHashSet to preserve the order of the context resources
-    final LinkedHashSet<Path> localFiles = new LinkedHashSet<>();
     final String destinationName = checksumForFileName(contextDefinition) + ".json";
     try {
       storeContextDefinition(contextDefinition, destinationName);
       boolean successful = false;
       while (!successful) {
-        localFiles.clear();
+        successful = true;
         for (Resource resource : contextDefinition.getResources()) {
           Path path = storeResource(resource);
           if (path == null) {
             LOG.trace("Skipped resource {} while another process or thread is downloading it",
                 resource.getLocation());
+            successful = false;
             continue;
           }
-          localFiles.add(path);
-          LOG.trace("Added resource {} to classpath", path);
         }
-        successful = localFiles.size() == contextDefinition.getResources().size();
       }
-
     } catch (IOException e) {
       LOG.error("Error storing resources for context {}", destinationName, e);
       throw new UncheckedIOException(e);

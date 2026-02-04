@@ -67,6 +67,7 @@ public class LccUtils {
   @SuppressFBWarnings(value = "DP_CREATE_CLASSLOADER_INSIDE_DO_PRIVILEGED",
       justification = "doPrivileged is deprecated without replacement and removed in newer Java")
   public static URLClassLoader createClassLoader(ContextCacheKey cacheKey, LocalStore localStore) {
+    // use a LinkedHashSet to preserve the order of the context resources
     final var hardLinks = new LinkedHashSet<Path>();
     Path hardLinksDir = null;
 
@@ -95,6 +96,7 @@ public class LccUtils {
 
     URL[] urls = hardLinks.stream().map(p -> {
       try {
+        LOG.trace("Added resource {} to classpath", p);
         return p.toUri().toURL();
       } catch (MalformedURLException e) {
         // shouldn't be possible, since these are file-based URLs
