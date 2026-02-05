@@ -905,7 +905,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
     executor.shutdown();
 
     var workingDir = tempDir.resolve("base").resolve("working").toFile();
-    var workingDirs = workingDir.listFiles().length;
+    var filesList = workingDir.listFiles();
+    var workingDirs = filesList == null ? 0 : filesList.length;
     // check that many hard link directories were created
     assertTrue(workingDirs > 50, () -> "workingDirs:" + workingDirs);
   }
