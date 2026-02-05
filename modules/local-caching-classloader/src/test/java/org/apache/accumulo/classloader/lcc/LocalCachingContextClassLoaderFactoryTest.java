@@ -47,6 +47,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
@@ -57,6 +61,7 @@ import org.apache.accumulo.classloader.lcc.util.LocalStore;
 import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
 import org.apache.accumulo.core.util.ConfigurationImpl;
+import org.apache.accumulo.core.util.Timer;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
@@ -64,7 +69,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonSyntaxException;
 
@@ -73,6 +81,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
   protected static final int MONITOR_INTERVAL_SECS = 5;
   // MD5 sum for "bad"
   private static final String BAD_MD5 = "bae60998ffe4923b131e3d6e4c19993e";
+  private static final Logger log =
+      LoggerFactory.getLogger(LocalCachingContextClassLoaderFactoryTest.class);
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
   private static Server jetty;
@@ -92,7 +102,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
   private LocalCachingContextClassLoaderFactory FACTORY;
   private Path baseCacheDir;
 
-  @TempDir
+  @TempDir(cleanup = CleanupMode.ON_SUCCESS)
   private Path tempDir;
 
   @BeforeAll
@@ -825,5 +835,63 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
     // ensure it works now
     FACTORY.getClassLoader(updatedDefUrl2.toString());
+  }
+
+  @Test
+  public void testConcurrentlDeletes() throws Exception {
+
+    var executor = Executors.newCachedThreadPool();
+
+    AtomicBoolean stop = new AtomicBoolean(false);
+
+    // create a background task that continually concurrently deletes files in the resources dir
+    executor.submit(() -> {
+      while (!stop.get()) {
+        var resourcesDir = tempDir.resolve("base").resolve("resources");
+        var files = resourcesDir.toFile().listFiles();
+        for (var file : files) {
+          file.delete();
+        }
+        Thread.sleep(100);
+      }
+      return null;
+    });
+
+    var def = ContextDefinition.create(100, "SHA-512", jarAOrigLocation, jarBOrigLocation,
+        jarCOrigLocation, jarDOrigLocation);
+
+    List<Future<?>> futures = new ArrayList<>();
+
+    // create 10 threads that are continually creating new classloaders, the deletes should cause
+    // hard link creations to fail sometimes
+    for (int i = 0; i < 10; i++) {
+      int threadNum = i;
+      var future = executor.submit(() -> {
+        Timer timer = Timer.startNew();
+        int j = 0;
+        while (!timer.hasElapsed(10, TimeUnit.SECONDS)) {
+          var contextFile = tempDir.resolve("context-cd-" + threadNum + "_" + j + ".json");
+          Files.writeString(contextFile, def.toJson());
+          var contextUrl = contextFile.toUri().toURL().toExternalForm();
+
+          final ClassLoader cl = FACTORY.getClassLoader(contextUrl);
+          testClassLoads(cl, classA);
+          testClassLoads(cl, classB);
+          testClassLoads(cl, classC);
+          testClassLoads(cl, classD);
+          j++;
+        }
+
+        return null;
+      });
+      futures.add(future);
+    }
+
+    for (var future : futures) {
+      future.get();
+    }
+
+    stop.set(true);
+    executor.shutdownNow();
   }
 }
