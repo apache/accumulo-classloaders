@@ -838,19 +838,20 @@ public class LocalCachingContextClassLoaderFactoryTest {
   }
 
   @Test
-  public void testConcurrentlDeletes() throws Exception {
+  public void testConcurrentDeletes() throws Exception {
 
     var executor = Executors.newCachedThreadPool();
 
     AtomicBoolean stop = new AtomicBoolean(false);
 
     // create a background task that continually concurrently deletes files in the resources dir
-    executor.submit(() -> {
+    var deleteFuture = executor.submit(() -> {
       while (!stop.get()) {
-        var resourcesDir = tempDir.resolve("base").resolve("resources");
-        var files = resourcesDir.toFile().listFiles();
+        var resourcesDir = tempDir.resolve("base").resolve("resources").toFile();
+        assertTrue(resourcesDir.exists() && resourcesDir.isDirectory());
+        var files = resourcesDir.listFiles();
         for (var file : files) {
-          file.delete();
+          assertTrue(file.delete());
         }
         Thread.sleep(100);
       }
@@ -892,6 +893,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
     }
 
     stop.set(true);
-    executor.shutdownNow();
+    // ensure the delete task had no errors
+    deleteFuture.get();
+    executor.shutdown();
   }
 }
