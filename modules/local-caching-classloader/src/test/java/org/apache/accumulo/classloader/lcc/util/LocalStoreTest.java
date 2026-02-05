@@ -150,6 +150,7 @@ public class LocalStoreTest {
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve(CONTEXTS_DIR)));
     assertTrue(Files.exists(baseCacheDir.resolve(RESOURCES_DIR)));
+    assertTrue(Files.exists(baseCacheDir.resolve(WORKING_DIR)));
     assertEquals(baseCacheDir.resolve(CONTEXTS_DIR), localStore.contextsDir());
     assertEquals(baseCacheDir.resolve(RESOURCES_DIR), localStore.resourcesDir());
     assertEquals(baseCacheDir.resolve(WORKING_DIR), localStore.workingDir());
