@@ -26,6 +26,8 @@ import static org.apache.accumulo.classloader.lcc.TestUtils.createContextDefinit
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.apache.accumulo.classloader.lcc.TestUtils.updateContextDefinitionFile;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.RESOURCES_DIR;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.WORKING_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -70,10 +72,9 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonSyntaxException;
 
@@ -82,8 +83,6 @@ public class LocalCachingContextClassLoaderFactoryTest {
   protected static final int MONITOR_INTERVAL_SECS = 5;
   // MD5 sum for "bad"
   private static final String BAD_MD5 = "bae60998ffe4923b131e3d6e4c19993e";
-  private static final Logger log =
-      LoggerFactory.getLogger(LocalCachingContextClassLoaderFactoryTest.class);
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
   private static Server jetty;
@@ -177,8 +176,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
   }
 
   @BeforeEach
-  public void beforeEach() throws Exception {
-    baseCacheDir = tempDir.resolve("base");
+  public void beforeEach(TestInfo info) throws Exception {
+    baseCacheDir = tempDir.resolve(info.getTestMethod().orElseThrow().getName());
     ConfigurationCopy acuConf = new ConfigurationCopy(
         Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm(),
             UPDATE_FAILURE_GRACE_PERIOD_MINS, "1", ALLOWED_URLS_PATTERN, ".*"));
@@ -812,7 +811,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classC);
     testClassLoads(cl, classD);
 
-    var resources = tempDir.resolve("base").resolve("resources");
+    var resources = baseCacheDir.resolve(RESOURCES_DIR);
     List<Path> files =
         def.getResources().stream().map(r -> resources.resolve(LocalStore.localResourceName(r)))
             .limit(2).collect(Collectors.toList());
@@ -841,14 +840,13 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testConcurrentDeletes() throws Exception {
 
-    var executor = Executors.newCachedThreadPool();
-
-    AtomicBoolean stop = new AtomicBoolean(false);
+    final var executor = Executors.newCachedThreadPool();
+    final var stop = new AtomicBoolean(false);
 
     // create a background task that continually concurrently deletes files in the resources dir
     var deleteFuture = executor.submit(() -> {
       while (!stop.get()) {
-        var resourcesDir = tempDir.resolve("base").resolve("resources").toFile();
+        var resourcesDir = baseCacheDir.resolve(RESOURCES_DIR).toFile();
         assertTrue(resourcesDir.exists() && resourcesDir.isDirectory());
         var files = resourcesDir.listFiles();
         for (var file : files) {
@@ -904,10 +902,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     deleteFuture.get();
     executor.shutdown();
 
-    var workingDir = tempDir.resolve("base").resolve("working").toFile();
-    var filesList = workingDir.listFiles();
-    var workingDirs = filesList == null ? 0 : filesList.length;
+    long workingDirsCount =
+        Files.list(baseCacheDir.resolve(WORKING_DIR)).filter(p -> p.toFile().isDirectory()).count();
     // check that many hard link directories were created
-    assertTrue(workingDirs > 50, () -> "workingDirs:" + workingDirs);
+    assertTrue(workingDirsCount > 50);
   }
 }
