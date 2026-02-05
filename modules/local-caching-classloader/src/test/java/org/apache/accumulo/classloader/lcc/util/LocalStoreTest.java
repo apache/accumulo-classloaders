@@ -18,9 +18,13 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
+import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactoryTest.BASE_CACHE_DIR;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.checksumForFileName;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.CONTEXTS_DIR;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.RESOURCES_DIR;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.WORKING_DIR;
 import static org.apache.accumulo.classloader.lcc.util.LocalStore.localResourceName;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,7 +75,7 @@ public class LocalStoreTest {
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    baseCacheDir = tempDir.resolve("base");
+    baseCacheDir = tempDir.resolve(BASE_CACHE_DIR);
 
     // Find the Test jar files
     final URL jarAOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestA/TestA.jar");
@@ -137,14 +141,19 @@ public class LocalStoreTest {
 
   @Test
   public void testCreateBaseDirs() throws Exception {
+    // these dirs are documented, so need to update docs when changing constant values
+    assertEquals("resources", RESOURCES_DIR);
+    assertEquals("working", WORKING_DIR);
+    assertEquals("contexts", CONTEXTS_DIR);
+
     assertFalse(Files.exists(baseCacheDir));
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(Files.exists(baseCacheDir.resolve("contexts")));
-    assertTrue(Files.exists(baseCacheDir.resolve("resources")));
-    assertEquals(baseCacheDir.resolve("contexts"), localStore.contextsDir());
-    assertEquals(baseCacheDir.resolve("resources"), localStore.resourcesDir());
-    assertEquals(baseCacheDir.resolve("working"), localStore.workingDir());
+    assertTrue(Files.exists(baseCacheDir.resolve(CONTEXTS_DIR)));
+    assertTrue(Files.exists(baseCacheDir.resolve(RESOURCES_DIR)));
+    assertEquals(baseCacheDir.resolve(CONTEXTS_DIR), localStore.contextsDir());
+    assertEquals(baseCacheDir.resolve(RESOURCES_DIR), localStore.resourcesDir());
+    assertEquals(baseCacheDir.resolve(WORKING_DIR), localStore.workingDir());
   }
 
   @Test
@@ -223,10 +232,10 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(baseCacheDir));
-    assertTrue(
-        Files.exists(baseCacheDir.resolve("contexts").resolve(checksumForFileName(def) + ".json")));
+    assertTrue(Files
+        .exists(baseCacheDir.resolve(CONTEXTS_DIR).resolve(checksumForFileName(def) + ".json")));
     for (Resource r : def.getResources()) {
-      assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
+      assertTrue(Files.exists(baseCacheDir.resolve(RESOURCES_DIR).resolve(localResourceName(r))));
     }
   }
 
@@ -270,16 +279,16 @@ public class LocalStoreTest {
 
     // Confirm the 3 jars are cached locally
     assertTrue(Files.exists(
-        baseCacheDir.resolve("contexts").resolve(checksumForFileName(updatedDef) + ".json")));
+        baseCacheDir.resolve(CONTEXTS_DIR).resolve(checksumForFileName(updatedDef) + ".json")));
     for (Resource r : updatedDef.getResources()) {
       assertFalse(r.getFileName().contains("C"));
-      assertTrue(Files.exists(baseCacheDir.resolve("resources").resolve(localResourceName(r))));
+      assertTrue(Files.exists(baseCacheDir.resolve(RESOURCES_DIR).resolve(localResourceName(r))));
     }
 
     assertTrue(removedResource.getFileName().contains("C"),
         "cache location should still contain 'C'");
     assertTrue(Files
-        .exists(baseCacheDir.resolve("resources").resolve(localResourceName(removedResource))));
+        .exists(baseCacheDir.resolve(RESOURCES_DIR).resolve(localResourceName(removedResource))));
 
     cacheKey = new ContextCacheKey("loc", updatedDef);
     final var updatedContextClassLoader = LccUtils.createClassLoader(cacheKey, localStore);

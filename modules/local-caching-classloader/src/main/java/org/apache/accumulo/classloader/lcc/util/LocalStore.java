@@ -91,13 +91,17 @@ public final class LocalStore {
   private final Path workingDir;
   private final BiConsumer<String,URL> allowedUrlChecker;
 
+  public static final String CONTEXTS_DIR = "contexts";
+  public static final String RESOURCES_DIR = "resources";
+  public static final String WORKING_DIR = "working";
+
   public LocalStore(final Path baseDir, final BiConsumer<String,URL> allowedUrlChecker)
       throws IOException {
     requireNonNull(baseDir);
     this.allowedUrlChecker = requireNonNull(allowedUrlChecker);
-    this.contextsDir = Files.createDirectories(baseDir.resolve("contexts"));
-    this.resourcesDir = Files.createDirectories(baseDir.resolve("resources"));
-    this.workingDir = Files.createDirectories(baseDir.resolve("working"));
+    this.contextsDir = Files.createDirectories(baseDir.resolve(CONTEXTS_DIR));
+    this.resourcesDir = Files.createDirectories(baseDir.resolve(RESOURCES_DIR));
+    this.workingDir = Files.createDirectories(baseDir.resolve(WORKING_DIR));
   }
 
   Path contextsDir() {
