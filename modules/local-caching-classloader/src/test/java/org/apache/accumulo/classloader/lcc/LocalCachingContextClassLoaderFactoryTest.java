@@ -29,6 +29,7 @@ import static org.apache.accumulo.classloader.lcc.TestUtils.updateContextDefinit
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -870,12 +871,18 @@ public class LocalCachingContextClassLoaderFactoryTest {
       var future = executor.submit(() -> {
         Timer timer = Timer.startNew();
         int j = 0;
+        ClassLoader lastCl = null;
         while (!timer.hasElapsed(10, TimeUnit.SECONDS)) {
           var contextFile = tempDir.resolve("context-cd-" + threadNum + "_" + j + ".json");
           Files.writeString(contextFile, def.toJson());
           var contextUrl = contextFile.toUri().toURL().toExternalForm();
 
           final ClassLoader cl = FACTORY.getClassLoader(contextUrl);
+          // This test is assuming that each call above creates a new classloader which in turn
+          // creates new hard links. This is checking that assuming in case the impl changes and
+          // this test needs to be reevaluated.
+          assertNotSame(cl, lastCl);
+          lastCl = cl;
           testClassLoads(cl, classA);
           testClassLoads(cl, classB);
           testClassLoads(cl, classC);
@@ -896,5 +903,10 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // ensure the delete task had no errors
     deleteFuture.get();
     executor.shutdown();
+
+    var workingDir = tempDir.resolve("base").resolve("working").toFile();
+    var workingDirs = workingDir.listFiles().length;
+    // check that many hard link directories were created
+    assertTrue(workingDirs > 50, () -> "workingDirs:" + workingDirs);
   }
 }
