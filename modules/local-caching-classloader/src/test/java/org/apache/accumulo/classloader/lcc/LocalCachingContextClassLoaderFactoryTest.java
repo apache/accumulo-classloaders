@@ -71,6 +71,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
@@ -79,8 +80,6 @@ import org.slf4j.LoggerFactory;
 import com.google.gson.JsonSyntaxException;
 
 public class LocalCachingContextClassLoaderFactoryTest {
-
-  public static final String BASE_CACHE_DIR = "base";
 
   protected static final int MONITOR_INTERVAL_SECS = 5;
   // MD5 sum for "bad"
@@ -180,8 +179,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
   }
 
   @BeforeEach
-  public void beforeEach() throws Exception {
-    baseCacheDir = tempDir.resolve(BASE_CACHE_DIR);
+  public void beforeEach(TestInfo info) throws Exception {
+    baseCacheDir = tempDir.resolve(info.getTestMethod().orElseThrow().getName());
     ConfigurationCopy acuConf = new ConfigurationCopy(
         Map.of(CACHE_DIR_PROPERTY, baseCacheDir.toAbsolutePath().toUri().toURL().toExternalForm(),
             UPDATE_FAILURE_GRACE_PERIOD_MINS, "1", ALLOWED_URLS_PATTERN, ".*"));
@@ -815,7 +814,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     testClassLoads(cl, classC);
     testClassLoads(cl, classD);
 
-    var resources = tempDir.resolve(BASE_CACHE_DIR).resolve(RESOURCES_DIR);
+    var resources = baseCacheDir.resolve(RESOURCES_DIR);
     List<Path> files =
         def.getResources().stream().map(r -> resources.resolve(LocalStore.localResourceName(r)))
             .limit(2).collect(Collectors.toList());

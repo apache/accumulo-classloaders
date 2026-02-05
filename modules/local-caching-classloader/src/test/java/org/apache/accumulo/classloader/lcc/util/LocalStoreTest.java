@@ -18,7 +18,6 @@
  */
 package org.apache.accumulo.classloader.lcc.util;
 
-import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactoryTest.BASE_CACHE_DIR;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.apache.accumulo.classloader.lcc.util.LccUtils.checksumForFileName;
@@ -50,14 +49,16 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 public class LocalStoreTest {
 
-  @TempDir
+  @TempDir(cleanup = CleanupMode.ON_SUCCESS)
   private static Path tempDir;
 
   // a mock URL checker that allows all for test
@@ -71,12 +72,10 @@ public class LocalStoreTest {
   private static TestClassInfo classB;
   private static TestClassInfo classC;
   private static TestClassInfo classD;
-  private static Path baseCacheDir = null;
+  private Path baseCacheDir;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
-    baseCacheDir = tempDir.resolve(BASE_CACHE_DIR);
-
     // Find the Test jar files
     final URL jarAOrigLocation = LocalStoreTest.class.getResource("/ClassLoaderTestA/TestA.jar");
     assertNotNull(jarAOrigLocation);
@@ -126,9 +125,9 @@ public class LocalStoreTest {
     }
   }
 
-  @AfterEach
-  public void cleanBaseDir() throws Exception {
-    LccUtils.recursiveDelete(baseCacheDir);
+  @BeforeEach
+  public void createBaseDir(TestInfo info) {
+    baseCacheDir = tempDir.resolve(info.getTestMethod().orElseThrow().getName());
   }
 
   @Test

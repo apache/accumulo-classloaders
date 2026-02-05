@@ -23,7 +23,6 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.ALLOWED_URLS_PATTERN;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.CACHE_DIR_PROPERTY;
 import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory.UPDATE_FAILURE_GRACE_PERIOD_MINS;
-import static org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactoryTest.BASE_CACHE_DIR;
 import static org.apache.accumulo.classloader.lcc.util.LocalStore.WORKING_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
@@ -75,6 +74,7 @@ import org.apache.accumulo.test.VerifyIngest.VerifyParams;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
 
 public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniClusterBase {
@@ -88,13 +88,13 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       cfg.setProperty(Property.TSERV_NATIVEMAP_ENABLED.getKey(), "false");
       cfg.setProperty(Property.GENERAL_CONTEXT_CLASSLOADER_FACTORY.getKey(),
           LocalCachingContextClassLoaderFactory.class.getName());
-      cfg.setProperty(CACHE_DIR_PROPERTY, tempDir.resolve(BASE_CACHE_DIR).toUri().toString());
+      cfg.setProperty(CACHE_DIR_PROPERTY, baseCacheDir.toUri().toString());
       cfg.setProperty(ALLOWED_URLS_PATTERN, ".*");
       cfg.setProperty(UPDATE_FAILURE_GRACE_PERIOD_MINS, "1");
     }
   }
 
-  @TempDir
+  @TempDir(cleanup = CleanupMode.ON_SUCCESS)
   private static Path tempDir;
 
   private static final String ITER_CLASS_NAME =
@@ -104,9 +104,11 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   private static URL jarAOrigLocation;
   private static URL jarBOrigLocation;
+  private static Path baseCacheDir;
 
   @BeforeAll
   public static void beforeAll() throws Exception {
+    baseCacheDir = Files.createTempDirectory(tempDir, "base-");
 
     // Find the Test jar files
     jarAOrigLocation = MiniAccumuloClusterClassLoaderFactoryTest.class
@@ -126,7 +128,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   @Test
   public void testClassLoader() throws Exception {
-    final var workingDirPath = tempDir.resolve(BASE_CACHE_DIR).resolve(WORKING_DIR);
+    final var workingDirPath = baseCacheDir.resolve(WORKING_DIR);
     final var jsonDirPath = tempDir.resolve("simulatedRemoteContextFiles");
     Files.createDirectory(jsonDirPath);
 
