@@ -75,8 +75,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.gson.JsonSyntaxException;
 
@@ -85,8 +83,6 @@ public class LocalCachingContextClassLoaderFactoryTest {
   protected static final int MONITOR_INTERVAL_SECS = 5;
   // MD5 sum for "bad"
   private static final String BAD_MD5 = "bae60998ffe4923b131e3d6e4c19993e";
-  private static final Logger log =
-      LoggerFactory.getLogger(LocalCachingContextClassLoaderFactoryTest.class);
   private static MiniDFSCluster hdfs;
   private static FileSystem fs;
   private static Server jetty;
@@ -844,9 +840,8 @@ public class LocalCachingContextClassLoaderFactoryTest {
   @Test
   public void testConcurrentDeletes() throws Exception {
 
-    var executor = Executors.newCachedThreadPool();
-
-    AtomicBoolean stop = new AtomicBoolean(false);
+    final var executor = Executors.newCachedThreadPool();
+    final var stop = new AtomicBoolean(false);
 
     // create a background task that continually concurrently deletes files in the resources dir
     var deleteFuture = executor.submit(() -> {
@@ -907,10 +902,9 @@ public class LocalCachingContextClassLoaderFactoryTest {
     deleteFuture.get();
     executor.shutdown();
 
-    var workingDir = baseCacheDir.resolve(WORKING_DIR).toFile();
-    var filesList = workingDir.listFiles();
-    var workingDirs = filesList == null ? 0 : filesList.length;
+    long workingDirsCount =
+        Files.list(baseCacheDir.resolve(WORKING_DIR)).filter(p -> p.toFile().isDirectory()).count();
     // check that many hard link directories were created
-    assertTrue(workingDirs > 50, () -> "workingDirs:" + workingDirs);
+    assertTrue(workingDirsCount > 50);
   }
 }
