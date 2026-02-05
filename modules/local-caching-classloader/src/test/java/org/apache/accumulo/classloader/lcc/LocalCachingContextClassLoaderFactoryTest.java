@@ -27,6 +27,7 @@ import static org.apache.accumulo.classloader.lcc.TestUtils.testClassFailsToLoad
 import static org.apache.accumulo.classloader.lcc.TestUtils.testClassLoads;
 import static org.apache.accumulo.classloader.lcc.TestUtils.updateContextDefinitionFile;
 import static org.apache.accumulo.classloader.lcc.util.LocalStore.RESOURCES_DIR;
+import static org.apache.accumulo.classloader.lcc.util.LocalStore.WORKING_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -850,7 +851,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     // create a background task that continually concurrently deletes files in the resources dir
     var deleteFuture = executor.submit(() -> {
       while (!stop.get()) {
-        var resourcesDir = tempDir.resolve("base").resolve("resources").toFile();
+        var resourcesDir = baseCacheDir.resolve(RESOURCES_DIR).toFile();
         assertTrue(resourcesDir.exists() && resourcesDir.isDirectory());
         var files = resourcesDir.listFiles();
         for (var file : files) {
@@ -906,7 +907,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
     deleteFuture.get();
     executor.shutdown();
 
-    var workingDir = tempDir.resolve("base").resolve("working").toFile();
+    var workingDir = baseCacheDir.resolve(WORKING_DIR).toFile();
     var filesList = workingDir.listFiles();
     var workingDirs = filesList == null ? 0 : filesList.length;
     // check that many hard link directories were created
