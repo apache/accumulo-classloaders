@@ -879,7 +879,7 @@ public class LocalCachingContextClassLoaderFactoryTest {
 
           final ClassLoader cl = FACTORY.getClassLoader(contextUrl);
           // This test is assuming that each call above creates a new classloader which in turn
-          // creates new hard links. This is checking that assuming in case the impl changes and
+          // creates new hard links. This is checking that assumption in case the impl changes and
           // this test needs to be reevaluated.
           assertNotSame(cl, lastCl);
           lastCl = cl;
