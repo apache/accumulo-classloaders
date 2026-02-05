@@ -29,7 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.accumulo.classloader.lcc.LocalCachingContextClassLoaderFactory;
 import org.apache.accumulo.classloader.lcc.definition.ContextDefinition;
@@ -44,12 +43,12 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 public class LccUtils {
   private static final Logger LOG = LoggerFactory.getLogger(LccUtils.class);
 
-  private static final ConcurrentHashMap<String,DigestUtils> DIGESTERS = new ConcurrentHashMap<>();
   private static final Cleaner CLEANER = Cleaner.create();
 
-  // keep at most one DigestUtils instance for each algorithm
+  // these instances are not thread-safe; calls to getClassLoader(context) and the background
+  // monitor threads need distinct instances of these
   public static DigestUtils getDigester(String algorithm) {
-    return DIGESTERS.computeIfAbsent(algorithm, DigestUtils::new);
+    return new DigestUtils(algorithm);
   }
 
   private static String checksumForFileName(String algorithm, String checksum) {
