@@ -27,14 +27,17 @@ import static java.util.Objects.requireNonNull;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -85,7 +88,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  * their checksums are verified before use, so that a {@link URLClassLoader} can be constructed
  * using the same resource ordering as in the {@link Manifest} file.
  */
-final class LocalStore {
+public final class LocalStore {
   private static final Logger LOG = LoggerFactory.getLogger(LocalStore.class);
   private static final String PID = Long.toString(ProcessHandle.current().pid());
 
@@ -98,7 +101,27 @@ final class LocalStore {
   public static final String RESOURCES_DIR = "resources";
   public static final String WORKING_DIR = "working";
 
-  public LocalStore(final Path baseDir, final BiConsumer<String,URL> allowedUrlChecker)
+  public LocalStore(final String baseDir, final BiConsumer<String,URL> allowedUrlChecker)
+      throws IOException {
+    this(baseDirStringToPath(baseDir), allowedUrlChecker);
+  }
+
+  private static Path baseDirStringToPath(final String value) {
+    if (value.startsWith("file:")) {
+      try {
+        return Path.of(new URL(value).toURI());
+      } catch (IOException | URISyntaxException e) {
+        throw new IllegalArgumentException(
+            "Malformed file: URL specified for base directory: " + value, e);
+      }
+    } else if (value.startsWith("/")) {
+      return Path.of(value);
+    }
+    throw new IllegalArgumentException(
+        "Base directory is neither a file URL nor an absolute file path: " + value);
+  }
+
+  LocalStore(final Path baseDir, final BiConsumer<String,URL> allowedUrlChecker)
       throws IOException {
     requireNonNull(baseDir);
     this.allowedUrlChecker = requireNonNull(allowedUrlChecker);
@@ -174,7 +197,7 @@ final class LocalStore {
    * Save the {@link Manifest} to the manifests directory, and all of its resources to the resources
    * directory.
    */
-  void storeContext(final Manifest manifest) {
+  public void storeContext(final Manifest manifest) {
     requireNonNull(manifest, "manifest must be supplied");
     final String destinationName = checksumForFileName(manifest) + ".json";
     try {
@@ -369,7 +392,7 @@ final class LocalStore {
     }
   }
 
-  Path createWorkingHardLinks(final Manifest manifest, Consumer<Path> forEachLink)
+  public Path createWorkingHardLinks(final Manifest manifest, Consumer<Path> forEachLink)
       throws HardLinkFailedException {
     Path hardLinkDir = createTempDirectory("context-" + checksumForFileName(manifest));
     // create all hard links first
@@ -417,6 +440,14 @@ final class LocalStore {
       return missingResource;
     }
 
+  }
+
+  public static void recursiveDelete(Path directory) throws IOException {
+    if (Files.exists(directory)) {
+      try (var walker = Files.walk(directory)) {
+        walker.map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
+      }
+    }
   }
 
 }
