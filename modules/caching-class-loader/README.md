@@ -22,7 +22,9 @@
 
 `CachingClassLoaderFactory` implements Accumulo's `ContextClassLoaderFactory`
 SPI. This implementation is designed around a set of remote resources
-(typically, `.jar` files) listed in a JSON-formatted manifest for each context.
+(typically, `.jar` files) listed in a JSON-formatted manifest for each context,
+and a local cache directory that is intended to be shared across multiple
+processes.
 
 The URL to the manifest, as a String, is used for the context parameter. In
 return, this factory downloads the resource from the remote locations specified
@@ -91,7 +93,7 @@ When this factory receives a request for a `ClassLoader` for a given URL, it
 downloads a copy of the manifest and parses it. If it has recently acquired
 that manifest, based on the monitoring interval from a previous retrieval, it
 can skip this step and use the manifest from the earlier retrieval, which is
-kept up-to-date by the background monitoring process that started when it was
+kept up-to-date by the background monitoring thread that started when it was
 previously retrieved. Once it has the manifest, it then returns a `ClassLoader`
 instance containing the resources defined in that manifest, first downloading
 any missing resources and verifying them using the checksums in manifest.
