@@ -75,7 +75,7 @@
   <modules>
     <module>modules/example-iterators-a</module>
     <module>modules/example-iterators-b</module>
-    <module>modules/cargo-class-loader</module>
+    <module>modules/caching-class-loader</module>
     <module>modules/hdfs-urlstreamhandler-provider</module>
     <module>modules/vfs-class-loader</module>
   </modules>
