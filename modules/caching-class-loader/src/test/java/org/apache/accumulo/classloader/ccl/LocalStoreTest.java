@@ -43,7 +43,7 @@ import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.ccl.TestUtils.TestClassInfo;
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 import org.apache.accumulo.classloader.ccl.manifest.Resource;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -67,7 +67,7 @@ public class LocalStoreTest {
   private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
   private static Server jetty;
-  private static ContextManifest manifest;
+  private static Manifest manifest;
   private static TestClassInfo classA;
   private static TestClassInfo classB;
   private static TestClassInfo classC;
@@ -107,7 +107,7 @@ public class LocalStoreTest {
     resources.add(new Resource(jarCNewLocation, "SHA-1",
         TestUtils.computeResourceChecksum("SHA-1", jarCOrigLocation)));
 
-    manifest = new ContextManifest(MONITOR_INTERVAL_SECS, resources);
+    manifest = new Manifest(MONITOR_INTERVAL_SECS, resources);
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
     classB = new TestClassInfo("test.TestObjectB", "Hello from B");
     classC = new TestClassInfo("test.TestObjectC", "Hello from C");
@@ -275,7 +275,7 @@ public class LocalStoreTest {
     updatedResources.add(new Resource(jarDOrigLocation, "SHA-512",
         TestUtils.computeResourceChecksum("SHA-512", jarDOrigLocation)));
 
-    var update = new ContextManifest(MONITOR_INTERVAL_SECS, updatedResources);
+    var update = new Manifest(MONITOR_INTERVAL_SECS, updatedResources);
     localStore.storeContext(update);
 
     // Confirm the 3 jars are cached locally

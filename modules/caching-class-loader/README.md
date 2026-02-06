@@ -161,10 +161,10 @@ after approximately a minute.
 
 ## Creating a Manifest
 
-Users may take advantage of the `ContextManifest.create(int,String,URL[])` method
-to construct a `ContextManifest` object, programmatically. This will calculate
-the checksums of the classpath elements. `ContextManifest.toJson()` can be used
-to serialize the `ContextManifest` to a `String` to store in a file.
+Users may take advantage of the `Manifest.create(int,String,URL[])` method to
+construct a `Manifest` object, programmatically. This will calculate the
+checksums of the classpath elements. `Manifest.toJson()` can be used to
+serialize the `Manifest` to a `String` to store in a file.
 
 Alternatively, if this library's jar is built and placed onto Accumulo's
 `CLASSPATH`, then one can run `bin/accumulo create-classloader-manifest` to

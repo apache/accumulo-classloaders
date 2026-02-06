@@ -52,7 +52,7 @@ import com.google.gson.GsonBuilder;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 @AutoService(KeywordExecutable.class)
-public class ContextManifest implements KeywordExecutable {
+public class Manifest implements KeywordExecutable {
 
   static class Opts {
     @Parameter(names = {"-i", "--interval"}, required = true,
@@ -111,7 +111,7 @@ public class ContextManifest implements KeywordExecutable {
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
-  public static ContextManifest create(int monitorIntervalSecs, String algorithm, URL... sources)
+  public static Manifest create(int monitorIntervalSecs, String algorithm, URL... sources)
       throws IOException {
     // use a LinkedHashSet to preserve the order of the resources
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
@@ -121,16 +121,16 @@ public class ContextManifest implements KeywordExecutable {
         resources.add(new Resource(u, algorithm, checksum));
       }
     }
-    return new ContextManifest(monitorIntervalSecs, resources);
+    return new Manifest(monitorIntervalSecs, resources);
   }
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
-  public static ContextManifest download(final URL url) throws IOException {
+  public static Manifest download(final URL url) throws IOException {
     try (InputStream is = url.openStream()) {
-      var manifest = GSON.fromJson(new InputStreamReader(is, UTF_8), ContextManifest.class);
+      var manifest = GSON.fromJson(new InputStreamReader(is, UTF_8), Manifest.class);
       if (manifest == null) {
-        throw new EOFException("InputStream does not contain a valid ContextManifest at " + url);
+        throw new EOFException("InputStream does not contain a valid manifest at " + url);
       }
       return manifest;
     }
@@ -147,9 +147,9 @@ public class ContextManifest implements KeywordExecutable {
   private int monitorIntervalSeconds;
   private LinkedHashSet<Resource> resources;
 
-  public ContextManifest() {}
+  public Manifest() {}
 
-  public ContextManifest(int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
+  public Manifest(int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
@@ -180,7 +180,7 @@ public class ContextManifest implements KeywordExecutable {
     if (getClass() != obj.getClass()) {
       return false;
     }
-    ContextManifest other = (ContextManifest) obj;
+    Manifest other = (Manifest) obj;
     return monitorIntervalSeconds == other.monitorIntervalSeconds
         && Objects.equals(resources, other.resources);
   }
@@ -202,18 +202,18 @@ public class ContextManifest implements KeywordExecutable {
 
   @Override
   public String keyword() {
-    return "create-context-manifest";
+    return "create-classloader-manifest";
   }
 
   @Override
   public String description() {
-    return "Creates and prints a class loader context manifest";
+    return "Creates and prints a class loader context manifest for the CachingClassLoaderFactory";
   }
 
   @Override
   public void execute(String[] args) throws Exception {
     Opts opts = new Opts();
-    opts.parseArgs(ContextManifest.class.getName(), args);
+    opts.parseArgs(Manifest.class.getName(), args);
     URL[] urls = new URL[opts.files.size()];
     int count = 0;
     for (String f : opts.files) {

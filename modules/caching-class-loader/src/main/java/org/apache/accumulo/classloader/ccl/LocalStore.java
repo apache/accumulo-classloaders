@@ -43,7 +43,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 import org.apache.accumulo.classloader.ccl.manifest.Resource;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
@@ -52,16 +52,16 @@ import org.slf4j.LoggerFactory;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
- * A simple storage service backed by a local file system for storing downloaded
- * {@link ContextManifest} files and the {@link Resource} objects it references.
+ * A simple storage service backed by a local file system for storing downloaded {@link Manifest}
+ * files and the {@link Resource} objects it references.
  *
  * <p>
  * The layout of the storage area consists of three directories. You may create this directory
  * structure in advance, but they must be on the same file system, one which supports atomic moves
  * and hard-links. The directories are:
  * <ul>
- * <li><b>manifests</b>: stores a copy of the {@link ContextManifest} JSON files for each context,
- * and exist primarily for user convenience (they aren't used again by this factory)
+ * <li><b>manifests</b>: stores a copy of the {@link Manifest} JSON files for each context, and
+ * exist primarily for user convenience (they aren't used again by this factory)
  * <li><b>resources</b>: stores a copy of all the {@link Resource} files for all contexts
  * <li><b>working</b>: files in use, such as temporary files while downloading, and directories of
  * hard-linked resource files for the lifetime of a classloader
@@ -83,7 +83,7 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
  * <p>
  * Once all files for a context are downloaded, they are hard-linked to a temporary directory where
  * their checksums are verified before use, so that a {@link URLClassLoader} can be constructed
- * using the same resource ordering as in the {@link ContextManifest} file.
+ * using the same resource ordering as in the {@link Manifest} file.
  */
 final class LocalStore {
   private static final Logger LOG = LoggerFactory.getLogger(LocalStore.class);
@@ -140,7 +140,7 @@ final class LocalStore {
     return algorithm.replace('/', '_') + "-" + checksum;
   }
 
-  static String checksumForFileName(ContextManifest manifest) {
+  static String checksumForFileName(Manifest manifest) {
     return checksumForFileName(manifest.getChecksumAlgorithm(), manifest.getChecksum());
   }
 
@@ -171,10 +171,10 @@ final class LocalStore {
   }
 
   /**
-   * Save the {@link ContextManifest} to the manifests directory, and all of its resources to the
-   * resources directory.
+   * Save the {@link Manifest} to the manifests directory, and all of its resources to the resources
+   * directory.
    */
-  void storeContext(final ContextManifest manifest) {
+  void storeContext(final Manifest manifest) {
     requireNonNull(manifest, "manifest must be supplied");
     final String destinationName = checksumForFileName(manifest) + ".json";
     try {
@@ -207,7 +207,7 @@ final class LocalStore {
     }
   }
 
-  private void storeManifest(final ContextManifest manifest, final String destinationName)
+  private void storeManifest(final Manifest manifest, final String destinationName)
       throws IOException {
     Path destinationPath = manifestsDir.resolve(destinationName);
     if (Files.exists(destinationPath)) {
@@ -369,7 +369,7 @@ final class LocalStore {
     }
   }
 
-  Path createWorkingHardLinks(final ContextManifest manifest, Consumer<Path> forEachLink)
+  Path createWorkingHardLinks(final Manifest manifest, Consumer<Path> forEachLink)
       throws HardLinkFailedException {
     Path hardLinkDir = createTempDirectory("context-" + checksumForFileName(manifest));
     // create all hard links first

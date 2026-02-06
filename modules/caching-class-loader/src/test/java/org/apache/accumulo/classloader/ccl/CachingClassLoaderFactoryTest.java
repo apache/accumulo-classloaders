@@ -24,10 +24,10 @@ import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP_GRACE_PERIOD;
 import static org.apache.accumulo.classloader.ccl.LocalStore.RESOURCES_DIR;
 import static org.apache.accumulo.classloader.ccl.LocalStore.WORKING_DIR;
-import static org.apache.accumulo.classloader.ccl.TestUtils.createContextManifestFile;
+import static org.apache.accumulo.classloader.ccl.TestUtils.createManifestFile;
 import static org.apache.accumulo.classloader.ccl.TestUtils.testClassFailsToLoad;
 import static org.apache.accumulo.classloader.ccl.TestUtils.testClassLoads;
-import static org.apache.accumulo.classloader.ccl.TestUtils.updateContextManifestFile;
+import static org.apache.accumulo.classloader.ccl.TestUtils.updateManifestFile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -58,7 +58,7 @@ import java.util.regex.PatternSyntaxException;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.ccl.TestUtils.TestClassInfo;
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 import org.apache.accumulo.classloader.ccl.manifest.Resource;
 import org.apache.accumulo.core.conf.ConfigurationCopy;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory.ContextClassLoaderException;
@@ -140,7 +140,7 @@ class CachingClassLoaderFactoryTest {
     final URL jarCJettyLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
     // manifest with all jars
-    var allJars = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
+    var allJars = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
         jarBHdfsLocation, jarCJettyLocation, jarDOrigLocation);
     String allJarsJson = allJars.toJson();
 
@@ -212,7 +212,7 @@ class CachingClassLoaderFactoryTest {
     var newResources = new LinkedHashSet<Resource>();
     var badUrl = "http://localhost/some/path";
     newResources.add(new Resource(new URL(badUrl), "MD5", BAD_MD5));
-    var context2 = new ContextManifest(MONITOR_INTERVAL_SECS, newResources);
+    var context2 = new Manifest(MONITOR_INTERVAL_SECS, newResources);
     var disallowedContext = tempDir.resolve("context-with-disallowed-resource-url.json");
     Files.writeString(disallowedContext, context2.toJson());
     ex = assertThrows(ContextClassLoaderException.class,
@@ -284,24 +284,23 @@ class CachingClassLoaderFactoryTest {
   @Test
   public void testInitialManifestEmpty() throws Exception {
     // Create a new manifest file in HDFS, but with no content
-    final var manifest = createContextManifestFile(fs, "empty.json", null);
+    final var manifest = createManifestFile(fs, "empty.json", null);
     final URL emptyUrl = new URL(fs.getUri().toString() + manifest.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyUrl.toString()));
     assertTrue(ex.getCause() instanceof UncheckedIOException);
     assertTrue(ex.getCause().getCause() instanceof EOFException);
-    assertEquals("InputStream does not contain a valid ContextManifest at " + emptyUrl.toString(),
+    assertEquals("InputStream does not contain a valid manifest at " + emptyUrl.toString(),
         ex.getCause().getCause().getMessage());
   }
 
   @Test
   public void testInitialInvalidJson() throws Exception {
     // Create a new manifest in HDFS, but with invalid content
-    var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     // write out invalid json
-    final var invalid =
-        createContextManifestFile(fs, "invalid.json", manifest.toJson().substring(0, 4));
+    final var invalid = createManifestFile(fs, "invalid.json", manifest.toJson().substring(0, 4));
     final URL invalidUrl = new URL(fs.getUri().toString() + invalid.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
@@ -312,8 +311,8 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testInitial() throws Exception {
-    var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
-    final var initial = createContextManifestFile(fs, "initial.json", manifest.toJson());
+    var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var initial = createManifestFile(fs, "initial.json", manifest.toJson());
     final URL initialUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
     ClassLoader cl = FACTORY.getClassLoader(initialUrl.toString());
@@ -335,13 +334,12 @@ class CachingClassLoaderFactoryTest {
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
 
-    var manifest =
-        ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
+    var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
 
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
-    final var initial = createContextManifestFile(fs, "missing-resource.json", manifest.toJson());
+    final var initial = createManifestFile(fs, "missing-resource.json", manifest.toJson());
     final URL initialUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
@@ -364,12 +362,12 @@ class CachingClassLoaderFactoryTest {
     resources.add(new Resource(jarAOrigLocation, "MD5", BAD_MD5));
 
     // remove the file:// prefix from the URL
-    String goodJson = new ContextManifest(MONITOR_INTERVAL_SECS, resources).toJson();
+    String goodJson = new Manifest(MONITOR_INTERVAL_SECS, resources).toJson();
     String badJson =
         goodJson.replace(jarAOrigLocation.toString(), jarAOrigLocation.toString().substring(6));
     assertNotEquals(goodJson, badJson);
 
-    final var initial = createContextManifestFile(fs, "bad-resource-url.json", badJson);
+    final var initial = createManifestFile(fs, "bad-resource-url.json", badJson);
     final URL initialUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
@@ -388,10 +386,9 @@ class CachingClassLoaderFactoryTest {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
-    var manifest = new ContextManifest(MONITOR_INTERVAL_SECS, resources);
+    var manifest = new Manifest(MONITOR_INTERVAL_SECS, resources);
 
-    final var initial =
-        createContextManifestFile(fs, "bad-resource-checksum.json", manifest.toJson());
+    final var initial = createManifestFile(fs, "bad-resource-checksum.json", manifest.toJson());
     final URL initialUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
 
     var ex = assertThrows(ContextClassLoaderException.class,
@@ -411,8 +408,8 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdate() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
-    final var manifestPath = createContextManifestFile(fs, "update.json", manifest.toJson());
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifestPath = createManifestFile(fs, "update.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -423,8 +420,8 @@ class CachingClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classD);
 
     // Update the contents
-    var update = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarDOrigLocation);
-    updateContextManifestFile(fs, manifestPath, update.toJson());
+    var update = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarDOrigLocation);
+    updateManifestFile(fs, manifestPath, update.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -441,9 +438,8 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateSameClassNameDifferentContent() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
-    final var manifestPath =
-        createContextManifestFile(fs, "update-same-name.json", manifest.toJson());
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifestPath = createManifestFile(fs, "update-same-name.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -454,8 +450,8 @@ class CachingClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classD);
 
     // Update the contents
-    var update = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarEOrigLocation);
-    updateContextManifestFile(fs, manifestPath, update.toJson());
+    var update = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarEOrigLocation);
+    updateManifestFile(fs, manifestPath, update.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -474,8 +470,8 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateManifestEmpty() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
-    final var manifestPath = createContextManifestFile(fs, "update-empty.json", manifest.toJson());
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifestPath = createManifestFile(fs, "update-empty.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -486,7 +482,7 @@ class CachingClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classD);
 
     // Update the contents with an empty file
-    updateContextManifestFile(fs, manifestPath, null);
+    updateManifestFile(fs, manifestPath, null);
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -504,9 +500,9 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateNonExistentResource() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     final var manifestPath =
-        createContextManifestFile(fs, "UpdateNonExistentResource.json", manifest.toJson());
+        createManifestFile(fs, "UpdateNonExistentResource.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -526,12 +522,11 @@ class CachingClassLoaderFactoryTest {
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
-    var manifest2 =
-        ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
+    var manifest2 = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
-    updateContextManifestFile(fs, manifestPath, manifest2.toJson());
+    updateManifestFile(fs, manifestPath, manifest2.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -548,9 +543,9 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateBadResourceChecksum() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     final var manifestPath =
-        createContextManifestFile(fs, "UpdateBadResourceChecksum.json", manifest.toJson());
+        createManifestFile(fs, "UpdateBadResourceChecksum.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -564,9 +559,9 @@ class CachingClassLoaderFactoryTest {
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(r);
 
-    var manifest2 = new ContextManifest(MONITOR_INTERVAL_SECS, resources);
+    var manifest2 = new Manifest(MONITOR_INTERVAL_SECS, resources);
 
-    updateContextManifestFile(fs, manifestPath, manifest2.toJson());
+    updateManifestFile(fs, manifestPath, manifest2.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -583,9 +578,9 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateBadResourceURL() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     final var manifestPath =
-        createContextManifestFile(fs, "UpdateBadResourceChecksum.json", manifest.toJson());
+        createManifestFile(fs, "UpdateBadResourceChecksum.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -598,12 +593,12 @@ class CachingClassLoaderFactoryTest {
     // remove the file:// prefix from the URL
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     resources.add(new Resource(jarAOrigLocation, "MD5", BAD_MD5));
-    String goodJson = new ContextManifest(MONITOR_INTERVAL_SECS, resources).toJson();
+    String goodJson = new Manifest(MONITOR_INTERVAL_SECS, resources).toJson();
     String badJson =
         goodJson.replace(jarAOrigLocation.toString(), jarAOrigLocation.toString().substring(6));
     assertNotEquals(goodJson, badJson);
 
-    updateContextManifestFile(fs, manifestPath, badJson);
+    updateManifestFile(fs, manifestPath, badJson);
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -620,9 +615,8 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testUpdateInvalidJson() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
-    final var manifestPath =
-        createContextManifestFile(fs, "update-invalid.json", manifest.toJson());
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifestPath = createManifestFile(fs, "update-invalid.json", manifest.toJson());
     final URL updateUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(updateUrl.toString());
@@ -632,8 +626,8 @@ class CachingClassLoaderFactoryTest {
     testClassFailsToLoad(cl, classC);
     testClassFailsToLoad(cl, classD);
 
-    var update = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarDOrigLocation);
-    updateContextManifestFile(fs, manifestPath, update.toJson().substring(0, 4));
+    var update = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarDOrigLocation);
+    updateManifestFile(fs, manifestPath, update.toJson().substring(0, 4));
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -648,7 +642,7 @@ class CachingClassLoaderFactoryTest {
     testClassFailsToLoad(cl2, classD);
 
     // Re-write the updated file such that it is now valid
-    updateContextManifestFile(fs, manifestPath, update.toJson());
+    updateManifestFile(fs, manifestPath, update.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -665,10 +659,9 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testChangingContext() throws Exception {
-    var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
+    var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
         jarBOrigLocation, jarCOrigLocation, jarDOrigLocation);
-    final var manifestPath =
-        createContextManifestFile(fs, "update-changing.json", manifest.toJson());
+    final var manifestPath = createManifestFile(fs, "update-changing.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -693,8 +686,8 @@ class CachingClassLoaderFactoryTest {
 
       // Update the contents
       var update =
-          ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", updatedList.toArray(new URL[0]));
-      updateContextManifestFile(fs, manifestPath, update.toJson());
+          Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", updatedList.toArray(new URL[0]));
+      updateManifestFile(fs, manifestPath, update.toJson());
 
       // wait 2x the monitor interval
       Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -737,9 +730,9 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testGracePeriod() throws Exception {
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation);
     final var manifestPath =
-        createContextManifestFile(fs, "UpdateNonExistentResource.json", manifest.toJson());
+        createManifestFile(fs, "UpdateNonExistentResource.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -759,12 +752,11 @@ class CachingClassLoaderFactoryTest {
     assertTrue(!Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
-    var manifest2 =
-        ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
+    var manifest2 = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
     assertTrue(!Files.exists(jarACopy));
 
-    updateContextManifestFile(fs, manifestPath, manifest2.toJson());
+    updateManifestFile(fs, manifestPath, manifest2.toJson());
 
     // wait 2x the monitor interval
     Thread.sleep(MONITOR_INTERVAL_SECS * 2 * 1000);
@@ -797,10 +789,10 @@ class CachingClassLoaderFactoryTest {
 
   @Test
   public void testExternalFileModification() throws Exception {
-    var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
+    var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarAOrigLocation,
         jarBOrigLocation, jarCOrigLocation, jarDOrigLocation);
     final var manifestPath =
-        createContextManifestFile(fs, "update-external-modified.json", manifest.toJson());
+        createManifestFile(fs, "update-external-modified.json", manifest.toJson());
     final URL manifestUrl = new URL(fs.getUri().toString() + manifestPath.toUri().toString());
 
     final ClassLoader cl = FACTORY.getClassLoader(manifestUrl.toString());
@@ -818,8 +810,7 @@ class CachingClassLoaderFactoryTest {
     // overwrite one downloaded jar with others content
     Files.copy(files.get(0), files.get(1), REPLACE_EXISTING);
 
-    final var update2 =
-        createContextManifestFile(fs, "update-external-modified2.json", manifest.toJson());
+    final var update2 = createManifestFile(fs, "update-external-modified2.json", manifest.toJson());
     final URL updateUrl2 = new URL(fs.getUri().toString() + update2.toUri().toString());
 
     // The classloader should fail to create because one of the files in the local filesystem cache
@@ -855,7 +846,7 @@ class CachingClassLoaderFactoryTest {
       return null;
     });
 
-    var manifest = ContextManifest.create(100, "SHA-512", jarAOrigLocation, jarBOrigLocation,
+    var manifest = Manifest.create(100, "SHA-512", jarAOrigLocation, jarBOrigLocation,
         jarCOrigLocation, jarDOrigLocation);
 
     List<Future<?>> futures = new ArrayList<>();

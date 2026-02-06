@@ -66,9 +66,9 @@ public class TestUtils {
     }
   }
 
-  public static org.apache.hadoop.fs.Path createContextManifestFile(FileSystem fs, String name,
+  public static org.apache.hadoop.fs.Path createManifestFile(FileSystem fs, String name,
       String contents) throws Exception {
-    var baseHdfsPath = new org.apache.hadoop.fs.Path("/ContextManifests");
+    var baseHdfsPath = new org.apache.hadoop.fs.Path("/remote-manifests");
     assertTrue(fs.mkdirs(baseHdfsPath));
     var newFile = new org.apache.hadoop.fs.Path(baseHdfsPath, name);
 
@@ -83,7 +83,7 @@ public class TestUtils {
     return newFile;
   }
 
-  public static void updateContextManifestFile(FileSystem fs, org.apache.hadoop.fs.Path path,
+  public static void updateManifestFile(FileSystem fs, org.apache.hadoop.fs.Path path,
       String contents) throws Exception {
     // Update the contents
     assertTrue(fs.exists(path));

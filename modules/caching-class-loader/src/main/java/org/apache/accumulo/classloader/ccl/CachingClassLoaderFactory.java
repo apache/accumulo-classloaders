@@ -45,7 +45,7 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.apache.accumulo.classloader.ccl.LocalStore.HardLinkFailedException;
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 import org.apache.accumulo.classloader.ccl.manifest.Resource;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderEnvironment;
 import org.apache.accumulo.core.spi.common.ContextClassLoaderFactory;
@@ -60,10 +60,10 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
  * A ContextClassLoaderFactory implementation where the context is based on a JSON-formatted
- * {@link ContextManifest} file at a URL specified in the parameter for the
- * {@link #getClassLoader(String)} method. The manifest contains a monitor interval and a set of
- * {@link Resource} URLs to transport from their remote storage location to the local disk, where it
- * will be used to construct and return a {@link ClassLoader}.
+ * {@link Manifest} file at a URL specified in the parameter for the {@link #getClassLoader(String)}
+ * method. The manifest contains a monitor interval and a set of {@link Resource} URLs to transport
+ * from their remote storage location to the local disk, where it will be used to construct and
+ * return a {@link ClassLoader}.
  *
  * <p>
  * The manifest URL will be monitored for updates at the monitor interval specified in the manifest,
@@ -116,9 +116,9 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
   // executor for the monitor tasks
   private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(0);
 
-  // stores the latest seen ContextManifest for a remote URL; String types are used here for the key
+  // stores the latest seen manifest for a remote URL; String types are used here for the key
   // instead of URL because URL.hashCode could trigger network activity for hostname lookups
-  private final ConcurrentHashMap<String,ContextManifest> manifests = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String,Manifest> manifests = new ConcurrentHashMap<>();
 
   // to keep this coherent with the manifests, updates to this should be done in manifests.compute()
   private final DeduplicationCache<DeduplicationCacheKey,LocalStore,URLClassLoader> classloaders =
@@ -135,20 +135,20 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
 
   /**
    * Schedule a task to execute at {@code interval} seconds to update the cached resources if the
-   * ContextManifest has changed. The task schedules a follow-on task at the update interval value
-   * (if it changed) and the task is successful or throws a handled exception. When an unhandled
-   * exception is thrown, then the corresponding entry in the manifests map is cleared. The next
-   * call to {@code #getClassLoader(String)} will recreate the manifests map entry and schedule the
-   * monitor task.
+   * manifest has changed. The task schedules a follow-on task at the update interval value (if it
+   * changed) and the task is successful or throws a handled exception. When an unhandled exception
+   * is thrown, then the corresponding entry in the manifests map is cleared. The next call to
+   * {@code #getClassLoader(String)} will recreate the manifests map entry and schedule the monitor
+   * task.
    */
   private void monitor(final String url, long interval) {
-    LOG.trace("Monitoring context manifest {} for changes at {} second intervals", url, interval);
+    LOG.trace("Monitoring manifest {} for changes at {} second intervals", url, interval);
     executor.schedule(() -> {
       try {
         checkMonitoredUrl(url, interval);
       } catch (Throwable t) {
-        LOG.error("Unhandled exception occurred in context manifest monitor thread. Removing"
-            + " context manifest {}.", url, t);
+        LOG.error("Unhandled exception occurred in manifest monitor thread. Removing manifest {}.",
+            url, t);
         manifests.remove(url);
         throw t;
       }
@@ -229,9 +229,9 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     return classloader.get();
   }
 
-  private ContextManifest computeManifestAndClassLoader(
-      AtomicReference<URLClassLoader> resultHolder, String url, ContextManifest previous) {
-    ContextManifest computed;
+  private Manifest computeManifestAndClassLoader(AtomicReference<URLClassLoader> resultHolder,
+      String url, Manifest previous) {
+    Manifest computed;
     if (previous == null) {
       try {
         computed = downloadManifest(url);
@@ -250,18 +250,18 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     return computed;
   }
 
-  private ContextManifest downloadManifest(String url) throws IOException {
-    LOG.trace("Retrieving context manifest from {}", url);
+  private Manifest downloadManifest(String url) throws IOException {
+    LOG.trace("Retrieving manifest from {}", url);
     URL urlUrl = new URL(url);
     allowedUrlChecker.accept("manifest", urlUrl);
-    return ContextManifest.download(urlUrl);
+    return Manifest.download(urlUrl);
   }
 
   private void checkMonitoredUrl(String url, long interval) {
-    ContextManifest current = manifests.compute(url, (key, previous) -> {
+    Manifest current = manifests.compute(url, (key, previous) -> {
       if (previous == null) {
         // manifest has been removed from the map, no need to check for update
-        LOG.debug("ContextManifest for {} not present, no longer monitoring for changes", url);
+        LOG.debug("Manifest for {} not present, no longer monitoring for changes", url);
         return null;
       }
       // check for any classloaders still in the cache that were created for a manifest
@@ -277,7 +277,7 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     }
     long nextInterval = interval;
     try {
-      final ContextManifest update = downloadManifest(url);
+      final Manifest update = downloadManifest(url);
       if (!current.getChecksum().equals(update.getChecksum())) {
         LOG.debug("Context manifest for {} has changed", url);
         localStore.get().storeContext(update);
@@ -297,7 +297,7 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
         return v;
       });
     } catch (IOException | RuntimeException e) {
-      LOG.error("Error parsing updated context manifest at {}. Classloader NOT updated!", url, e);
+      LOG.error("Error parsing updated manifest at {}. Classloader NOT updated!", url, e);
       final Stopwatch failureTimer = classloaderFailures.get(url);
       var gracePeriod = updateFailureGracePeriodMins.get();
       if (gracePeriod.isZero()) {

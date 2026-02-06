@@ -23,13 +23,13 @@ import static java.util.Objects.requireNonNull;
 
 import java.util.Objects;
 
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 
 class DeduplicationCacheKey {
   private final String location;
-  private final ContextManifest manifest;
+  private final Manifest manifest;
 
-  public DeduplicationCacheKey(String location, ContextManifest manifest) {
+  public DeduplicationCacheKey(String location, Manifest manifest) {
     this.location = requireNonNull(location);
     this.manifest = requireNonNull(manifest);
   }
@@ -38,7 +38,7 @@ class DeduplicationCacheKey {
     return location;
   }
 
-  public ContextManifest getManifest() {
+  public Manifest getManifest() {
     return manifest;
   }
 

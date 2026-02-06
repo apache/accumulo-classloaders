@@ -44,7 +44,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-import org.apache.accumulo.classloader.ccl.manifest.ContextManifest;
+import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 import org.apache.accumulo.classloader.ccl.manifest.Resource;
 import org.apache.accumulo.core.client.Accumulo;
 import org.apache.accumulo.core.client.AccumuloClient;
@@ -132,9 +132,9 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     Files.createDirectory(jsonDirPath);
 
     // Create a manifest that only references jar A
-    final var manifest = ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
+    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
     final String manifestJson = manifest.toJson();
-    final File testFile = jsonDirPath.resolve("testContextManifest.json").toFile();
+    final File testFile = jsonDirPath.resolve("testManifest.json").toFile();
     Files.writeString(testFile.toPath(), manifestJson);
     assertTrue(Files.exists(testFile.toPath()));
 
@@ -215,8 +215,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(refFiles.stream().anyMatch(p -> p.endsWith(jarALocalFileName)));
 
       // Update to point to jar B
-      final ContextManifest update =
-          ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarBOrigLocation);
+      final Manifest update = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarBOrigLocation);
       final String updateJson = update.toJson();
       Files.writeString(testFile.toPath(), updateJson);
       assertTrue(Files.exists(testFile.toPath()));
@@ -248,7 +247,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(jarACopy));
 
       final var update2 =
-          ContextManifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
+          Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 
