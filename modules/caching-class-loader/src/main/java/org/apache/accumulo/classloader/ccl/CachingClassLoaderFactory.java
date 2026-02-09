@@ -20,18 +20,14 @@ package org.apache.accumulo.classloader.ccl;
 
 import static java.util.Objects.requireNonNull;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner;
 import java.net.MalformedURLException;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -39,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.Supplier;
@@ -113,8 +110,15 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
   private static final Logger LOG = LoggerFactory.getLogger(CachingClassLoaderFactory.class);
   private static final Cleaner CLEANER = Cleaner.create();
 
+  private static final AtomicLong monitorThreadCounter = new AtomicLong(0);
+
   // executor for the monitor tasks
-  private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(0);
+  private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(0, r -> {
+    var t = new Thread(r);
+    t.setName("url-context-monitor-thread-" + monitorThreadCounter.getAndIncrement());
+    t.setDaemon(true);
+    return t;
+  });
 
   // stores the latest seen manifest for a remote URL; String types are used here for the key
   // instead of URL because URL.hashCode could trigger network activity for hostname lookups
@@ -157,7 +161,7 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
 
   @Override
   public void init(ContextClassLoaderEnvironment env) {
-    String value = requireNonNull(env.getConfiguration().get(PROP_CACHE_DIR),
+    String baseDir = requireNonNull(env.getConfiguration().get(PROP_CACHE_DIR),
         "Property " + PROP_CACHE_DIR + " not set, cannot create cache directory.");
 
     // these suppliers are used so we can update these config properties without restarting,
@@ -190,25 +194,10 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
               + " No ClassLoader instances will be created until it is set.",
           PROP_ALLOWED_URLS, env.getConfiguration().get(PROP_ALLOWED_URLS), npe);
     }
-    final Path baseCacheDir;
-    if (value.startsWith("file:")) {
-      try {
-        baseCacheDir = Path.of(new URL(value).toURI());
-      } catch (IOException | URISyntaxException e) {
-        throw new IllegalArgumentException(
-            "Malformed file: URL specified for base directory: " + value, e);
-      }
-    } else if (value.startsWith("/")) {
-      baseCacheDir = Path.of(value);
-    } else {
-      throw new IllegalArgumentException(
-          "Base directory is neither a file URL nor an absolute file path: " + value);
-    }
     try {
-      localStore.set(new LocalStore(baseCacheDir, allowedUrlChecker));
+      localStore.set(new LocalStore(baseDir, allowedUrlChecker));
     } catch (IOException e) {
-      throw new UncheckedIOException("Unable to create the local storage area at " + baseCacheDir,
-          e);
+      throw new UncheckedIOException("Unable to create the local storage area at " + baseDir, e);
     }
   }
 
@@ -358,7 +347,7 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
             "Exception creating a hard link in {} due to missing resource {}; attempting re-download of context resources",
             failedHardLinksDir, e.getMissingResource(), e);
         try {
-          recursiveDelete(failedHardLinksDir);
+          LocalStore.recursiveDelete(failedHardLinksDir);
         } catch (IOException ioe) {
           LOG.warn(
               "Saw exception removing directory {} after hard link creation failure; this should be cleaned up manually",
@@ -385,20 +374,12 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     final var cleanDir = hardLinksDir;
     CLEANER.register(cl, () -> {
       try {
-        recursiveDelete(cleanDir);
+        LocalStore.recursiveDelete(cleanDir);
       } catch (IOException e) {
         LOG.warn("Saw exception when executing cleaner on directory {}", cleanDir, e);
       }
     });
     return cl;
-  }
-
-  private static void recursiveDelete(Path directory) throws IOException {
-    if (Files.exists(directory)) {
-      try (var walker = Files.walk(directory)) {
-        walker.map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
-      }
-    }
   }
 
 }

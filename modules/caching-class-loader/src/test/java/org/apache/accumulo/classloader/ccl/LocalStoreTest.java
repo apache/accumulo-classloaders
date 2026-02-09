@@ -133,7 +133,8 @@ public class LocalStoreTest {
   @Test
   public void testPropertyNotSet() {
     // test baseDir not set
-    assertThrows(NullPointerException.class, () -> new LocalStore(null, ALLOW_ALL_URLS));
+    assertThrows(NullPointerException.class, () -> new LocalStore((Path) null, ALLOW_ALL_URLS));
+    assertThrows(NullPointerException.class, () -> new LocalStore((String) null, ALLOW_ALL_URLS));
     // test URL checker not set
     assertThrows(NullPointerException.class, () -> new LocalStore(baseCacheDir, null));
   }
