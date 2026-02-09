@@ -86,22 +86,28 @@ Here is an example manifest:
   ]
 }
 ```
-## Quick start
 
-The following are the steps to use this context classloader with jars accessible via URL.
+## Quick Start
 
- 1. Add the jar for this project to the Accumulo classpath.
- 2. Optionally add the jar for the [hdfs-urlstreamhandler-provider][2] project to the Accumulo classpath. This will enable loading jars from HDFS URLs.
- 3. Set the following Accumulo properties:
-    * `general.context.class.loader.factory=org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory`
-    * `general.custom.classloader.ccl.cache.dir=file://path/to/some/directory`
-    * `general.custom.classloader.ccl.allowed.urls.pattern=someRegexPatternForAllowedUrls`
-    * (optional) `general.custom.classloader.ccl.update.grace.minutes=30`
- 4. Restart Accumulo
- 5. Run `accumulo create-classloader-manifest <url>[ <url>...]` with your URLs to create a json manifest. Store the output of this command in a file accessible by a URL.
- 6. Set the following table property to link to a manifest. For example:
-    * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/manifest.json`
- 7. Repeat steps 5 and 6 for different contexts and/or tables.
+The following are the steps to use this context classloader with jars
+accessible via URL.
+
+1. Add the jar for this project to the Accumulo classpath.
+2. Optionally add the jar for the [hdfs-urlstreamhandler-provider][2] project
+   to the Accumulo classpath. This will enable loading jars from HDFS URLs.
+3. Set the following Accumulo properties:
+   * `general.context.class.loader.factory=org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory`
+   * `general.custom.classloader.ccl.cache.dir=file:/absolute/path/to/some/local/directory`
+   * `general.custom.classloader.ccl.allowed.urls.pattern=someRegexPatternForAllowedUrls`
+   * (optional) `general.custom.classloader.ccl.update.grace.minutes=30`
+4. Restart Accumulo (required for the first two properties; the others can be
+   changed on a running system)
+5. Create a manifest like the example above, either manually, or by using the
+   provided tool (see "Creating a Manifest" section below) and make it
+   accessible with a URL.
+6. Set the following table property to link to a manifest's URL. For example:
+   * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/manifest.json`
+7. Repeat steps 5 and 6 for different contexts and/or tables.
 
 ## How it Works
 
@@ -192,7 +198,7 @@ stdout and can be redirected to a file. The command takes two arguments:
 1. the monitor interval, in seconds (e.g. `-i 300`),
 2. an optional checksum algorithm to use (e.g. `-a 'SHA3-512'`), and
 3. a list of file URLs (e.g. `hdfs://host:port/path/to/one.jar
-   file://host/path/to/two.jar`)
+   file:/host/path/to/two.jar`)
 
 ## Updating a Manifest
 
