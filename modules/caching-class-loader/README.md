@@ -86,6 +86,22 @@ Here is an example manifest:
   ]
 }
 ```
+## Quick start
+
+The following are the steps to use this context classloader with jars accessible via URL.
+
+ 1. Add the jar for this project to the Accumulo classpath.
+ 2. Optionally add the jar for the [hdfs-urlstreamhandler-provider][2] project to the Accumulo classpath. This will enable loading jars from HDFS URLs.
+ 3. Set the following Accumulo properties:
+    * `general.context.class.loader.factory=org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory`
+    * `general.custom.classloader.ccl.cache.dir=file://path/to/some/directory`
+    * `general.custom.classloader.ccl.allowed.urls.pattern=someRegexPatternForAllowedUrls`
+    * (optional) `general.custom.classloader.ccl.update.grace.minutes=30`
+ 4. Restart Accumulo
+ 5. Run `accumulo create-classloader-manifest <url>[ <url>...]` with your URLs to create a json manifest. Store the output of this command in a file accessible by a URL.
+ 6. Set the following table property to link to a manifest. For example:
+    * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/manifest.json`
+ 7. Repeat steps 5 and 6 for different contexts and/or tables.
 
 ## How it Works
 
@@ -269,19 +285,6 @@ successfully downloaded by a previously failed process. Removing them won't
 break the application in any way, but doing so may result in a redundant
 download, which can result in increased network activity or storage space (see
 the previous section for considerations regarding the `resources` directory).
-
-## Accumulo Configuration
-
-To use this with Accumulo:
-
-1. Set the following Accumulo properties:
-   * `general.context.class.loader.factory=org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory`
-   * `general.custom.classloader.ccl.cache.dir=file://path/to/some/directory`
-   * `general.custom.classloader.ccl.allowed.urls.pattern=someRegexPatternForAllowedUrls`
-   * (optional) `general.custom.classloader.ccl.update.grace.minutes=30`
-2. Set the following table property to link to a manifest. For example:
-   * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/manifest.json`
-
 
 [1]: https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/net/spi/URLStreamHandlerProvider.html
 [2]: https://github.com/apache/accumulo-classloaders/tree/main/modules/hdfs-urlstreamhandler-provider
