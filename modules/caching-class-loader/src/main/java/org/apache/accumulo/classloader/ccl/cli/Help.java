@@ -18,8 +18,6 @@
  */
 package org.apache.accumulo.classloader.ccl.cli;
 
-import java.util.function.Consumer;
-
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
@@ -28,14 +26,9 @@ class Help {
   @Parameter(names = {"-h", "-?", "--help", "-help"}, help = true)
   public boolean help = false;
 
-  void parseArgs(Consumer<JCommander> jcConsumer, String programName, String[] args,
-      Object... others) {
+  void parseArgs(String programName, String[] args) {
     JCommander commander = new JCommander();
-    jcConsumer.accept(commander);
     commander.addObject(this);
-    for (Object other : others) {
-      commander.addObject(other);
-    }
     commander.setProgramName(programName);
     try {
       commander.parse(args);
@@ -49,15 +42,11 @@ class Help {
     }
   }
 
-  void parseArgs(String programName, String[] args, Object... others) {
-    parseArgs(jCommander -> {}, programName, args, others);
-  }
-
-  void exit(int status) {
+  private void exit(int status) {
     System.exit(status);
   }
 
-  void exitWithError(String message, int status) {
+  private void exitWithError(String message, int status) {
     System.err.println(message);
     exit(status);
   }
