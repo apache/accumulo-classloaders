@@ -103,7 +103,7 @@ accessible via URL.
 4. Restart Accumulo (required for the first two properties; the others can be
    changed on a running system)
 5. Create a manifest like the example above, either manually, or by using the
-   provided tool (see [Creating a Manifest](#Creating a Manifest)) and make it
+   provided tool (see [Creating a Manifest][#Creating a Manifest]) and make it
    accessible with a URL.
 6. Set the following table property to link to a manifest's URL. For example:
    * `table.class.loader.context=(file|hdfs|http|https)://path/to/context/manifest.json`
