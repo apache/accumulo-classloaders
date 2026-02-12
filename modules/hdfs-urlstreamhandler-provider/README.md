@@ -18,7 +18,7 @@
     under the License.
 
 -->
-# URLStreamHandlerProvider
+# HdfsURLStreamHandlerProvider
 
 This library contains a single class that implements
 [URLStreamHandlerProvider][1], to provide a stream handler for `hdfs:` URL
