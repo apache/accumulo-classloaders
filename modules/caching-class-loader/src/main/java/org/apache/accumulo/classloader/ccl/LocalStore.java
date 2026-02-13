@@ -423,8 +423,9 @@ public final class LocalStore {
   static class HardLinkFailedException extends Exception {
 
     private static final long serialVersionUID = 1L;
-    private final Path destDir;
-    private Path missingResource;
+    // Path isn't serializable; that's okay, since we don't need this exception serialized
+    private final transient Path destDir;
+    private final transient Path missingResource;
 
     HardLinkFailedException(Path destDir, Path missingResource, NoSuchFileException cause) {
       super("Creating hard link in directory " + destDir + " failed", cause);
