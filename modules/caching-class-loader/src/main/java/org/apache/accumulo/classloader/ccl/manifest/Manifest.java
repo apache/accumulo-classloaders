@@ -32,12 +32,11 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
-import java.util.function.Supplier;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.codec.digest.DigestUtils;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Suppliers;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
@@ -78,9 +77,9 @@ public class Manifest {
 
   private static final String SHA_512 = "SHA-512";
 
-  // transient fields that don't go in the json
-  private final transient Supplier<String> checksum =
-      Suppliers.memoize(() -> new DigestUtils(getChecksumAlgorithm()).digestAsHex(toJson()));
+  // transient fields that don't go in the json; use ConcurrentHashMap to lazily compute the fixed
+  // value, because Java 21 complains about this escapes when using a memoizing supplier
+  private final transient ConcurrentHashMap<String,String> checksum = new ConcurrentHashMap<>();
 
   // serialized fields for json
   // use a LinkedHashSet to preserve the order specified in the file
@@ -130,7 +129,8 @@ public class Manifest {
   }
 
   public String getChecksum() {
-    return checksum.get();
+    return checksum.computeIfAbsent(getChecksumAlgorithm(),
+        algorithm -> new DigestUtils(algorithm).digestAsHex(toJson()));
   }
 
   public String toJson() {
