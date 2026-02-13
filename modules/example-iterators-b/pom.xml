@@ -28,6 +28,9 @@
     <relativePath>../../pom.xml</relativePath>
   </parent>
   <artifactId>example-iterators-b</artifactId>
+  <properties>
+    <maven.deploy.skip>releases</maven.deploy.skip>
+  </properties>
   <dependencies>
     <dependency>
       <!-- provided by accumulo -->
