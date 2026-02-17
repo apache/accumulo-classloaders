@@ -29,6 +29,8 @@ import static org.apache.accumulo.classloader.ccl.TestUtils.testClassFailsToLoad
 import static org.apache.accumulo.classloader.ccl.TestUtils.testClassLoads;
 import static org.apache.accumulo.classloader.ccl.TestUtils.updateManifestFile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -198,7 +200,7 @@ class CachingClassLoaderFactoryTest {
     // case 2: manifest URL fails to match the pattern
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> factory.getClassLoader(hdfsAllUrl.toExternalForm()));
-    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+    assertInstanceOf(IllegalArgumentException.class, ex.getCause());
     assertTrue(ex.getCause().getMessage().contains("Context manifest URL (hdfs:"));
 
     // case 3a: manifest URL matches, but resource URL should fail to match the pattern,
@@ -217,9 +219,9 @@ class CachingClassLoaderFactoryTest {
     Files.writeString(disallowedContext, context2.toJson());
     ex = assertThrows(ContextClassLoaderException.class,
         () -> factory.getClassLoader(disallowedContext.toUri().toURL().toExternalForm()));
-    assertTrue(ex.getCause() instanceof IllegalStateException);
-    assertTrue(ex.getCause().getCause() instanceof ExecutionException);
-    assertTrue(ex.getCause().getCause().getCause() instanceof IllegalArgumentException);
+    assertInstanceOf(IllegalStateException.class, ex.getCause());
+    assertInstanceOf(ExecutionException.class, ex.getCause().getCause());
+    assertInstanceOf(IllegalArgumentException.class, ex.getCause().getCause().getCause());
     assertTrue(
         ex.getCause().getCause().getCause().getMessage()
             .contains("Context resource URL (" + badUrl + ") not allowed by pattern ("),
@@ -276,8 +278,8 @@ class CachingClassLoaderFactoryTest {
   public void testInvalidManifestURL() {
     var ex =
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
-    assertTrue(ex.getCause() instanceof UncheckedIOException);
-    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
+    assertInstanceOf(UncheckedIOException.class, ex.getCause());
+    assertInstanceOf(MalformedURLException.class, ex.getCause().getCause());
     assertEquals("no protocol: /not/a/URL", ex.getCause().getCause().getMessage());
   }
 
@@ -289,8 +291,8 @@ class CachingClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyUrl.toString()));
-    assertTrue(ex.getCause() instanceof UncheckedIOException);
-    assertTrue(ex.getCause().getCause() instanceof EOFException);
+    assertInstanceOf(UncheckedIOException.class, ex.getCause());
+    assertInstanceOf(EOFException.class, ex.getCause().getCause());
     assertEquals("InputStream does not contain a valid manifest at " + emptyUrl.toString(),
         ex.getCause().getCause().getMessage());
   }
@@ -305,8 +307,8 @@ class CachingClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidUrl.toString()));
-    assertTrue(ex.getCause() instanceof JsonSyntaxException);
-    assertTrue(ex.getCause().getCause() instanceof EOFException);
+    assertInstanceOf(JsonSyntaxException.class, ex.getCause());
+    assertInstanceOf(EOFException.class, ex.getCause().getCause());
   }
 
   @Test
@@ -330,14 +332,14 @@ class CachingClassLoaderFactoryTest {
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
 
     var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
 
     Files.delete(jarACopy);
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
 
     final var initial = createManifestFile(fs, "missing-resource.json", manifest.toJson());
     final URL initialUrl = new URL(fs.getUri().toString() + initial.toUri().toString());
@@ -374,8 +376,8 @@ class CachingClassLoaderFactoryTest {
         () -> FACTORY.getClassLoader(initialUrl.toString()));
     assertTrue(ex.getMessage().startsWith("Error getting classloader for context:"),
         ex::getMessage);
-    assertTrue(ex.getCause() instanceof JsonSyntaxException);
-    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
+    assertInstanceOf(JsonSyntaxException.class, ex.getCause());
+    assertInstanceOf(MalformedURLException.class, ex.getCause().getCause());
     assertTrue(ex.getCause().getCause().getMessage().startsWith("no protocol"),
         ex.getCause().getCause()::getMessage);
   }
@@ -393,11 +395,11 @@ class CachingClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(initialUrl.toString()));
-    assertTrue(ex.getCause() instanceof IllegalStateException);
+    assertInstanceOf(IllegalStateException.class, ex.getCause());
     assertTrue(ex.getCause().getMessage().startsWith("Error copying resource from file:"),
         ex::getMessage);
-    assertTrue(ex.getCause().getCause() instanceof ExecutionException);
-    assertTrue(ex.getCause().getCause().getCause() instanceof IllegalStateException);
+    assertInstanceOf(ExecutionException.class, ex.getCause().getCause());
+    assertInstanceOf(IllegalStateException.class, ex.getCause().getCause().getCause());
     assertTrue(ex.getCause().getCause().getCause().getMessage().startsWith("Checksum"),
         ex.getCause().getCause().getCause()::getMessage);
     assertTrue(
@@ -519,12 +521,12 @@ class CachingClassLoaderFactoryTest {
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
     var manifest2 = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
 
     updateManifestFile(fs, manifestPath, manifest2.toJson());
 
@@ -749,12 +751,12 @@ class CachingClassLoaderFactoryTest {
     var jarAPathParent = jarAPath.getParent();
     assertNotNull(jarAPathParent);
     var jarACopy = jarAPathParent.resolve("jarACopy.jar");
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
     Files.copy(jarAPath, jarACopy, REPLACE_EXISTING);
     assertTrue(Files.exists(jarACopy));
     var manifest2 = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
     Files.delete(jarACopy);
-    assertTrue(!Files.exists(jarACopy));
+    assertFalse(Files.exists(jarACopy));
 
     updateManifestFile(fs, manifestPath, manifest2.toJson());
 
