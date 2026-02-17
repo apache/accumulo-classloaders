@@ -307,8 +307,8 @@ class CachingClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(invalidUrl.toString()));
-      assertInstanceOf(JsonSyntaxException.class, ex.getCause());
-      assertInstanceOf(EOFException.class, ex.getCause().getCause());
+    assertInstanceOf(JsonSyntaxException.class, ex.getCause());
+    assertInstanceOf(EOFException.class, ex.getCause().getCause());
   }
 
   @Test
