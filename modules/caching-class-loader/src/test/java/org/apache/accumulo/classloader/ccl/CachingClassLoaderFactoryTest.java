@@ -278,9 +278,8 @@ class CachingClassLoaderFactoryTest {
   public void testInvalidManifestURL() {
     var ex =
         assertThrows(ContextClassLoaderException.class, () -> FACTORY.getClassLoader("/not/a/URL"));
-    assertTrue(ex.getCause() instanceof UncheckedIOException);
-    assertTrue(ex.getCause().getCause() instanceof MalformedURLException);
-    assertEquals("no protocol: /not/a/URL", ex.getCause().getCause().getMessage());
+    assertTrue(ex.getCause() instanceof IllegalArgumentException);
+    assertEquals("URI is not absolute", ex.getCause().getMessage());
   }
 
   @Test
