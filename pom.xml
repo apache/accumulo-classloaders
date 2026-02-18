@@ -130,6 +130,7 @@ under the License.
     <rat.consoleOutput>true</rat.consoleOutput>
     <sourceReleaseAssemblyDescriptor>source-release-tar</sourceReleaseAssemblyDescriptor>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <version.auto-service>1.1.1</version.auto-service>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -142,12 +143,9 @@ under the License.
         <scope>import</scope>
       </dependency>
       <dependency>
-        <!-- no longer provided by accumulo after 2.1 -->
-        <groupId>org.apache.commons</groupId>
-        <artifactId>commons-vfs2-bom</artifactId>
-        <version>2.10.0</version>
-        <type>pom</type>
-        <scope>import</scope>
+        <groupId>com.google.auto.service</groupId>
+        <artifactId>auto-service-annotations</artifactId>
+        <version>${version.auto-service}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.accumulo</groupId>
@@ -165,6 +163,12 @@ under the License.
     <dependency>
       <groupId>com.github.spotbugs</groupId>
       <artifactId>spotbugs-annotations</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <!-- needed for compile-time annotations only -->
+      <groupId>com.google.auto.service</groupId>
+      <artifactId>auto-service-annotations</artifactId>
       <optional>true</optional>
     </dependency>
   </dependencies>
@@ -380,13 +384,9 @@ under the License.
             </goals>
             <configuration>
               <failOnWarning>true</failOnWarning>
-              <ignoredUsedUndeclaredDependencies combine.children="append">
-                <!-- auto-service-annotations is transitive via auto-service -->
-                <undeclared>com.google.auto.service:auto-service-annotations:jar:*</undeclared>
-              </ignoredUsedUndeclaredDependencies>
               <ignoredUnusedDeclaredDependencies combine.children="append">
-                <!-- auto-service used by the compiler for annotation processing, not by code -->
-                <unused>com.google.auto.service:auto-service:jar:*</unused>
+                <!-- auto-service annotations may or may not be used in each module -->
+                <unused>com.google.auto.service:auto-service-annotations:jar:*</unused>
                 <!-- ignore false positive runtime dependencies -->
                 <unused>org.apache.logging.log4j:log4j-slf4j2-impl:*</unused>
                 <!-- spotbugs annotations may or may not be used in each module -->

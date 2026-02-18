@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.ref.Cleaner;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
@@ -120,9 +121,9 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     return t;
   });
 
-  // stores the latest seen manifest for a remote URL; String types are used here for the key
+  // stores the latest seen manifest for a remote URL; URI types are used here for the key
   // instead of URL because URL.hashCode could trigger network activity for hostname lookups
-  private final ConcurrentHashMap<String,Manifest> manifests = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<URI,Manifest> manifests = new ConcurrentHashMap<>();
 
   // to keep this coherent with the manifests, updates to this should be done in manifests.compute()
   private final DeduplicationCache<DeduplicationCacheKey,LocalStore,URLClassLoader> classloaders =
@@ -131,7 +132,7 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
 
   private final AtomicReference<LocalStore> localStore = new AtomicReference<>();
 
-  private final Map<String,Stopwatch> classloaderFailures = new HashMap<>();
+  private final Map<URI,Stopwatch> classloaderFailures = new HashMap<>();
   private volatile Supplier<Duration> updateFailureGracePeriodMins;
 
   // this is a BiConsumer so we can pass a type in the String
@@ -145,15 +146,15 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
    * {@code #getClassLoader(String)} will recreate the manifests map entry and schedule the monitor
    * task.
    */
-  private void monitor(final String url, long interval) {
-    LOG.trace("Monitoring manifest {} for changes at {} second intervals", url, interval);
+  private void monitor(final URI uri, long interval) {
+    LOG.trace("Monitoring manifest {} for changes at {} second intervals", uri, interval);
     executor.schedule(() -> {
       try {
-        checkMonitoredUrl(url, interval);
+        checkMonitoredUrl(uri, interval);
       } catch (Throwable t) {
         LOG.error("Unhandled exception occurred in manifest monitor thread. Removing manifest {}.",
-            url, t);
-        manifests.remove(url);
+            uri, t);
+        manifests.remove(uri);
         throw t;
       }
     }, interval, TimeUnit.SECONDS);
@@ -205,12 +206,12 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
   public ClassLoader getClassLoader(final String manifestUrl) throws ContextClassLoaderException {
     Preconditions.checkState(localStore.get() != null,
         "init not called before calling getClassLoader");
-    requireNonNull(manifestUrl, "manifest URL must be supplied");
+    URI manifestURI = URI.create(requireNonNull(manifestUrl, "manifest URL must be supplied"));
     final var classloader = new AtomicReference<URLClassLoader>();
     try {
       // get the current manifest, or create it from the URL if absent; this has the side effect of
       // creating and caching a class loader instance if it doesn't exist for the computed manifest
-      manifests.compute(manifestUrl,
+      manifests.compute(manifestURI,
           (key, previous) -> computeManifestAndClassLoader(classloader, key, previous));
     } catch (RuntimeException e) {
       throw new ContextClassLoaderException(e.getMessage(), e);
@@ -219,15 +220,15 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
   }
 
   private Manifest computeManifestAndClassLoader(AtomicReference<URLClassLoader> resultHolder,
-      String url, Manifest previous) {
+      URI uri, Manifest previous) {
     Manifest computed;
     if (previous == null) {
       try {
-        computed = downloadManifest(url);
+        computed = downloadManifest(uri);
         // we can set up monitoring now, but it will be blocked from doing anything yet, until this
         // finishes, since this code and the monitoring code both use manifests.compute(), which
         // is atomic/blocking for the same key
-        monitor(url, computed.getMonitorIntervalSeconds());
+        monitor(uri, computed.getMonitorIntervalSeconds());
       } catch (IOException e) {
         throw new UncheckedIOException(e);
       }
@@ -235,28 +236,28 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
       computed = previous;
     }
     resultHolder.set(
-        classloaders.computeIfAbsent(new DeduplicationCacheKey(url, computed), localStore::get));
+        classloaders.computeIfAbsent(new DeduplicationCacheKey(uri, computed), localStore::get));
     return computed;
   }
 
-  private Manifest downloadManifest(String url) throws IOException {
-    LOG.trace("Retrieving manifest from {}", url);
-    URL urlUrl = new URL(url);
-    allowedUrlChecker.accept("manifest", urlUrl);
-    return Manifest.download(urlUrl);
+  private Manifest downloadManifest(URI uri) throws IOException {
+    LOG.trace("Retrieving manifest from {}", uri);
+    URL url = uri.toURL();
+    allowedUrlChecker.accept("manifest", url);
+    return Manifest.download(url);
   }
 
-  private void checkMonitoredUrl(String url, long interval) {
-    Manifest current = manifests.compute(url, (key, previous) -> {
+  private void checkMonitoredUrl(URI uri, long interval) {
+    Manifest current = manifests.compute(uri, (key, previous) -> {
       if (previous == null) {
         // manifest has been removed from the map, no need to check for update
-        LOG.debug("Manifest for {} not present, no longer monitoring for changes", url);
+        LOG.debug("Manifest for {} not present, no longer monitoring for changes", uri);
         return null;
       }
       // check for any classloaders still in the cache that were created for a manifest
       // found at this URL
-      if (!classloaders.anyMatch(cacheKey -> cacheKey.getLocation().equals(url))) {
-        LOG.debug("ClassLoader for {} not present, no longer monitoring for changes", url);
+      if (!classloaders.anyMatch(cacheKey -> cacheKey.getLocation().equals(uri))) {
+        LOG.debug("ClassLoader for {} not present, no longer monitoring for changes", uri);
         return null;
       }
       return previous;
@@ -266,57 +267,57 @@ public class CachingClassLoaderFactory implements ContextClassLoaderFactory {
     }
     long nextInterval = interval;
     try {
-      final Manifest update = downloadManifest(url);
+      final Manifest update = downloadManifest(uri);
       if (!current.getChecksum().equals(update.getChecksum())) {
-        LOG.debug("Context manifest for {} has changed", url);
+        LOG.debug("Context manifest for {} has changed", uri);
         localStore.get().storeContext(update);
-        manifests.put(url, update);
+        manifests.put(uri, update);
         nextInterval = update.getMonitorIntervalSeconds();
-        classloaderFailures.remove(url);
+        classloaderFailures.remove(uri);
       } else {
-        LOG.trace("Context manifest for {} has not changed", url);
+        LOG.trace("Context manifest for {} has not changed", uri);
       }
       // reschedule this task to run if the manifest exists.
       // Atomically lock on the key and only reschedule if the value is present.
       final long finalMonitorInterval = nextInterval;
-      manifests.compute(url, (k, v) -> {
+      manifests.compute(uri, (k, v) -> {
         if (v != null) {
-          monitor(url, finalMonitorInterval);
+          monitor(uri, finalMonitorInterval);
         }
         return v;
       });
     } catch (IOException | RuntimeException e) {
-      LOG.error("Error parsing updated manifest at {}. Classloader NOT updated!", url, e);
-      final Stopwatch failureTimer = classloaderFailures.get(url);
+      LOG.error("Error parsing updated manifest at {}. Classloader NOT updated!", uri, e);
+      final Stopwatch failureTimer = classloaderFailures.get(uri);
       var gracePeriod = updateFailureGracePeriodMins.get();
       if (gracePeriod.isZero()) {
         // failure monitoring is disabled
         LOG.debug("Property {} not set, not tracking classloader failures for {}",
-            PROP_GRACE_PERIOD, url);
+            PROP_GRACE_PERIOD, uri);
       } else if (failureTimer == null) {
         // first failure, start the timer
-        classloaderFailures.put(url, Stopwatch.createStarted());
+        classloaderFailures.put(uri, Stopwatch.createStarted());
         LOG.debug(
             "Tracking classloader failures for {}, will NOT return working classloader if failures continue for {} minutes",
-            url, gracePeriod.toMinutes());
+            uri, gracePeriod.toMinutes());
       } else if (failureTimer.elapsed().compareTo(gracePeriod) > 0) {
         // has been failing for the grace period
         // unset the classloader reference so that the failure
         // will return from getClassLoader in the calling thread
-        LOG.info("Grace period for failing classloader has elapsed for {}", url);
-        manifests.remove(url);
-        classloaderFailures.remove(url);
+        LOG.info("Grace period for failing classloader has elapsed for {}", uri);
+        manifests.remove(uri);
+        classloaderFailures.remove(uri);
       } else {
-        LOG.trace("Failing to update classloader for {} within the grace period", url, e);
+        LOG.trace("Failing to update classloader for {} within the grace period", uri, e);
       }
       // reschedule this task to run if the manifest exists.
       // Don't put this in finally block as we only want to reschedule
       // on success or handled exception
       // Atomically lock on the key and only reschedule if the value is present.
       final long finalMonitorInterval = nextInterval;
-      manifests.compute(url, (k, v) -> {
+      manifests.compute(uri, (k, v) -> {
         if (v != null) {
-          monitor(url, finalMonitorInterval);
+          monitor(uri, finalMonitorInterval);
         }
         return v;
       });

@@ -18,6 +18,7 @@
  */
 package org.apache.accumulo.classloader.ccl.cli;
 
+import java.net.URI;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -66,7 +67,7 @@ public class CreateManifest implements KeywordExecutable {
     URL[] urls = new URL[opts.files.size()];
     int count = 0;
     for (String f : opts.files) {
-      urls[count++] = new URL(f);
+      urls[count++] = URI.create(f).toURL();
     }
     System.out.print(Manifest.create(opts.monitorInterval, opts.algorithm, urls).toJson());
   }

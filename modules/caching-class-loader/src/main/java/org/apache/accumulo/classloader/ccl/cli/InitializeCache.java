@@ -18,7 +18,7 @@
  */
 package org.apache.accumulo.classloader.ccl.cli;
 
-import java.net.URL;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -69,7 +69,7 @@ public class InitializeCache implements KeywordExecutable {
     opts.parseArgs(InitializeCache.class.getName(), args);
     var localStore = new LocalStore(opts.directory, (a, b) -> {/* allow all */});
     for (String manifestUrl : opts.manifests) {
-      var manifest = Manifest.download(new URL(manifestUrl));
+      var manifest = Manifest.download(URI.create(manifestUrl).toURL());
       localStore.storeContext(manifest);
       if (opts.verify) {
         var workingDir = localStore.createWorkingHardLinks(manifest, p -> {/* do nothing */});

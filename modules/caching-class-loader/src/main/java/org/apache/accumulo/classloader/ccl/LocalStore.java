@@ -30,7 +30,7 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.URISyntaxException;
+import java.net.URI;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.FileAlreadyExistsException;
@@ -108,12 +108,7 @@ public final class LocalStore {
 
   private static Path baseDirStringToPath(final String value) {
     if (value.startsWith("file:")) {
-      try {
-        return Path.of(new URL(value).toURI());
-      } catch (IOException | URISyntaxException e) {
-        throw new IllegalArgumentException(
-            "Malformed file: URL specified for base directory: " + value, e);
-      }
+      return Path.of(URI.create(value));
     } else if (value.startsWith("/")) {
       return Path.of(value);
     }
@@ -343,8 +338,9 @@ public final class LocalStore {
       }
 
       if (t.isAlive()) {
-        LOG.debug("Unexpectedly found download thread " + t.getId()
-            + " still alive (thread was likely interrupted): " + t.getName());
+        LOG.debug(
+            "Unexpectedly found download thread still alive (thread was likely interrupted): {}",
+            t);
       }
     }
   }
