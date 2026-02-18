@@ -19,6 +19,8 @@
 package org.apache.accumulo.classloader.ccl;
 
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.createClassLoader;
+import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactoryTest.DESC;
+import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactoryTest.MONITOR_INTERVAL_SECS;
 import static org.apache.accumulo.classloader.ccl.LocalStore.MANIFESTS_DIR;
 import static org.apache.accumulo.classloader.ccl.LocalStore.RESOURCES_DIR;
 import static org.apache.accumulo.classloader.ccl.LocalStore.WORKING_DIR;
@@ -65,7 +67,6 @@ public class LocalStoreTest {
   // a mock URL checker that allows all for test
   private static final BiConsumer<String,URL> ALLOW_ALL_URLS = (type, url) -> {};
 
-  private static final int MONITOR_INTERVAL_SECS = 5;
   private static MiniDFSCluster hdfs;
   private static Server jetty;
   private static Manifest manifest;
@@ -108,7 +109,7 @@ public class LocalStoreTest {
     resources.add(new Resource(jarCNewLocation, "SHA-1",
         TestUtils.computeResourceChecksum("SHA-1", jarCOrigLocation)));
 
-    manifest = new Manifest(MONITOR_INTERVAL_SECS, resources);
+    manifest = new Manifest(DESC, MONITOR_INTERVAL_SECS, resources);
     classA = new TestClassInfo("test.TestObjectA", "Hello from A");
     classB = new TestClassInfo("test.TestObjectB", "Hello from B");
     classC = new TestClassInfo("test.TestObjectC", "Hello from C");
@@ -277,7 +278,7 @@ public class LocalStoreTest {
     updatedResources.add(new Resource(jarDOrigLocation, "SHA-512",
         TestUtils.computeResourceChecksum("SHA-512", jarDOrigLocation)));
 
-    var update = new Manifest(MONITOR_INTERVAL_SECS, updatedResources);
+    var update = new Manifest(DESC, MONITOR_INTERVAL_SECS, updatedResources);
     localStore.storeContext(update);
 
     // Confirm the 3 jars are cached locally

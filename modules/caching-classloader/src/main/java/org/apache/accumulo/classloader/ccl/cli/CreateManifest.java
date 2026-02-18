@@ -20,6 +20,7 @@ package org.apache.accumulo.classloader.ccl.cli;
 
 import java.net.URI;
 import java.net.URL;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,16 +35,21 @@ import com.google.auto.service.AutoService;
 public class CreateManifest implements KeywordExecutable {
 
   static class Opts extends Help {
+    @Parameter(names = {"-c", "--comment"}, required = false,
+        description = "optional comment (default: Created <current ISO-8601 timestamp>)", arity = 1,
+        order = 1)
+    String comment = "Created " + Instant.now().toString();
+
     @Parameter(names = {"-i", "--interval"}, required = true,
-        description = "monitor interval (in seconds)", arity = 1, order = 1)
+        description = "monitor interval (in seconds)", arity = 1, order = 2)
     int monitorInterval;
 
     @Parameter(names = {"-a", "--algorithm"}, required = false,
-        description = "checksum algorithm to use (default: SHA-512)", arity = 1, order = 2)
+        description = "checksum algorithm to use (default: SHA-512)", arity = 1, order = 3)
     String algorithm = "SHA-512";
 
-    @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
-        arity = -1, order = 3)
+    @Parameter(required = false, description = "classpath element URLs ([<url>...])", arity = -1,
+        order = 4)
     public List<String> files = new ArrayList<>();
   }
 
@@ -69,6 +75,8 @@ public class CreateManifest implements KeywordExecutable {
     for (String f : opts.files) {
       urls[count++] = URI.create(f).toURL();
     }
-    System.out.print(Manifest.create(opts.monitorInterval, opts.algorithm, urls).toJson());
+    System.out
+        .print(Manifest.create(opts.comment, opts.monitorInterval, opts.algorithm, urls).toJson());
   }
+
 }

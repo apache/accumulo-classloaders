@@ -23,6 +23,8 @@ import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP_ALLOWED_URLS;
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP_CACHE_DIR;
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP_GRACE_PERIOD;
+import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactoryTest.DESC;
+import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactoryTest.MONITOR_INTERVAL_SECS;
 import static org.apache.accumulo.classloader.ccl.LocalStore.WORKING_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -99,8 +101,6 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   private static final String ITER_CLASS_NAME =
       "org.apache.accumulo.classloader.vfs.examples.ExampleIterator";
-  private static final int MONITOR_INTERVAL_SECS =
-      CachingClassLoaderFactoryTest.MONITOR_INTERVAL_SECS;
 
   private static URL jarAOrigLocation;
   private static URL jarBOrigLocation;
@@ -133,7 +133,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     Files.createDirectory(jsonDirPath);
 
     // Create a manifest that only references jar A
-    final var manifest = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
+    final var manifest = Manifest.create(DESC, MONITOR_INTERVAL_SECS, "SHA-256", jarAOrigLocation);
     final String manifestJson = manifest.toJson();
     final File testFile = jsonDirPath.resolve("testManifest.json").toFile();
     Files.writeString(testFile.toPath(), manifestJson);
@@ -216,7 +216,8 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(refFiles.stream().anyMatch(p -> p.endsWith(jarALocalFileName)));
 
       // Update to point to jar B
-      final Manifest update = Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarBOrigLocation);
+      final Manifest update =
+          Manifest.create(DESC, MONITOR_INTERVAL_SECS, "SHA-512", jarBOrigLocation);
       final String updateJson = update.toJson();
       Files.writeString(testFile.toPath(), updateJson);
       assertTrue(Files.exists(testFile.toPath()));
@@ -248,7 +249,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       assertTrue(Files.exists(jarACopy));
 
       final var update2 =
-          Manifest.create(MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
+          Manifest.create(DESC, MONITOR_INTERVAL_SECS, "SHA-512", jarACopy.toUri().toURL());
       Files.delete(jarACopy);
       assertTrue(!Files.exists(jarACopy));
 

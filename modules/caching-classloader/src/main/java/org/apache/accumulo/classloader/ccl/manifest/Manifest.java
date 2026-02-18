@@ -50,8 +50,8 @@ public class Manifest {
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
-  public static Manifest create(int monitorIntervalSecs, String algorithm, URL... sources)
-      throws IOException {
+  public static Manifest create(String comment, int monitorIntervalSecs, String algorithm,
+      URL... sources) throws IOException {
     // use a LinkedHashSet to preserve the order of the resources
     LinkedHashSet<Resource> resources = new LinkedHashSet<>();
     for (URL u : sources) {
@@ -60,19 +60,29 @@ public class Manifest {
         resources.add(new Resource(u, algorithm, checksum));
       }
     }
-    return new Manifest(monitorIntervalSecs, resources);
+    return new Manifest(comment, monitorIntervalSecs, resources);
   }
 
   @SuppressFBWarnings(value = "URLCONNECTION_SSRF_FD",
       justification = "user-supplied URL is the intended functionality")
   public static Manifest download(final URL url) throws IOException {
+    final Manifest manifest;
     try (InputStream is = url.openStream()) {
-      var manifest = GSON.fromJson(new InputStreamReader(is, UTF_8), Manifest.class);
-      if (manifest == null) {
-        throw new EOFException("InputStream does not contain a valid manifest at " + url);
-      }
-      return manifest;
+      manifest = fromStream(is);
     }
+    if (manifest == null) {
+      throw new EOFException("InputStream does not contain a valid manifest at " + url);
+    }
+    return manifest;
+  }
+
+  static Manifest fromStream(InputStream is) {
+    var manifest = GSON.fromJson(new InputStreamReader(is, UTF_8), Manifest.class);
+    if (manifest == null || manifest.getMonitorIntervalSeconds() <= 0
+        || manifest.getResources() == null) {
+      return null;
+    }
+    return manifest;
   }
 
   private static final String SHA_512 = "SHA-512";
@@ -83,16 +93,22 @@ public class Manifest {
 
   // serialized fields for json
   // use a LinkedHashSet to preserve the order specified in the file
+  private String comment;
   private int monitorIntervalSeconds;
   private LinkedHashSet<Resource> resources;
 
   public Manifest() {}
 
-  public Manifest(int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
+  public Manifest(String comment, int monitorIntervalSeconds, LinkedHashSet<Resource> resources) {
+    this.comment = comment; // optional, may be null
     Preconditions.checkArgument(monitorIntervalSeconds > 0,
         "monitor interval must be greater than zero");
     this.monitorIntervalSeconds = monitorIntervalSeconds;
-    this.resources = requireNonNull(resources, "resources must be supplied");
+    this.resources = requireNonNull(resources, "resources must be supplied, but may be empty");
+  }
+
+  public String getComment() {
+    return comment;
   }
 
   public int getMonitorIntervalSeconds() {
