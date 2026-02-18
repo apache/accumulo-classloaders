@@ -74,15 +74,15 @@ public class URLTypesTest {
     var p = Path.of(jarPath.toURI());
     final long origFileSize = TestUtils.getFileSize(p);
 
-    MiniDFSCluster cluster = TestUtils.getMiniCluster();
+    MiniDFSCluster hdfs = TestUtils.getMiniCluster();
     try {
-      FileSystem fs = cluster.getFileSystem();
+      FileSystem fs = hdfs.getFileSystem();
       assertTrue(fs.mkdirs(new org.apache.hadoop.fs.Path("/context1")));
       var dst = new org.apache.hadoop.fs.Path("/context1/HelloWorld.jar");
       fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarPath.toURI()), dst);
       assertTrue(fs.exists(dst));
 
-      URL fullPath = new URL(fs.getUri().toString() + dst.toUri().toString());
+      URL fullPath = fs.getUri().resolve(dst.toUri()).toURL();
       LOG.info("Path to hdfs file: {}", fullPath);
 
       assertEquals(origFileSize, TestUtils.getFileSize(fullPath));
@@ -90,7 +90,7 @@ public class URLTypesTest {
     } catch (IOException e) {
       throw new RuntimeException("Error setting up mini cluster", e);
     } finally {
-      cluster.shutdown();
+      hdfs.shutdown();
     }
   }
 

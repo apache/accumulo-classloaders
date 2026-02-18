@@ -21,20 +21,21 @@ package org.apache.accumulo.classloader.ccl;
 import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
 
+import java.net.URI;
 import java.util.Objects;
 
 import org.apache.accumulo.classloader.ccl.manifest.Manifest;
 
 class DeduplicationCacheKey {
-  private final String location;
+  private final URI location;
   private final Manifest manifest;
 
-  public DeduplicationCacheKey(String location, Manifest manifest) {
+  public DeduplicationCacheKey(URI location, Manifest manifest) {
     this.location = requireNonNull(location);
     this.manifest = requireNonNull(manifest);
   }
 
-  public String getLocation() {
+  public URI getLocation() {
     return location;
   }
 

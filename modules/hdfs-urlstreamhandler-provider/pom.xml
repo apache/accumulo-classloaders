@@ -31,18 +31,6 @@
   <name>HDFS URLStreamHandlerProvider</name>
   <dependencies>
     <dependency>
-      <!-- needed for build checks, but not for runtime -->
-      <groupId>com.github.spotbugs</groupId>
-      <artifactId>spotbugs-annotations</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
-      <!-- needed for annotation processor during compile, but not after -->
-      <groupId>com.google.auto.service</groupId>
-      <artifactId>auto-service</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
       <scope>provided</scope>

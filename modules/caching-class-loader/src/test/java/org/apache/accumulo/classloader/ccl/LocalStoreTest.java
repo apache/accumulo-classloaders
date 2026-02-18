@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -91,7 +92,7 @@ public class LocalStoreTest {
     final var dst = new org.apache.hadoop.fs.Path("/contextB/TestB.jar");
     fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(jarBOrigLocation.toURI()), dst);
     assertTrue(fs.exists(dst));
-    final URL jarBNewLocation = new URL(fs.getUri().toString() + dst.toUri().toString());
+    final URL jarBNewLocation = fs.getUri().resolve(dst.toUri()).toURL();
 
     // Put C into Jetty
     var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
@@ -244,7 +245,7 @@ public class LocalStoreTest {
   public void testClassLoader() throws Exception {
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     localStore.storeContext(manifest);
-    var cacheKey = new DeduplicationCacheKey("loc", manifest);
+    var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
     var cl = createClassLoader(cacheKey, localStore);
 
     testClassLoads(cl, classA);
@@ -256,7 +257,7 @@ public class LocalStoreTest {
   public void testClassLoaderUpdate() throws Exception {
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     localStore.storeContext(manifest);
-    var cacheKey = new DeduplicationCacheKey("loc", manifest);
+    var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
     final var cl = createClassLoader(cacheKey, localStore);
 
     testClassLoads(cl, classA);
@@ -292,7 +293,7 @@ public class LocalStoreTest {
     assertTrue(Files
         .exists(baseCacheDir.resolve(RESOURCES_DIR).resolve(localResourceName(removedResource))));
 
-    cacheKey = new DeduplicationCacheKey("loc", update);
+    cacheKey = new DeduplicationCacheKey(URI.create("loc"), update);
     final var updatedCl = createClassLoader(cacheKey, localStore);
 
     assertNotEquals(cl, updatedCl);
@@ -307,7 +308,7 @@ public class LocalStoreTest {
     var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
     assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
     localStore.storeContext(manifest);
-    var cacheKey = new DeduplicationCacheKey("loc", manifest);
+    var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
     assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
 
     final var endBackgroundThread = new CountDownLatch(1);
