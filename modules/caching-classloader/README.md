@@ -44,11 +44,11 @@ downloads from a remote URL.
 
 To use this factory, one must store resource files in a location that can be
 specified by a supported URL, and then must create a JSON-formatted manifest
-file that contains a monitoring interval (in seconds, greater than 0), and a
-list of resource URLs along with a checksum for each resource file. This
-manifest file must then be stored somewhere where this factory can download it,
-and use the URL to that file as the `context` parameter for this factory's
-`getClassLoader(String context)` method.
+file that contains an optional comment, a monitoring interval (in seconds,
+greater than 0), and a list of resource URLs along with a checksum for each
+resource file. This manifest file must then be stored somewhere where this
+factory can download it, and use the URL to that file as the `context`
+parameter for this factory's `getClassLoader(String context)` method.
 
 This factory can handle manifest and resource URLs of any type that are
 supported by your application via a registered [URLStreamHandlerProvider][1],
@@ -61,6 +61,7 @@ Here is an example manifest:
 
 ```json
 {
+  "comment": "an optional comment",
   "monitorIntervalSeconds": 5,
   "resources": [
     {
@@ -185,9 +186,9 @@ after approximately a minute.
 
 ## Creating a Manifest
 
-Users may take advantage of the `Manifest.create(int,String,URL[])` method to
-construct a `Manifest` object, programmatically. This will calculate the
-checksums of the classpath elements. `Manifest.toJson()` can be used to
+Users may take advantage of the `Manifest.create(String,int,String,URL[])`
+method to construct a `Manifest` object, programmatically. This will calculate
+the checksums of the classpath elements. `Manifest.toJson()` can be used to
 serialize the `Manifest` to a `String` to store in a file.
 
 Alternatively, if this library's jar is built and placed onto Accumulo's
