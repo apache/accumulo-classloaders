@@ -293,6 +293,7 @@ class CachingClassLoaderFactoryTest {
 
     var ex = assertThrows(ContextClassLoaderException.class,
         () -> FACTORY.getClassLoader(emptyUrl.toString()));
+    ex.printStackTrace();
     assertInstanceOf(UncheckedIOException.class, ex.getCause());
     assertInstanceOf(EOFException.class, ex.getCause().getCause());
     assertEquals("InputStream does not contain a valid manifest at " + emptyUrl.toString(),

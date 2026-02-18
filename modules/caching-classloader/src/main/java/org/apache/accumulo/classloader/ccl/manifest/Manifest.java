@@ -78,7 +78,8 @@ public class Manifest {
 
   static Manifest fromStream(InputStream is) {
     var manifest = GSON.fromJson(new InputStreamReader(is, UTF_8), Manifest.class);
-    if (manifest.getMonitorIntervalSeconds() <= 0 || manifest.getResources() == null) {
+    if (manifest == null || manifest.getMonitorIntervalSeconds() <= 0
+        || manifest.getResources() == null) {
       return null;
     }
     return manifest;
