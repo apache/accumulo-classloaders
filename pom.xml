@@ -28,11 +28,11 @@
     <relativePath />
   </parent>
   <groupId>org.apache.accumulo</groupId>
-  <artifactId>classloader-extras</artifactId>
+  <artifactId>accumulo-classloader-extras</artifactId>
   <version>1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <name>Classloader Extras</name>
-  <description>Classloader Extras provided by the Apache Accumulo project</description>
+  <name>Accumulo ClassLoader Extras</name>
+  <description>ClassLoader Extras provided by the Apache Accumulo project</description>
   <inceptionYear>2020</inceptionYear>
   <organization>
     <name>The Apache Software Foundation</name>
