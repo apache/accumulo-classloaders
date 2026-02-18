@@ -48,8 +48,8 @@ public class CreateManifest implements KeywordExecutable {
         description = "checksum algorithm to use (default: SHA-512)", arity = 1, order = 3)
     String algorithm = "SHA-512";
 
-    @Parameter(required = true, description = "classpath element URL (<url>[ <url>...])",
-        arity = -1, order = 4)
+    @Parameter(required = false, description = "classpath element URLs ([<url>...])", arity = -1,
+        order = 4)
     public List<String> files = new ArrayList<>();
   }
 
@@ -78,4 +78,5 @@ public class CreateManifest implements KeywordExecutable {
     System.out
         .print(Manifest.create(opts.comment, opts.monitorInterval, opts.algorithm, urls).toJson());
   }
+
 }
