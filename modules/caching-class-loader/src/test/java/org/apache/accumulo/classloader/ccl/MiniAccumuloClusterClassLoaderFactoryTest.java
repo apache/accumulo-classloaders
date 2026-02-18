@@ -25,6 +25,7 @@ import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP
 import static org.apache.accumulo.classloader.ccl.CachingClassLoaderFactory.PROP_GRACE_PERIOD;
 import static org.apache.accumulo.classloader.ccl.LocalStore.WORKING_DIR;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -273,7 +274,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
       // Scan of table with iterator setting should now fail.
       final Scanner scanner2 = client.createScanner(tableName);
       var re = assertThrows(RuntimeException.class, () -> scanner2.iterator().hasNext());
-      assertTrue(re.getCause() instanceof AccumuloServerException);
+      assertInstanceOf(AccumuloServerException.class, re.getCause());
     }
   }
 
