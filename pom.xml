@@ -75,7 +75,7 @@
   <modules>
     <module>modules/example-iterators-a</module>
     <module>modules/example-iterators-b</module>
-    <module>modules/caching-class-loader</module>
+    <module>modules/caching-classloader</module>
     <module>modules/hdfs-urlstreamhandler-provider</module>
   </modules>
   <scm>

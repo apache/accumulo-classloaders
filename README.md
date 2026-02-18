@@ -30,7 +30,7 @@ downloads, verifies, and locally caches classloader resources using a manifest
 file at a specified URL, which itself contained a listing of resource URLs to
 download, and corresponding checksums to verify their contents.
 
-See [modules/caching-class-loader/README.md](modules/caching-class-loader/README.md).
+See [modules/caching-classloader/README.md](modules/caching-classloader/README.md).
 
 ### HdfsURLStreamHandlerProvider
 
