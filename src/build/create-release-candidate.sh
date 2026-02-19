@@ -23,8 +23,8 @@ scriptname=$(basename "$0")
 projectroot="$(git rev-parse --show-toplevel)" || exit 1
 cd "$projectroot" || exit 1
 export tlpName=accumulo
-export projName="$tlpName-classloader-extras"
-export projNameLong="Apache ${projName^}"
+export projName="$(xmllint --shell pom.xml <<<'xpath /*[local-name()="project"]/*[local-name()="artifactId"]/text()' | grep content= | cut -f2 -d=)"
+export projNameLong="Apache $(xmllint --shell pom.xml <<<'xpath /*[local-name()="project"]/*[local-name()="name"]/text()' | grep content= | cut -f2 -d=)"
 export stagingRepoPrefix="https://repository.apache.org/content/repositories/orgapache$tlpName"
 export srcQualifier="source-release"
 export relTestingUrl="https://$tlpName.apache.org/contributor/verifying-release"
@@ -161,8 +161,9 @@ createEmail() {
   echo
   echo "    Remember, $(red DO NOT PUSH) the $(red "$tag") tag until after the vote"
   echo "    passes and the tag is re-made with a gpg signature using:"
-  echo "      $(red "git tag -f -s -m '$projNameLong $ver' $tag") \\"
-  echo "      $(red "$commit")"
+  echo "      $(red "git tag -f -s -m '$projNameLong $ver'") \\"
+  echo "        $(red "$tag") \\"
+  echo "        $(red "$commit")"
   echo
   yellow "IMPORTANT!! IMPORTANT!! IMPORTANT!! IMPORTANT!! IMPORTANT!! IMPORTANT!!"
   echo
@@ -202,8 +203,9 @@ Branch:
     $(green "$branch")
 
 If this vote passes, a gpg-signed tag will be created using:
-    $(green "git tag -f -s -m '$projNameLong $ver' $tag") \\
-    $(green "$commit")
+    $(green "git tag -f -s -m '$projNameLong $ver'") \\
+      $(green "$tag") \\
+      $(green "$commit")
 
 Staging repo: $(green "$stagingRepoPrefix-$stagingrepo")
 Source (official release artifact): $(green "$stagingRepoPrefix-$stagingrepo/org/apache/$tlpName/$projName/$ver/$projName-$ver-$srcQualifier.tar.gz")
