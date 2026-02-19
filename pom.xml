@@ -318,6 +318,7 @@ under the License.
             <goals>clean deploy</goals>
             <preparationGoals>clean verify</preparationGoals>
             <tagNameFormat>rel/@{project.artifactId}-@{project.version}</tagNameFormat>
+            <preparationProfiles>apache-release,accumulo-release,!autoformat,verifyformat</preparationProfiles>
             <releaseProfiles>apache-release,accumulo-release,!autoformat,verifyformat</releaseProfiles>
             <useReleaseProfile>false</useReleaseProfile>
             <pushChanges>false</pushChanges>
