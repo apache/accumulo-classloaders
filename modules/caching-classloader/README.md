@@ -21,10 +21,9 @@
 # Caching ClassLoader Factory
 
 `CachingClassLoaderFactory` implements Accumulo's `ContextClassLoaderFactory`
-SPI. This implementation is designed around a set of remote resources
-(typically, `.jar` files) listed in a JSON-formatted manifest for each context,
-and a local cache directory that is intended to be shared across multiple
-processes.
+SPI. This implementation is designed around a set of remote classpath resource
+files listed in a JSON-formatted manifest for each context, and a local cache
+directory that is intended to be shared across multiple processes.
 
 The URL to the manifest, as a String, is used for the context parameter. In
 return, this factory downloads the resource from the remote locations specified
@@ -32,6 +31,10 @@ in the manifest to a local storage cache, where they will be used to produce a
 corresponding `ClassLoader` instance. The specified URL will then be monitored
 for any changes to the manifest at that location, at the monitoring interval
 specified in the manifest.
+
+Resources must be jar files (jar, war, ear, etc.). Other resource file types
+(like text or data files) must be contained within a jar file and can be read
+from the classloader using `.getResourceAsStream()`.
 
 ## Introduction
 
@@ -143,11 +146,11 @@ does not already exist. This will cause an error if the application does not
 have permission to create the directories.
 
 The selected location should be a persistent location with plenty of space to
-store downloaded resources (usually jar files), and should be writable by all
-the processes which use this factory to share the same resources. You may wish
-to pre-create the base directory specified by the property, and the three
-sub-directories, `manifests`, `resources`, and `working`, to set the
-appropriate permissions and ACLs.
+store downloaded resources, and should be writable by all the processes which
+use this factory to share the same resources. You may wish to pre-create the
+base directory specified by the property, and the three sub-directories,
+`manifests`, `resources`, and `working`, to set the appropriate permissions and
+ACLs.
 
 Resources downloaded to this cache may be used by multiple manifests, threads,
 and processes, so be very careful when removing old contents to ensure that
@@ -260,9 +263,8 @@ these files.
 ### Resources
 
 The `resources` directory contains a shared pool of remote resource files that
-have been fetched for all manifests (typically, `.jar` files). The files in
-this directory are safe to delete any time. However, some considerations should
-be made:
+have been fetched for all manifests. The files in this directory are safe to
+delete any time. However, some considerations should be made:
 
 1. Deleting resources that are still needed will cause them to be downloaded
    again the next time they are needed, which may cause an increase in network
