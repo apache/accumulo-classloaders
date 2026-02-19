@@ -28,7 +28,7 @@ export projNameLong="Apache ${projName^}"
 export stagingRepoPrefix="https://repository.apache.org/content/repositories/orgapache$tlpName"
 export srcQualifier="source-release"
 export relTestingUrl="https://$tlpName.apache.org/contributor/verifying-release"
-export tagPrefix="rel/"
+export tagPrefix="rel/$projName-"
 
 # check if running in a color terminal
 terminalSupportsColor() {
