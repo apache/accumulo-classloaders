@@ -35,6 +35,8 @@ import org.junit.jupiter.api.Test;
 
 class ManifestTest {
 
+  private static final SecureRandom RAND = new SecureRandom();
+
   private static String mockJson(boolean withComment, boolean withMonitorInterval,
       int withResourceCount) {
     final String COMMA = ",";
@@ -90,7 +92,6 @@ class ManifestTest {
 
   @Test
   void testDeserializing() throws Exception {
-    var RAND = new SecureRandom();
     int resourceCount = RAND.nextInt(100) + 15;
     var json = mockJson(true, true, resourceCount);
     try (var in = new ByteArrayInputStream(json.getBytes(UTF_8))) {

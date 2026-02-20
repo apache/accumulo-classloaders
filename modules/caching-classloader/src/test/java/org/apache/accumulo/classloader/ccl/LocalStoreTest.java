@@ -97,6 +97,7 @@ public class LocalStoreTest {
 
     // Put C into Jetty
     var jarCParentDirectory = Path.of(jarCOrigLocation.toURI()).getParent();
+    assertNotNull(jarCParentDirectory);
     jetty = TestUtils.getJetty(jarCParentDirectory);
     final URL jarCNewLocation = jetty.getURI().resolve("TestC.jar").toURL();
 
