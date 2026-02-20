@@ -46,6 +46,8 @@ jobs:
         distribution: temurin
         java-version: 21
         cache: 'maven'
+    - name: Show the first log message
+      run: git log -n1
     - name: Build with Maven
       timeout-minutes: 345
       run: mvn -B -V -e -ntp "-Dstyle.color=always" ${{ github.event.inputs.goals }}

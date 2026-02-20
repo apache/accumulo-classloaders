@@ -130,7 +130,10 @@ under the License.
     <rat.consoleOutput>true</rat.consoleOutput>
     <sourceReleaseAssemblyDescriptor>source-release-tar</sourceReleaseAssemblyDescriptor>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <version.accumulo>2.1.4</version.accumulo>
     <version.auto-service>1.1.1</version.auto-service>
+    <version.errorprone>2.47.0</version.errorprone>
+    <version.httpclient5>5.6</version.httpclient5>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -138,7 +141,7 @@ under the License.
         <!-- most dependencies will be provided by the accumulo installation -->
         <groupId>org.apache.accumulo</groupId>
         <artifactId>accumulo-project</artifactId>
-        <version>2.1.4</version>
+        <version>${version.accumulo}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -155,7 +158,7 @@ under the License.
       <dependency>
         <groupId>org.apache.httpcomponents.client5</groupId>
         <artifactId>httpclient5</artifactId>
-        <version>5.6</version>
+        <version>${version.httpclient5}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -669,6 +672,29 @@ under the License.
   </build>
   <profiles>
     <profile>
+      <!-- This profile skips all Quality Assurance checks; activate with -PskipQA OR -DskipQA  -->
+      <id>skipQA</id>
+      <activation>
+        <property>
+          <name>skipQA</name>
+        </property>
+      </activation>
+      <properties>
+        <apilyzer.skip>true</apilyzer.skip>
+        <checkstyle.skip>true</checkstyle.skip>
+        <formatter.skip>true</formatter.skip>
+        <impsort.skip>true</impsort.skip>
+        <mdep.analyze.skip>true</mdep.analyze.skip>
+        <modernizer.skip>true</modernizer.skip>
+        <rat.skip>true</rat.skip>
+        <skipITs>true</skipITs>
+        <skipTests>true</skipTests>
+        <sort.skip>true</sort.skip>
+        <spotbugs.skip>true</spotbugs.skip>
+        <warbucks.skip>true</warbucks.skip>
+      </properties>
+    </profile>
+    <profile>
       <id>accumulo-release</id>
       <properties>
         <skipTests>true</skipTests>
@@ -891,6 +917,58 @@ under the License.
             </plugin>
           </plugins>
         </pluginManagement>
+      </build>
+    </profile>
+    <profile>
+      <!-- This profile uses the Google ErrorProne tool to perform static code analysis at
+      compile time. Auto-generated code is not checked.
+      See: https://errorprone.info/bugpatterns for list of available bug patterns.-->
+      <id>errorprone</id>
+      <activation>
+        <property>
+          <name>errorprone</name>
+        </property>
+      </activation>
+      <properties>
+        <!-- forking is required for -J options to take effect -->
+        <maven.compiler.fork>true</maven.compiler.fork>
+      </properties>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <compilerArgs>
+                <arg>-XDcompilePolicy=simple</arg>
+                <arg>--should-stop=ifError=FLOW</arg>
+                <arg>
+                  -Xplugin:ErrorProne \
+                  <!-- this complains about using LinkedHashSet instead of Set
+                    but we need to use that to preserve set order -->
+                  -Xep:NonApiType:OFF \
+                </arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
+              </compilerArgs>
+              <annotationProcessorPaths>
+                <path>
+                  <groupId>com.google.errorprone</groupId>
+                  <artifactId>error_prone_core</artifactId>
+                  <version>${version.errorprone}</version>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+          </plugin>
+        </plugins>
       </build>
     </profile>
   </profiles>

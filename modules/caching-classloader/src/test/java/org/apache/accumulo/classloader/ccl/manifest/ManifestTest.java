@@ -21,12 +21,15 @@ package org.apache.accumulo.classloader.ccl.manifest;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.io.ByteArrayInputStream;
 import java.nio.file.Path;
+import java.security.SecureRandom;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 
@@ -55,8 +58,13 @@ class ManifestTest {
         if (i > 0) {
           json.append(COMMA);
         }
-        json.append("{'location': 'file:/home/user/ClassLoaderTestA/" + i + ".jar'").append(COMMA);
-        json.append("'algorithm': 'MOCK',").append("'checksum': '" + i + "'}");
+        var n = i;
+        if (withResourceCount == 10) {
+          // special value to make all resources the same to test deduplication
+          n = 0;
+        }
+        json.append("{'location': 'file:/home/user/ClassLoaderTestA/" + n + ".jar'").append(COMMA);
+        json.append("'algorithm': 'MOCK',").append("'checksum': '" + n + "'}");
       }
       json.append("]");
     }
@@ -82,15 +90,17 @@ class ManifestTest {
 
   @Test
   void testDeserializing() throws Exception {
-    var json = mockJson(true, true, 3);
+    var RAND = new SecureRandom();
+    int resourceCount = RAND.nextInt(100) + 15;
+    var json = mockJson(true, true, resourceCount);
     try (var in = new ByteArrayInputStream(json.getBytes(UTF_8))) {
       var manifest = Manifest.fromStream(in);
       assertEquals("an optional comment", manifest.getComment());
       assertEquals(5, manifest.getMonitorIntervalSeconds());
-      assertEquals(3, manifest.getResources().size());
+      assertEquals(resourceCount, manifest.getResources().size());
       var resources = manifest.getResources();
       var iter = resources.iterator();
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < resourceCount; i++) {
         var r = iter.next();
         assertEquals(i + ".jar", r.getFileName());
         assertEquals("MOCK", r.getAlgorithm());
@@ -125,5 +135,35 @@ class ManifestTest {
     try (var in = new ByteArrayInputStream(json.getBytes(UTF_8))) {
       assertNull(Manifest.fromStream(in));
     }
+  }
+
+  @Test
+  void testDeserializationWithDeduplication() throws Exception {
+    Pattern numExpectedJar = Pattern.compile("0[.]jar");
+    var json = mockJson(true, true, 1);
+    var jsonWithDuplicates = mockJson(true, true, 10);
+    assertNotEquals(json, jsonWithDuplicates);
+    assertEquals(1, numExpectedJar.matcher(json).results().count());
+    assertEquals(10, numExpectedJar.matcher(jsonWithDuplicates).results().count());
+    final Manifest manifest;
+    try (var in = new ByteArrayInputStream(json.getBytes(UTF_8))) {
+      manifest = Manifest.fromStream(in);
+    }
+    final Manifest manifestFromDuplicates;
+    try (var in = new ByteArrayInputStream(jsonWithDuplicates.getBytes(UTF_8))) {
+      manifestFromDuplicates = Manifest.fromStream(in);
+    }
+    assertEquals(manifest, manifestFromDuplicates);
+    assertEquals(manifest.toJson(), manifestFromDuplicates.toJson());
+    assertEquals("an optional comment", manifest.getComment());
+    assertEquals(5, manifest.getMonitorIntervalSeconds());
+    assertEquals(1, manifest.getResources().size());
+    var resources = manifest.getResources();
+    var iter = resources.iterator();
+    var r = iter.next();
+    assertEquals("0.jar", r.getFileName());
+    assertEquals("MOCK", r.getAlgorithm());
+    assertEquals(String.valueOf(0), r.getChecksum());
+    assertFalse(iter.hasNext());
   }
 }

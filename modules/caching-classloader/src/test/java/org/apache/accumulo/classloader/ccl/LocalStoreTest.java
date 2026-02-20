@@ -36,13 +36,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.concurrent.CountDownLatch;
-import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
 import org.apache.accumulo.classloader.ccl.TestUtils.TestClassInfo;
@@ -65,7 +65,7 @@ public class LocalStoreTest {
   private static Path tempDir;
 
   // a mock URL checker that allows all for test
-  private static final BiConsumer<String,URL> ALLOW_ALL_URLS = (type, url) -> {};
+  private static final void allowAllUrls(String type, URL url) {};
 
   private static MiniDFSCluster hdfs;
   private static Server jetty;
@@ -135,8 +135,10 @@ public class LocalStoreTest {
   @Test
   public void testPropertyNotSet() {
     // test baseDir not set
-    assertThrows(NullPointerException.class, () -> new LocalStore((Path) null, ALLOW_ALL_URLS));
-    assertThrows(NullPointerException.class, () -> new LocalStore((String) null, ALLOW_ALL_URLS));
+    assertThrows(NullPointerException.class,
+        () -> new LocalStore((Path) null, LocalStoreTest::allowAllUrls));
+    assertThrows(NullPointerException.class,
+        () -> new LocalStore((String) null, LocalStoreTest::allowAllUrls));
     // test URL checker not set
     assertThrows(NullPointerException.class, () -> new LocalStore(baseCacheDir, null));
   }
@@ -149,7 +151,7 @@ public class LocalStoreTest {
     assertEquals("working", WORKING_DIR);
 
     assertFalse(Files.exists(baseCacheDir));
-    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
+    var localStore = new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls);
     assertTrue(Files.exists(baseCacheDir));
     assertTrue(Files.exists(baseCacheDir.resolve(MANIFESTS_DIR)));
     assertTrue(Files.exists(baseCacheDir.resolve(RESOURCES_DIR)));
@@ -162,10 +164,10 @@ public class LocalStoreTest {
   @Test
   public void testCreateBaseDirsMultipleTimes() throws Exception {
     assertFalse(Files.exists(baseCacheDir));
-    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
-    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
-    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
-    assertNotNull(new LocalStore(baseCacheDir, ALLOW_ALL_URLS));
+    assertNotNull(new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls));
+    assertNotNull(new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls));
+    assertNotNull(new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls));
+    assertNotNull(new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls));
     assertTrue(Files.exists(baseCacheDir));
   }
 
@@ -230,7 +232,7 @@ public class LocalStoreTest {
 
   @Test
   public void testStoreContext() throws Exception {
-    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
+    var localStore = new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls);
     localStore.storeContext(manifest);
 
     // Confirm the 3 jars are cached locally
@@ -244,7 +246,7 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoader() throws Exception {
-    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
+    var localStore = new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls);
     localStore.storeContext(manifest);
     var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
     var cl = createClassLoader(cacheKey, localStore);
@@ -256,7 +258,7 @@ public class LocalStoreTest {
 
   @Test
   public void testClassLoaderUpdate() throws Exception {
-    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
+    var localStore = new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls);
     localStore.storeContext(manifest);
     var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
     final var cl = createClassLoader(cacheKey, localStore);
@@ -304,13 +306,19 @@ public class LocalStoreTest {
     testClassLoads(updatedCl, classD);
   }
 
+  private static long getWorkingDirCount(LocalStore localStore) throws IOException {
+    try (var s = Files.list(localStore.workingDir()).filter(Files::isDirectory)) {
+      return s.count();
+    }
+  }
+
   @Test
   public void testClassLoaderDirCleanup() throws Exception {
-    var localStore = new LocalStore(baseCacheDir, ALLOW_ALL_URLS);
-    assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+    var localStore = new LocalStore(baseCacheDir, LocalStoreTest::allowAllUrls);
+    assertEquals(0, getWorkingDirCount(localStore));
     localStore.storeContext(manifest);
     var cacheKey = new DeduplicationCacheKey(URI.create("loc"), manifest);
-    assertEquals(0, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+    assertEquals(0, getWorkingDirCount(localStore));
 
     final var endBackgroundThread = new CountDownLatch(1);
     var createdClassLoader = new CountDownLatch(1);
@@ -329,12 +337,12 @@ public class LocalStoreTest {
     t.start();
     createdClassLoader.await();
 
-    assertEquals(1, Files.list(localStore.workingDir()).filter(Files::isDirectory).count());
+    assertEquals(1, getWorkingDirCount(localStore));
 
     endBackgroundThread.countDown();
 
     // wait for classloader to be garbage collected and its cleaner to run
-    while (Files.list(localStore.workingDir()).filter(Files::isDirectory).count() != 0) {
+    while (getWorkingDirCount(localStore) != 0) {
       System.gc();
       Thread.sleep(50);
     }

@@ -31,8 +31,8 @@ permissions:
   contents: read
 
 jobs:
-  mvn:
-    timeout-minutes: 60
+  # fast build to populate the local maven repository cache
+  fastbuild:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -42,22 +42,50 @@ jobs:
         distribution: temurin
         java-version: 21
         cache: 'maven'
-    - name: Build with Maven (verify javadoc:jar)
-      run: mvn -B -V -e -ntp "-Dstyle.color=always" verify javadoc:jar -DskipFormat -DverifyFormat
+    - name: Show the first log message
+      run: git log -n1
+    - name: Build with Maven (Fast Build)
+      timeout-minutes: 20
+      run: mvn -B -V -e -ntp "-Dstyle.color=always" clean package dependency:resolve -DskipTests -DskipFormat -DverifyFormat
+      env:
+        MAVEN_OPTS: -Djansi.force=true
+  # more complete builds with tests
+  mvn:
+    needs: fastbuild
+    strategy:
+      matrix:
+        profile:
+          - {name: 'unit-tests',    javaver: 21, args: 'verify -PskipQA -DskipTests=false'}
+          - {name: 'qa-checks',     javaver: 21, args: 'verify javadoc:jar -DskipTests -Dspotbugs.timeout=3600000'}
+          - {name: 'compat',        javaver: 21, args: 'package -DskipTests -Dversion.accumulo=4.0.0-SNAPSHOT -Puse-apache-snapshots -Dmaven.compiler.failOnWarning=false'}
+          - {name: 'errorprone',    javaver: 21, args: 'verify -Perrorprone,skipQA'}
+      fail-fast: false
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Set up JDK ${{ matrix.profile.javaver }}
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: ${{ matrix.profile.javaver }}
+        cache: 'maven'
+    - name: Build with Maven (${{ matrix.profile.name }})
+      timeout-minutes: 60
+      run: mvn -B -V -e -ntp "-Dstyle.color=always" -DskipFormat ${{ matrix.profile.args }}
       env:
         MAVEN_OPTS: -Djansi.force=true
     - name: Upload unit test results
       if: ${{ failure() }}
       uses: actions/upload-artifact@v6
       with:
-        name: surefire-reports
+        name: surefire-reports-${{ matrix.profile.name }}
         path: ./**/target/surefire-reports/
         if-no-files-found: ignore
     - name: Upload integration test results
       if: ${{ failure() }}
       uses: actions/upload-artifact@v6
       with:
-        name: failsafe-reports
+        name: failsafe-reports-${{ matrix.profile.name }}
         path: ./**/target/failsafe-reports/
         if-no-files-found: ignore
 

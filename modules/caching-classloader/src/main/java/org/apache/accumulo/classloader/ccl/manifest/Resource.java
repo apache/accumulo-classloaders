@@ -76,7 +76,7 @@ public class Resource {
 
   @Override
   public int hashCode() {
-    return Objects.hash(location, checksum);
+    return Objects.hash(getLocation(), getAlgorithm(), getChecksum());
   }
 
   @Override
@@ -84,14 +84,13 @@ public class Resource {
     if (this == obj) {
       return true;
     }
-    if (obj == null) {
-      return false;
+    if (obj instanceof Resource) {
+      Resource other = (Resource) obj;
+      return Objects.equals(getLocation(), other.getLocation())
+          && Objects.equals(getAlgorithm(), other.getAlgorithm())
+          && Objects.equals(getChecksum(), other.getChecksum());
     }
-    if (getClass() != obj.getClass()) {
-      return false;
-    }
-    Resource other = (Resource) obj;
-    return Objects.equals(checksum, other.checksum) && Objects.equals(location, other.location);
+    return false;
   }
 
 }

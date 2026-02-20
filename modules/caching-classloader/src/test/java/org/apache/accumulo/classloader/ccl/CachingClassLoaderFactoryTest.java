@@ -901,8 +901,11 @@ class CachingClassLoaderFactoryTest {
     deleteFuture.get();
     executor.shutdown();
 
-    long workingDirsCount =
-        Files.list(baseCacheDir.resolve(WORKING_DIR)).filter(p -> p.toFile().isDirectory()).count();
+    long workingDirsCount;
+    try (var s =
+        Files.list(baseCacheDir.resolve(WORKING_DIR)).filter(p -> p.toFile().isDirectory())) {
+      workingDirsCount = s.count();
+    }
     // check that many hard link directories were created; this is non-deterministic; at least 50 is
     // nice to see (5 per thread), but depending on performance, each thread may not create them
     // that quickly; we should get at least 1 per thread, though
