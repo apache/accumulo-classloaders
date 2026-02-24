@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +39,6 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ResourceHandler;
-import org.eclipse.jetty.util.resource.PathResource;
 
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
@@ -124,9 +124,15 @@ public class TestUtils {
   }
 
   public static Server getJetty(Path resourceDirectory) throws Exception {
-    PathResource directory = new PathResource(resourceDirectory);
     ResourceHandler handler = new ResourceHandler();
-    handler.setBaseResource(directory);
+    // work with jetty 11 or 12, so we can build with Accumulo 2.1 or 4.0
+    Method m;
+    try {
+      m = handler.getClass().getMethod("setResourceBase", String.class); // jetty 11
+    } catch (NoSuchMethodException e) {
+      m = handler.getClass().getMethod("setBaseResourceAsString", String.class); // jetty 12
+    }
+    m.invoke(handler, resourceDirectory.toString());
 
     Server jetty = new Server(0);
     jetty.setHandler(handler);

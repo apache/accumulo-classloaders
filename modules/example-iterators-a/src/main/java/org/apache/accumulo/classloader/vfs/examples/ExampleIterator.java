@@ -38,31 +38,38 @@ public class ExampleIterator implements SortedKeyValueIterator<Key,Value> {
 
   protected SortedKeyValueIterator<Key,Value> source;
 
+  @Override
   public ExampleIterator deepCopy(IteratorEnvironment env) {
     throw new UnsupportedOperationException();
   }
 
+  @Override
   public Key getTopKey() {
     return source.getTopKey();
   }
 
+  @Override
   public Value getTopValue() {
     return new Value("foo".getBytes(UTF_8));
   }
 
+  @Override
   public boolean hasTop() {
     return source.hasTop();
   }
 
+  @Override
   public void init(SortedKeyValueIterator<Key,Value> source, Map<String,String> options,
       IteratorEnvironment env) {
     this.source = source;
   }
 
+  @Override
   public void next() throws IOException {
     source.next();
   }
 
+  @Override
   public void seek(Range range, Collection<ByteSequence> columnFamilies, boolean inclusive)
       throws IOException {
     source.seek(range, columnFamilies, inclusive);

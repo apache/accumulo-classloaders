@@ -51,7 +51,7 @@ public class HdfsURLStreamHandlerProvider extends URLStreamHandlerProvider {
 
     private InputStream is;
 
-    public HdfsURLConnection(URL url) {
+    HdfsURLConnection(URL url) {
       super(requireNonNull(url, "null url argument"));
     }
 

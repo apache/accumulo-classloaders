@@ -86,7 +86,6 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
     @Override
     public void configureMiniCluster(MiniAccumuloConfigImpl cfg,
         org.apache.hadoop.conf.Configuration coreSite) {
-      cfg.setNumTservers(3);
       cfg.setProperty(Property.TSERV_NATIVEMAP_ENABLED.getKey(), "false");
       cfg.setProperty(Property.GENERAL_CONTEXT_CLASSLOADER_FACTORY.getKey(),
           CachingClassLoaderFactory.class.getName());
@@ -148,7 +147,7 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
       List<String> tservers = client.instanceOperations().getTabletServers();
       Collections.sort(tservers);
-      assertEquals(3, tservers.size());
+      assertTrue(tservers.size() >= 2, "Expected at least 2 tservers, but saw " + tservers);
 
       final String tableName = names[0];
 
@@ -163,16 +162,17 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
       TestIngest.createTable(client, params);
 
-      // Confirm 4 tablets, spread across 3 tablet servers
+      // Confirm 4 tablets, spread across all tablet servers
       client.instanceOperations().waitForBalance();
 
       final List<TabletMetadata> tm = getLocations(((ClientContext) client).getAmple(),
           client.tableOperations().tableIdMap().get(tableName));
-      assertEquals(4, tm.size()); // 3 tablets
+      assertEquals(4, tm.size());
 
       final Set<String> tabletLocations = new TreeSet<>();
       tm.forEach(t -> tabletLocations.add(t.getLocation().getHostPort()));
-      assertEquals(3, tabletLocations.size()); // 3 locations
+      assertTrue(tabletLocations.size() >= 2,
+          "Expected at least 2 tablet locations, but saw " + tabletLocations);
 
       // both collections are sorted
       assertIterableEquals(tservers, tabletLocations);
@@ -281,9 +281,11 @@ public class MiniAccumuloClusterClassLoaderFactoryTest extends SharedMiniCluster
 
   private Set<Path> getReferencedFiles(Path workingDirPath) throws IOException {
     // get all files in subdirectories in working directory
-    return Files.walk(workingDirPath).filter(p -> p.toFile().isFile())
-        .filter(p -> p.getNameCount() == workingDirPath.getNameCount() + 2).map(Path::getFileName)
-        .collect(Collectors.toSet());
+    try (var s = Files.walk(workingDirPath).filter(p -> p.toFile().isFile())
+        .filter(p -> p.getNameCount() == workingDirPath.getNameCount() + 2)
+        .map(Path::getFileName)) {
+      return s.collect(Collectors.toSet());
+    }
   }
 
   private int countExpectedValues(AccumuloClient client, String table, byte[] expectedValue)

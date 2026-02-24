@@ -19,7 +19,6 @@
 package org.apache.accumulo.classloader.ccl.manifest;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.util.Objects.hash;
 import static java.util.Objects.requireNonNull;
 
 import java.io.BufferedInputStream;
@@ -121,7 +120,7 @@ public class Manifest {
 
   @Override
   public int hashCode() {
-    return hash(monitorIntervalSeconds, resources);
+    return toJson().hashCode();
   }
 
   @Override
@@ -129,15 +128,7 @@ public class Manifest {
     if (this == obj) {
       return true;
     }
-    if (obj == null) {
-      return false;
-    }
-    if (getClass() != obj.getClass()) {
-      return false;
-    }
-    Manifest other = (Manifest) obj;
-    return monitorIntervalSeconds == other.monitorIntervalSeconds
-        && Objects.equals(resources, other.resources);
+    return obj instanceof Manifest ? Objects.equals(toJson(), ((Manifest) obj).toJson()) : false;
   }
 
   public String getChecksumAlgorithm() {

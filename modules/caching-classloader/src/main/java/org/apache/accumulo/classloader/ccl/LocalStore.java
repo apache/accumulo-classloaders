@@ -206,7 +206,6 @@ public final class LocalStore {
             LOG.trace("Skipped resource {} while another process or thread is downloading it",
                 resource.getLocation());
             waitingOnOtherDownloadsCount++;
-            continue;
           }
         }
         // avoid rapid cycling checking for other downloads to finish; wait longer if more downloads

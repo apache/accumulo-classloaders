@@ -55,9 +55,11 @@ public class URLTypesTest {
     URL jarPath = URLTypesTest.class.getResource("/HelloWorld.jar");
     assertNotNull(jarPath);
     var p = Path.of(jarPath.toURI());
+    var parent = p.getParent();
+    assertNotNull(parent);
     final long origFileSize = TestUtils.getFileSize(p);
 
-    Server jetty = TestUtils.getJetty(p.getParent());
+    Server jetty = TestUtils.getJetty(parent);
     LOG.debug("Jetty listening at: {}", jetty.getURI());
     URL httpPath = jetty.getURI().resolve("HelloWorld.jar").toURL();
     assertEquals(origFileSize, TestUtils.getFileSize(httpPath));
