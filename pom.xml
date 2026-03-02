@@ -29,7 +29,7 @@
   </parent>
   <groupId>org.apache.accumulo</groupId>
   <artifactId>accumulo-classloader-extras</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>1.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Accumulo ClassLoader Extras</name>
   <description>ClassLoader Extras provided by the Apache Accumulo project</description>
@@ -126,7 +126,7 @@ under the License.
     <minimalMavenBuildVersion>3.9</minimalMavenBuildVersion>
     <modernizer.javaVersion>${javaVersion}</modernizer.javaVersion>
     <!-- timestamp for reproducible outputs, updated on release by the release plugin -->
-    <project.build.outputTimestamp>2020-08-27T15:56:15Z</project.build.outputTimestamp>
+    <project.build.outputTimestamp>2026-02-24T20:09:31Z</project.build.outputTimestamp>
     <rat.consoleOutput>true</rat.consoleOutput>
     <sourceReleaseAssemblyDescriptor>source-release-tar</sourceReleaseAssemblyDescriptor>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
