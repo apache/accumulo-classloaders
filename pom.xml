@@ -31,8 +31,8 @@
   <artifactId>accumulo-classloader-extras</artifactId>
   <version>1.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
-  <name>Accumulo ClassLoader Extras</name>
-  <description>ClassLoader Extras provided by the Apache Accumulo project</description>
+  <name>Apache Accumulo ClassLoader Extras</name>
+  <description>Apache ClassLoader Extras provided by the Apache Accumulo project</description>
   <inceptionYear>2020</inceptionYear>
   <organization>
     <name>The Apache Software Foundation</name>
