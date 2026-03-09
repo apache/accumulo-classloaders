@@ -33,6 +33,7 @@
   <packaging>pom</packaging>
   <name>Apache Accumulo ClassLoader Extras</name>
   <description>Apache ClassLoader Extras provided by the Apache Accumulo project</description>
+  <url>https://accumulo.apache.org</url>
   <inceptionYear>2020</inceptionYear>
   <organization>
     <name>The Apache Software Foundation</name>
