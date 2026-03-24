@@ -222,6 +222,8 @@ files will be added to the dist/release SVN area after release:
 $(yellow "$projName-$ver-$srcQualifier.tar.gz.sha512") will contain:
 SHA512 ($(green "$projName-$ver-$srcQualifier.tar.gz")) = $(yellow "$srcSha")
 
+Issues and pull requests related to this release can be found at: $(green "https://github.com/apache/$projName/issues?q=milestone%3A$ver")
+
 Release testing instructions: $relTestingUrl
 
 Please vote one of:
